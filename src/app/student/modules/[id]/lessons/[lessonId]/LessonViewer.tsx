@@ -67,26 +67,30 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     // Remove edit buttons (table +row/col buttons, etc.)
     el.querySelectorAll('button[onclick^="cbTable"]').forEach(b => (b as HTMLElement).style.display = 'none')
 
-    // #1 — Apply Python syntax highlighting
-    // Handle new format: code stored in data-code on .cb-code-block
+    // #1 — Apply Python syntax highlighting to code blocks
     el.querySelectorAll('.cb-code-block').forEach(block => {
       const b = block as HTMLElement
-      const pre = b.querySelector('pre')
+      // Hide the editing textarea
+      const ta = b.querySelector('.cb-code-ta') as HTMLTextAreaElement
+      if (ta) ta.style.display = 'none'
+      // Show highlighted preview
+      const preview = b.querySelector('.cb-code-preview') as HTMLElement
       const enc = b.getAttribute('data-code')
-      if (pre && enc) {
-        try { pre.innerHTML = highlightPython(decodeURIComponent(enc)) } catch { pre.innerHTML = highlightPython(enc) }
-      } else if (pre && !b.dataset.hl) {
-        b.dataset.hl = '1'
-        pre.innerHTML = highlightPython(pre.textContent ?? '')
+      if (preview && enc) {
+        try { preview.innerHTML = highlightPython(decodeURIComponent(enc)) }
+        catch { preview.innerHTML = highlightPython(enc) }
+        preview.style.display = 'block'
+      } else if (preview) {
+        // fallback: use textarea content
+        const code = ta?.value ?? ''
+        preview.innerHTML = highlightPython(code)
+        preview.style.display = 'block'
       }
-      // Hide edit button in student view
-      const editBtn = b.querySelector('button')
-      if (editBtn) editBtn.style.display = 'none'
     })
-    // Also highlight any plain <pre> blocks not in .cb-code-block
+    // Highlight any standalone <pre> blocks
     el.querySelectorAll('pre').forEach(pre => {
       const p = pre as HTMLElement
-      if (p.closest('.cb-code-block')) return // already handled
+      if (p.closest('.cb-code-block')) return
       if (p.dataset.highlighted) return
       p.dataset.highlighted = '1'
       p.innerHTML = highlightPython(p.textContent ?? '')

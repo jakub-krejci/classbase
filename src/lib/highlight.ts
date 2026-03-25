@@ -1,40 +1,61 @@
-// Python syntax highlighter — shared between editor and viewer
+// Python syntax highlighter — safe placeholder approach (no null bytes)
 export function highlightPython(raw: string): string {
-  // Step 1: escape HTML entities
-  let r = raw
+  // Escape HTML
+  const escaped = raw
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
 
-  // Step 2: use placeholder tokens to avoid re-matching
-  const ph: Record<string, string> = {}
-  let n = 0
-  const save = (cls: string, txt: string): string => {
-    const k = `\x00${n++}\x00`
-    ph[k] = `<span class="${cls}">${txt}</span>`
-    return k
+  // We do single-pass replacement using a tagged approach:
+  // Split into segments: [literal, token, literal, token, ...]
+  // Then wrap tokens in spans at the end.
+
+  // Order of patterns (most specific first):
+  const patterns: [string, RegExp][] = [
+    ['py-str', /"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g],
+    ['py-cmt', /#[^\n]*/g],
+    ['py-kw',  /\b(?:def|class|if|elif|else|for|while|return|import|from|as|in|not|and|or|is|None|True|False|pass|break|continue|with|try|except|finally|raise|lambda|yield|global|nonlocal|del|assert|async|await)\b/g],
+    ['py-bi',  /\b(?:print|len|range|int|float|str|list|dict|set|tuple|bool|type|input|open|sum|max|min|abs|round|sorted|enumerate|zip|map|filter|isinstance|hasattr|getattr|setattr|repr)\b/g],
+    ['py-num', /\b\d+\.?\d*(?:[eE][+-]?\d+)?\b/g],
+  ]
+
+  // Build a combined regex with named groups isn't feasible cross-browser, so we do
+  // sequential non-overlapping replacement using a segment array.
+  
+  // Represent as array of {text, cls} where cls='' means literal
+  type Seg = { text: string; cls: string }
+  let segments: Seg[] = [{ text: escaped, cls: '' }]
+
+  for (const [cls, regex] of patterns) {
+    const next: Seg[] = []
+    for (const seg of segments) {
+      if (seg.cls !== '') {
+        // Already classified — keep as-is
+        next.push(seg)
+        continue
+      }
+      // Split this literal segment by the pattern
+      const text = seg.text
+      let lastIndex = 0
+      regex.lastIndex = 0
+      let m: RegExpExecArray | null
+      while ((m = regex.exec(text)) !== null) {
+        if (m.index > lastIndex) {
+          next.push({ text: text.slice(lastIndex, m.index), cls: '' })
+        }
+        next.push({ text: m[0], cls })
+        lastIndex = m.index + m[0].length
+      }
+      if (lastIndex < text.length) {
+        next.push({ text: text.slice(lastIndex), cls: '' })
+      }
+    }
+    segments = next
   }
 
-  // Strings first (to protect their content)
-  r = r.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, m => save('py-str', m))
-  // Comments
-  r = r.replace(/(#[^\n]*)/g, m => save('py-cmt', m))
-  // Keywords
-  r = r.replace(/\b(def|class|if|elif|else|for|while|return|import|from|as|in|not|and|or|is|None|True|False|pass|break|continue|with|try|except|finally|raise|lambda|yield|global|nonlocal|del|assert|async|await)\b/g, m => save('py-kw', m))
-  // Built-ins
-  r = r.replace(/\b(print|len|range|int|float|str|list|dict|set|tuple|bool|type|input|open|sum|max|min|abs|round|sorted|enumerate|zip|map|filter|isinstance|hasattr|getattr|setattr|repr|vars|dir|super|object)\b/g, m => save('py-bi', m))
-  // Class names (CapitalCase)
-  r = r.replace(/\b([A-Z][a-zA-Z0-9_]+)\b/g, m => save('py-cls', m))
-  // Numbers
-  r = r.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, m => save('py-num', m))
-  // Operators
-  r = r.replace(/([+\-*/%=<>!&|^~]+)/g, m => save('py-op', m))
-
-  // Step 3: restore placeholders (must use replaceAll to handle multiple occurrences)
-  for (const [k, v] of Object.entries(ph)) {
-    r = r.split(k).join(v)
-  }
-  return r
+  return segments
+    .map(seg => seg.cls ? `<span class="${seg.cls}">${seg.text}</span>` : seg.text)
+    .join('')
 }
 
 export const PYTHON_CSS = `
@@ -43,6 +64,4 @@ export const PYTHON_CSS = `
 .py-num { color: #d19a66; }
 .py-cmt { color: #7f848e; font-style: italic; }
 .py-bi  { color: #61afef; }
-.py-cls { color: #e5c07b; }
-.py-op  { color: #56b6c2; }
 `

@@ -170,6 +170,7 @@ export default function LessonEditorPage() {
   const [modal, setModal] = useState<null | 'quiz' | 'table' | 'image' | 'video' | 'file' | 'link'>(null)
   const editorRef = useRef<HTMLDivElement>(null)
   const savedRange = useRef<Range | null>(null)
+  const initialHtmlRef = useRef<string | null>(null)
 
   // #6 / #10 — Load existing lesson content
   // Key fix: we set innerHTML via ref, and re-render highlighted code blocks
@@ -189,34 +190,36 @@ export default function LessonEditorPage() {
         if (le) { setError('Failed to load lesson: ' + le.message); setLoading(false); return }
         if (data) {
           setTitle((data as any).title ?? '')
-          // Store HTML to inject after state update causes re-render
-          const html = (data as any).content_html ?? '<p><br></p>'
-          setLoading(false)
-          // Wait for next tick so ref is available
-          setTimeout(() => {
-            if (editorRef.current) {
-              editorRef.current.innerHTML = html
-              // Render code block previews (highlighted but read-only display — actual code in textarea)
-              editorRef.current.querySelectorAll('.cb-code-preview').forEach(el => {
-                const raw = el.getAttribute('data-code') ?? ''
-                el.innerHTML = highlightPython(raw)
-              })
-            }
-          }, 0)
-          return
+          initialHtmlRef.current = (data as any).content_html ?? '<p><br></p>'
         }
       }
       setLoading(false)
-      setTimeout(() => {
-        if (editorRef.current && !editorRef.current.innerHTML.trim()) {
-          editorRef.current.innerHTML = '<p><br></p>'
-        }
-      }, 0)
     }
     load()
   }, [])
 
-  // Table helpers
+  // Inject initial HTML into editor after loading completes
+  useEffect(() => {
+    if (!loading && editorRef.current && initialHtmlRef.current !== null) {
+      editorRef.current.innerHTML = initialHtmlRef.current
+      initialHtmlRef.current = null
+      // Re-highlight code blocks that were loaded from DB
+      editorRef.current.querySelectorAll('.cb-code-block').forEach(block => {
+        const b = block as HTMLElement
+        const enc = b.getAttribute('data-code')
+        const pre = b.querySelector('pre')
+        if (pre && enc) {
+          try { pre.innerHTML = highlightPython(decodeURIComponent(enc)) } catch { pre.innerHTML = highlightPython(enc) }
+        }
+      })
+    } else if (!loading && editorRef.current && !isNew) {
+      // fallback: if ref is empty, set placeholder
+    } else if (!loading && isNew && editorRef.current) {
+      if (!editorRef.current.innerHTML.trim()) editorRef.current.innerHTML = '<p><br></p>'
+    }
+  }, [loading])
+
+    // Table helpers
   useEffect(() => {
     const w = window as any
     w.cbTblAddRow = (id: string) => {
@@ -301,51 +304,19 @@ export default function LessonEditorPage() {
 </div></div>`)
   }
 
-  // #3 #4 #5 — CODE BLOCKS: use textarea for editing, data-code for storage
-  // The raw code is stored in data-code attribute.
-  // A preview div shows highlighted HTML. Never use contenteditable pre.
+  // Code block: plain textarea for editing, highlighted preview on top
   function insertCodeBlock() {
-    const id = 'code' + Date.now()
     const defaultCode = '# Write Python here\nprint("Hello, world!")'
     const highlighted = highlightPython(defaultCode)
-    insertAtCursor(`<div class="cb-code-block" contenteditable="false" data-code="${encodeURIComponent(defaultCode)}" style="background:#1e1e2e;border-radius:8px;overflow:hidden;margin:10px 0">
+    const enc = encodeURIComponent(defaultCode)
+    insertAtCursor(`<div class="cb-code-block" contenteditable="false" data-code="${enc}" style="background:#1e1e2e;border-radius:8px;overflow:hidden;margin:10px 0">
 <div style="background:#16213e;padding:6px 14px;font-size:10px;color:#7aa2f7;font-family:monospace;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between">
-  <span>PYTHON</span>
-  <button onclick="cbToggleCodeEdit('${id}')" style="padding:2px 8px;font-size:10px;background:transparent;color:#7aa2f7;border:1px solid #7aa2f7;border-radius:4px;cursor:pointer;font-family:inherit">Edit</button>
+  <span>PYTHON</span><span style="font-size:10px;color:#6c7086">Edit below ↓</span>
 </div>
-<pre id="${id}_pre" style="background:#1e1e2e;color:#cdd6f4;padding:14px;font-family:ui-monospace,monospace;font-size:13px;margin:0;white-space:pre;overflow-x:auto;border-radius:0;line-height:1.6">${highlighted}</pre>
-<textarea id="${id}_ta" spellcheck="false" style="display:none;width:100%;background:#1a1b26;color:#cdd6f4;font-family:ui-monospace,monospace;font-size:13px;padding:14px;border:none;outline:none;resize:vertical;min-height:100px;line-height:1.6;box-sizing:border-box">${defaultCode}</textarea>
+<textarea class="cb-code-ta" spellcheck="false" style="width:100%;background:#1a1b26;color:#cdd6f4;font-family:ui-monospace,monospace;font-size:13px;padding:12px 14px;border:none;outline:none;resize:vertical;min-height:80px;line-height:1.6;box-sizing:border-box;display:block" oninput="this.closest('.cb-code-block').setAttribute('data-code',encodeURIComponent(this.value))">${defaultCode}</textarea>
+<div class="cb-code-preview" style="background:#1e1e2e;color:#cdd6f4;padding:14px;font-family:ui-monospace,monospace;font-size:13px;white-space:pre;overflow-x:auto;line-height:1.6;display:none">${highlighted}</div>
 </div>`)
-    // Register toggle function
-    const w = window as any
-    if (!w.cbToggleCodeEdit) {
-      w.cbToggleCodeEdit = (id: string) => {
-        const pre = document.getElementById(id + '_pre')
-        const ta = document.getElementById(id + '_ta') as HTMLTextAreaElement
-        const block = pre?.closest('.cb-code-block') as HTMLElement
-        if (!pre || !ta || !block) return
-        if (ta.style.display === 'none') {
-          // Switch to edit mode
-          ta.value = block.getAttribute('data-code') ? decodeURIComponent(block.getAttribute('data-code')!) : (pre.textContent ?? '')
-          ta.style.display = 'block'; pre.style.display = 'none'
-          ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'
-          ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px' }
-        } else {
-          // Switch back to preview mode — save code and re-highlight
-          const code = ta.value
-          block.setAttribute('data-code', encodeURIComponent(code))
-          // Dynamically import highlighter
-          const highlighted = (window as any).__highlightPython?.(code) ?? code
-          pre.innerHTML = highlighted; ta.style.display = 'none'; pre.style.display = 'block'
-        }
-      }
-    }
   }
-
-  // Expose highlightPython to window so onclick can use it
-  useEffect(() => {
-    (window as any).__highlightPython = highlightPython
-  }, [])
 
   // #4 — TRY-IT: textarea is editable, code stored in data-code
   function insertTryIt() {
@@ -451,15 +422,11 @@ export default function LessonEditorPage() {
     if (!moduleId || moduleId === 'undefined') { setError('Module ID missing.'); return }
     setSaving(true); setError('')
 
-    // Sync code block textareas → data-code (in case user edited without clicking back to preview)
+    // Sync code block textareas → data-code before saving
     editorRef.current?.querySelectorAll('.cb-code-block').forEach(block => {
-      const ta = block.querySelector('textarea') as HTMLTextAreaElement
-      if (ta && ta.style.display !== 'none') {
+      const ta = block.querySelector('.cb-code-ta') as HTMLTextAreaElement
+      if (ta) {
         block.setAttribute('data-code', encodeURIComponent(ta.value))
-        const pre = block.querySelector('pre')
-        if (pre) pre.innerHTML = highlightPython(ta.value)
-        ta.style.display = 'none'
-        if (pre) pre.style.display = 'block'
       }
     })
 
