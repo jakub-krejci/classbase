@@ -15,7 +15,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
   const router = useRouter()
 
   const codeBox: React.CSSProperties = { fontFamily: 'monospace', fontSize: 13, fontWeight: 600, letterSpacing: '.08em', background: '#f3f4f6', padding: '6px 12px', borderRadius: 8, border: '0.5px solid #e5e7eb', display: 'inline-block' }
-  const tabStyle = (t: string): React.CSSProperties => ({ padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: tab === t ? '#111' : '#888', borderBottom: tab === t ? '2px solid #185FA5' : '2px solid transparent', fontWeight: tab === t ? 600 : 400, background: 'none', border: 'none', borderBottom: tab === t ? '2px solid #185FA5' : '2px solid transparent' })
+  const tabStyle = (t: string): React.CSSProperties => ({ padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: tab === t ? '#111' : '#888', borderBottom: tab === t ? '2px solid #185FA5' : '2px solid transparent', borderTop: 'none', borderLeft: 'none', borderRight: 'none', fontWeight: tab === t ? 600 : 400, background: 'none' })
 
   async function deleteModule() {
     if (!confirm('Delete this module and all its content?')) return
