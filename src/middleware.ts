@@ -9,10 +9,11 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
+        getAll(): { name: string; value: string }[] {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
@@ -25,10 +26,8 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh the session — required for @supabase/ssr
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Redirect unauthenticated users to login (except on public routes)
   const publicPaths = ['/login', '/auth/callback']
   const isPublic = publicPaths.some(p => request.nextUrl.pathname.startsWith(p))
 
