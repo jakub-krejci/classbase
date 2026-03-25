@@ -67,7 +67,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
               <div key={l.id}>
                 {unlocked ? (
                   <a href={'/student/modules/' + module.id + '/lessons/' + l.id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, textDecoration: 'none', color: 'inherit' }}>
+                    className='dm-card' style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, textDecoration: 'none', color: 'inherit' }}>
                     <div style={{ width: 22, height: 22, borderRadius: '50%', background: completed ? '#EAF3DE' : '#E6F1FB', color: completed ? '#27500A' : '#0C447C', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {completed ? '✓' : (i + 1)}
                     </div>
@@ -97,7 +97,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
             const isSubmitted = !!sub
             const dueStr = a.deadline ? ' · Due ' + new Date(a.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''
             return (
-              <div key={a.id} style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+              <div key={a.id} className='dm-card' style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
                   <div>
                     <div style={{ fontWeight: 500, fontSize: 14 }}>{a.title}</div>

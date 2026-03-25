@@ -94,21 +94,36 @@ function CodeViewer({ code }: { code: string }) {
   )
 }
 
-// ── Try-it viewer (like Jupyter cell) ─────────────────────────────────────────
+// ── Try-it viewer — highlighted overlay technique ────────────────────────────
+// A <pre> with colored HTML sits behind a transparent <textarea>.
+// The textarea captures input; the pre shows colors. They stay in sync.
 function TryItViewer({ initialCode }: { initialCode: string }) {
   const [code, setCode] = useState(initialCode)
   const [output, setOutput] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  const preRef = useRef<HTMLPreElement>(null)
 
-  function autoResize() {
-    if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' }
+  function syncHighlight(val: string) {
+    if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n'
   }
-  useEffect(() => { autoResize() }, [])
+  function syncHeight() {
+    if (!taRef.current) return
+    taRef.current.style.height = 'auto'
+    taRef.current.style.height = taRef.current.scrollHeight + 'px'
+  }
+  useEffect(() => { syncHighlight(code); syncHeight() }, [])
 
   function run() {
     setRunning(true)
     setTimeout(() => { setOutput(runPy(code)); setRunning(false) }, 10)
+  }
+
+  const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",monospace'
+  const codeStyle: React.CSSProperties = {
+    fontFamily: monoFont, fontSize: 14, lineHeight: 1.7,
+    padding: '14px 16px', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    display: 'block', boxSizing: 'border-box', width: '100%',
   }
 
   return (
@@ -120,24 +135,46 @@ function TryItViewer({ initialCode }: { initialCode: string }) {
           {running ? 'Running…' : '▶ Run'}
         </button>
       </div>
-      <textarea
-        ref={taRef}
-        value={code}
-        spellCheck={false}
-        onChange={e => { setCode(e.target.value); autoResize() }}
-        onKeyDown={e => {
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
-          if (e.key === 'Tab') { e.preventDefault(); const s=e.currentTarget.selectionStart,en=e.currentTarget.selectionEnd,v=e.currentTarget.value; e.currentTarget.value=v.slice(0,s)+'    '+v.slice(en); e.currentTarget.selectionStart=e.currentTarget.selectionEnd=s+4; setCode(e.currentTarget.value) }
-        }}
-        style={{ width:'100%', background:'#1a1b26', color:'#cdd6f4', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, padding:'14px 16px', border:'none', outline:'none', resize:'none', lineHeight:1.7, display:'block', boxSizing:'border-box', minHeight:60, overflow:'hidden' }}
-      />
+
+      {/* Stacked: highlighted pre behind transparent textarea */}
+      <div style={{ position:'relative', background:'#1e1e2e' }}>
+        {/* Highlighted layer */}
+        <pre ref={preRef}
+          aria-hidden="true"
+          style={{ ...codeStyle, color:'#cdd6f4', background:'transparent', pointerEvents:'none', position:'absolute', inset:0, overflow:'hidden', minHeight:60 }} />
+        {/* Editable layer */}
+        <textarea
+          ref={taRef}
+          value={code}
+          spellCheck={false}
+          onChange={e => {
+            setCode(e.target.value)
+            syncHighlight(e.target.value)
+            syncHeight()
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              const s = e.currentTarget.selectionStart, en = e.currentTarget.selectionEnd, v = e.currentTarget.value
+              const nv = v.slice(0,s)+'    '+v.slice(en)
+              setCode(nv); syncHighlight(nv)
+              requestAnimationFrame(() => {
+                if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s+4 }
+              })
+            }
+          }}
+          style={{ ...codeStyle, color:'transparent', caretColor:'#cdd6f4', background:'transparent', border:'none', outline:'none', resize:'none', overflow:'hidden', position:'relative', zIndex:1, minHeight:60 }}
+        />
+      </div>
+
       {output !== null && (
         <div style={{ background:'#0d1117', borderTop:'1px solid #2a2a4a', padding:'10px 16px' }}>
           <div style={{ fontSize:10, color:'#6c7086', marginBottom:4, fontFamily:'monospace', letterSpacing:'.05em' }}>OUTPUT</div>
           <pre style={{ color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, margin:0, whiteSpace:'pre-wrap' }}>{output}</pre>
         </div>
       )}
-      <div style={{ padding:'4px 14px 6px', fontSize:10, color:'#4a4a6a' }}>Ctrl+Enter to run · Tab for indent · Edit freely</div>
+      <div style={{ padding:'4px 14px 6px', fontSize:10, color:'#4a4a6a' }}>Ctrl+Enter to run · Tab for indent</div>
     </div>
   )
 }
@@ -272,7 +309,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
       {/* Left nav */}
       <div style={{ width:210, flexShrink:0, position:'sticky', top:80 }}>
-        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
+        <div className='dm-nav' style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
           <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Lessons</div>
           {allLessons.map((l:any, i:number) => {
             const isCurrent = l.id === lesson.id
@@ -296,7 +333,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         <h1 style={{ fontSize:22, fontWeight:700, marginBottom:4 }}>{lesson.title}</h1>
         {authorName && <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Author: {authorName}</div>}
 
-        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'20px 24px', marginBottom:20 }}>
+        <div className='dm-lesson-card' style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'20px 24px', marginBottom:20 }}>
           {blocks.map((b, i) => (
             <div key={i}>
               {b.type === 'html' && <HtmlBlock html={b.content} />}

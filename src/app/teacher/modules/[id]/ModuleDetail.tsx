@@ -96,7 +96,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
               onDragStart={() => setDragIdx(i)}
               onDragOver={e => e.preventDefault()}
               onDrop={() => onDrop(i)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#f9fafb', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, cursor: 'grab' }}>
+              className='dm-card' style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#f9fafb', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, cursor: 'grab' }}>
               <span style={{ color: '#bbb', fontSize: 14, cursor: 'grab' }}>⠿</span>
               <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#E6F1FB', color: '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{l.title}</span>
@@ -113,7 +113,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
         <div>
           {assignments.length === 0 && <p style={{ color: '#aaa', fontSize: 13, marginBottom: 12 }}>No assignments yet.</p>}
           {assignments.map((a: any) => (
-            <div key={a.id} style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+            <div key={a.id} className='dm-card' style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
                 <div>
                   <div style={{ fontWeight: 500, fontSize: 14 }}>{a.title}</div>

@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
+import { DarkContext } from '@/lib/darkMode'
 
 // Inject global dark-mode styles once
 const DARK_CSS = `
@@ -97,7 +98,9 @@ export default function AppShell({ user, role, children }: { user: any; role: 't
         </button>
       </div>
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 20px' }}>
-        {children}
+        <DarkContext.Provider value={dark}>
+          {children}
+        </DarkContext.Provider>
       </div>
     </div>
   )

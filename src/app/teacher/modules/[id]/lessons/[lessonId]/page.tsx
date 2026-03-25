@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useParams } from 'next/navigation'
 import { BackLink } from '@/components/ui'
 import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
+import { useDark } from '@/lib/darkMode'
 
 // ─── Block types ──────────────────────────────────────────────────────────────
 type BlockType = 'html' | 'code' | 'tryit'
@@ -85,10 +86,11 @@ const EDITOR_CSS = `
 .cb-rich details > *:not(summary){padding:10px 14px}
 `
 
-function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete }: {
+function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia }: {
   block: Block; onChange: (content: string) => void
   onAddAfter: (type: BlockType) => void; onDelete: () => void
   onMoveUp: () => void; onMoveDown: () => void; canDelete: boolean
+  onOpenMedia: (type: 'image'|'video'|'file'|'link', insertFn: (html: string) => void) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const dark = typeof document !== 'undefined' && document.body.getAttribute('data-theme') === 'dark'
@@ -163,9 +165,10 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
         <button style={{...TB,background:'#E1F5EE',color:'#085041',fontSize:11}} onMouseDown={e=>{e.preventDefault();insertHtml('<details><summary>▶ Click to reveal</summary><div contenteditable="true">Hidden content.</div></details>')}}>▾ Fold</button>
         <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); const r=prompt('Rows:','3'); const c=prompt('Columns:','3'); if(r&&c) insertTable(parseInt(r),parseInt(c))}}>⊞ Table</button>
         {SEP}
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); const url=prompt('Image URL:'); if(url) insertHtml(`<img src="${url}" style="max-width:100%;border-radius:8px;margin:6px 0">`) }}>🖼</button>
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); const url=prompt('YouTube/Vimeo URL:'); if(url){const yt=url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/);const vm=url.match(/vimeo\.com\/(\d+)/);const src=yt?`https://www.youtube.com/embed/${yt[1]}`:vm?`https://player.vimeo.com/video/${vm[1]}`:url;insertHtml(`<iframe src="${src}" allowfullscreen style="width:100%;aspect-ratio:16/9;border:none;border-radius:8px;margin:6px 0;display:block"></iframe>`)}}}>▶ Video</button>
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); const url=prompt('Link URL:'); const txt=prompt('Link text:'); if(url) insertHtml(`<a href="${url}">${txt||url}</a>`)}}>🔗 Link</button>
+        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('image', insertHtml)}}>🖼 Image</button>
+        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('video', insertHtml)}}>▶ Video</button>
+        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('file', insertHtml)}}>📎 File</button>
+        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('link', insertHtml)}}>🔗 Link</button>
         {SEP}
         <button style={{...TB,background:'#1e1e2e',color:'#cdd6f4',fontSize:11}} onMouseDown={e=>{e.preventDefault();onAddAfter('code')}}>+ Code</button>
         <button style={{...TB,background:'#1a1b26',color:'#7aa2f7',fontSize:11}} onMouseDown={e=>{e.preventDefault();onAddAfter('tryit')}}>+ Try it</button>
@@ -219,15 +222,29 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
           <button onClick={onDelete} style={{ fontSize:11,color:'#f38ba8',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>✕</button>
         </div>
       </div>
-      <textarea
-        ref={taRef}
-        value={code}
-        spellCheck={false}
-        onChange={e => { setCode(e.target.value); onChange(e.target.value); autoResize() }}
-        onKeyDown={e => { if (e.key === 'Tab') { e.preventDefault(); const s=e.currentTarget.selectionStart, en=e.currentTarget.selectionEnd; const v=e.currentTarget.value; e.currentTarget.value=v.slice(0,s)+'    '+v.slice(en); e.currentTarget.selectionStart=e.currentTarget.selectionEnd=s+4; setCode(e.currentTarget.value); onChange(e.currentTarget.value) } }}
-        style={{ width: '100%', background: '#1e1e2e', color: '#cdd6f4', fontFamily: 'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize: 14, padding: '14px 16px', border: 'none', outline: 'none', resize: 'none', lineHeight: 1.7, display: 'block', boxSizing: 'border-box', minHeight: 60, overflow: 'hidden' }}
-        placeholder="# Write Python here&#10;print('Hello, world!')"
-      />
+      {/* Highlighted overlay: pre behind transparent textarea */}
+      <div style={{ position:'relative', background:'#1e1e2e' }}>
+        <pre ref={preRef} aria-hidden="true"
+          style={{ fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, lineHeight:1.7, padding:'14px 16px', margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all', position:'absolute', inset:0, overflow:'hidden', color:'#cdd6f4', background:'transparent', pointerEvents:'none', minHeight:60, boxSizing:'border-box' }} />
+        <textarea
+          ref={taRef}
+          value={code}
+          spellCheck={false}
+          onChange={e => { setCode(e.target.value); onChange(e.target.value); syncHL(e.target.value); syncH() }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              const s=e.currentTarget.selectionStart,en=e.currentTarget.selectionEnd,v=e.currentTarget.value
+              const nv=v.slice(0,s)+'    '+v.slice(en)
+              setCode(nv); onChange(nv); syncHL(nv)
+              requestAnimationFrame(()=>{ if(taRef.current){taRef.current.selectionStart=taRef.current.selectionEnd=s+4} })
+            }
+          }}
+          style={{ width:'100%', background:'transparent', color:'transparent', caretColor:'#cdd6f4', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, padding:'14px 16px', border:'none', outline:'none', resize:'none', lineHeight:1.7, display:'block', boxSizing:'border-box', minHeight:60, overflow:'hidden', position:'relative', zIndex:1 }}
+          placeholder="# Ctrl+Enter to run&#10;print('Hello!')"
+        />
+      </div>
     </div>
   )
 }
@@ -240,8 +257,10 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
   const [output, setOutput] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
-  function autoResize() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
-  useEffect(() => { autoResize() }, [])
+  const preRef = useRef<HTMLPreElement>(null)
+  function syncHL(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
+  function syncH() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
+  useEffect(() => { syncHL(code); syncH() }, [])
 
   function run() {
     setRunning(true)
@@ -332,6 +351,103 @@ function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:(
   </div>)
 }
 
+// ─── Media / Link modal ────────────────────────────────────────────────────────
+function MediaModal({ type, onInsert, onClose }: {
+  type: 'image' | 'video' | 'file' | 'link'
+  onInsert: (html: string) => void
+  onClose: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const [label, setLabel] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+  const [tab, setTab] = useState<'url' | 'upload'>('url')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function upload(f: File) {
+    setUploading(true); setUploadErr('')
+    const fd = new FormData(); fd.append('file', f)
+    const res = await fetch('/api/upload', { method: 'POST', body: fd })
+    const data = await res.json()
+    if (!res.ok) { setUploadErr(data.error ?? 'Upload failed'); setUploading(false); return }
+    setUrl(data.url); setLabel(f.name); setUploading(false)
+  }
+
+  function build(): string {
+    if (type === 'image') return `<img src="${url}" alt="${label || 'image'}" style="max-width:100%;border-radius:8px;margin:8px 0;display:block">`
+    if (type === 'video') {
+      const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/)
+      const vm = url.match(/vimeo\.com\/(\d+)/)
+      const src = yt ? `https://www.youtube.com/embed/${yt[1]}` : vm ? `https://player.vimeo.com/video/${vm[1]}` : url
+      return `<iframe src="${src}" allowfullscreen style="width:100%;aspect-ratio:16/9;border:none;border-radius:8px;margin:8px 0;display:block"></iframe>`
+    }
+    if (type === 'file') return `<a href="${url}" target="_blank" download style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;color:#185FA5;text-decoration:none;margin:6px 0">📎 ${label || url.split('/').pop()}</a>`
+    if (type === 'link') return `<a href="${url}" target="${url.startsWith('/') ? '_self' : '_blank'}" style="color:#185FA5;text-decoration:underline">${label || url}</a>`
+    return ''
+  }
+
+  const titles: Record<string,string> = { image: 'Insert image / animation', video: 'Embed video', file: 'Attach downloadable file', link: 'Insert hyperlink' }
+  const inp: React.CSSProperties = { width:'100%', padding:'8px 10px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:10 }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background:'#fff', borderRadius:14, padding:24, width:'100%', maxWidth:440 }}>
+        <h2 style={{ fontSize:16, fontWeight:600, marginBottom:14 }}>{titles[type]}</h2>
+
+        {/* Upload tab for image and file */}
+        {(type === 'image' || type === 'file') && (
+          <div style={{ display:'flex', borderBottom:'1px solid #e5e7eb', marginBottom:14 }}>
+            {(['url','upload'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{ padding:'6px 14px', fontSize:12, fontWeight:500, background:'none', border:'none', borderBottom:tab===t?'2px solid #185FA5':'2px solid transparent', color:tab===t?'#185FA5':'#888', cursor:'pointer' }}>
+                {t === 'url' ? 'External URL' : 'Upload file'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'upload' && (type === 'image' || type === 'file') ? (
+          <div>
+            <div onClick={() => fileRef.current?.click()}
+              style={{ border:'2px dashed #e5e7eb', borderRadius:10, padding:24, textAlign:'center', cursor:'pointer', color:url?'#27500A':'#888', fontSize:13, background:url?'#f0fff4':'#fafafa', marginBottom:10 }}>
+              {uploading ? 'Uploading…' : url ? '✓ ' + (label || 'File uploaded — ready to insert') : 'Click to choose a file from your computer'}
+            </div>
+            <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e => e.target.files?.[0] && upload(e.target.files[0])} />
+            {uploadErr && <div style={{ fontSize:12, color:'#791F1F', marginBottom:8 }}>{uploadErr}</div>}
+          </div>
+        ) : (
+          <>
+            <label style={{ fontSize:11, fontWeight:600, color:'#555', display:'block', marginBottom:3 }}>
+              {type === 'video' ? 'YouTube or Vimeo URL' : type === 'link' ? 'URL (https:// or /student/...)' : 'Image URL'}
+            </label>
+            <input value={url} onChange={e => setUrl(e.target.value)} style={inp}
+              placeholder={type === 'video' ? 'https://youtube.com/watch?v=...' : 'https://'} />
+          </>
+        )}
+
+        {(type === 'image' || type === 'file' || type === 'link') && (
+          <>
+            <label style={{ fontSize:11, fontWeight:600, color:'#555', display:'block', marginBottom:3 }}>
+              {type === 'link' ? 'Link text' : 'Alt text / label'}
+            </label>
+            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder={type === 'link' ? 'Click here' : 'Description'} />
+          </>
+        )}
+
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={() => { if (url) { onInsert(build()); onClose() } }}
+            disabled={!url || uploading}
+            style={{ flex:1, padding:'9px', background:'#185FA5', color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', opacity:(!url||uploading)?.5:1 }}>
+            Insert
+          </button>
+          <button onClick={onClose} style={{ padding:'9px 16px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, cursor:'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+
 // ─── Main editor page ─────────────────────────────────────────────────────────
 export default function LessonEditorPage() {
   const supabase = createClient()
@@ -347,9 +463,12 @@ export default function LessonEditorPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const pendingInsertFn = useRef<((html: string) => void) | null>(null)
   const [showQuiz, setShowQuiz] = useState(false)
   const [quizTargetId, setQuizTargetId] = useState<string | null>(null)
-  const dark = typeof document !== 'undefined' && document.body.getAttribute('data-theme') === 'dark'
+  const [mediaModal, setMediaModal] = useState<null | 'image' | 'video' | 'file' | 'link'>(null)
+  const [mediaTargetId, setMediaTargetId] = useState<string | null>(null)
+  const dark = useDark()
   const surfaceBg = dark ? '#1f2937' : '#fff'
   const borderColor = dark ? '#374151' : '#e5e7eb'
   const textColor = dark ? '#f3f4f6' : '#111'
@@ -448,6 +567,10 @@ export default function LessonEditorPage() {
               onMoveUp={() => moveBlock(block.id, -1)}
               onMoveDown={() => moveBlock(block.id, 1)}
               canDelete={blocks.length > 1}
+              onOpenMedia={(type, insertFn) => {
+                pendingInsertFn.current = insertFn
+                setMediaModal(type)
+              }}
             />
           )}
           {block.type === 'code' && (
@@ -487,6 +610,17 @@ export default function LessonEditorPage() {
         }
         setShowQuiz(false)
       }} onClose={() => setShowQuiz(false)} />}
+      {mediaModal && (
+        <MediaModal
+          type={mediaModal}
+          onInsert={html => {
+            if (pendingInsertFn.current) pendingInsertFn.current(html)
+            pendingInsertFn.current = null
+            setMediaModal(null)
+          }}
+          onClose={() => { setMediaModal(null); pendingInsertFn.current = null }}
+        />
+      )}
     </div>
   )
 }
