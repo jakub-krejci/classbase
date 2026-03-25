@@ -1,6 +1,8 @@
 import { createServerClient as createSSRClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
+// Regular client — respects RLS, used for auth operations
 export async function createServerClient() {
   const cookieStore = await cookies()
   return createSSRClient(
@@ -17,5 +19,15 @@ export async function createServerClient() {
         },
       },
     }
+  )
+}
+
+// Admin client — bypasses RLS using service role key
+// Only use in Server Components, never expose to the browser
+export function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
   )
 }

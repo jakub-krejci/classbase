@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createServerClient } from '@/lib/supabase/server'
+import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import AppShell from '@/components/AppShell'
 import { Tag, PageHeader, StatGrid } from '@/components/ui'
@@ -10,11 +10,12 @@ export default async function StudentProgressPage() {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
-  const { data: pd } = await supabase.from('profiles').select('*').eq('id', (user as any).id).single()
+  const admin = createAdminClient()
+  const { data: pd } = await admin.from('profiles').select('*').eq('id', (user as any).id).single()
   const profile = pd as any
   if (profile?.role !== 'student') redirect('/teacher/modules')
 
-  const { data: enr } = await supabase.from('enrollments').select('module_id, modules(id,title,tag)').eq('student_id', (user as any).id)
+  const { data: enr } = await admin.from('enrollments').select('module_id, modules(id,title,tag)').eq('student_id', (user as any).id)
   const enrollments = (enr ?? []) as any[]
 
   let totalLessons = 0, doneLessons = 0, totalAssignments = 0, doneAssignments = 0
@@ -22,20 +23,20 @@ export default async function StudentProgressPage() {
 
   for (const e of enrollments) {
     const m = e.modules as any
-    const { data: ls } = await supabase.from('lessons').select('id').eq('module_id', e.module_id)
+    const { data: ls } = await admin.from('lessons').select('id').eq('module_id', e.module_id)
     const ids = (ls ?? []).map((l: any) => l.id)
     const { count: doneC } = ids.length
-      ? await supabase.from('lesson_progress').select('*', { count: 'exact', head: true }).eq('student_id', (user as any).id).in('lesson_id', ids)
+      ? await admin.from('lesson_progress').select('*', { count: 'exact', head: true }).eq('student_id', (user as any).id).in('lesson_id', ids)
       : { count: 0 }
     const total = ids.length, done = (doneC as number) ?? 0
     totalLessons += total; doneLessons += done
     moduleStats.push({ mod: m, total, done, pct: total > 0 ? Math.round(done / total * 100) : 0 })
 
-    const { data: assignments } = await supabase.from('assignments').select('id').eq('module_id', e.module_id)
+    const { data: assignments } = await admin.from('assignments').select('id').eq('module_id', e.module_id)
     const aIds = (assignments ?? []).map((a: any) => a.id)
     totalAssignments += aIds.length
     if (aIds.length) {
-      const { count: subC } = await supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('student_id', (user as any).id).in('assignment_id', aIds)
+      const { count: subC } = await admin.from('submissions').select('*', { count: 'exact', head: true }).eq('student_id', (user as any).id).in('assignment_id', aIds)
       doneAssignments += (subC as number) ?? 0
     }
   }
