@@ -9,3 +9,31 @@
 
 * { box-sizing: border-box; }
 body { font-family: var(--font-sans); background: #f9fafb; }
+
+/* Lesson content rendered from rich editor */
+.lesson-content h1 { font-size: 20px; font-weight: 600; margin: 14px 0 6px; }
+.lesson-content h2 { font-size: 17px; font-weight: 600; margin: 12px 0 5px; }
+.lesson-content h3 { font-size: 15px; font-weight: 600; margin: 10px 0 4px; }
+.lesson-content p  { margin: 5px 0; }
+.lesson-content ul, .lesson-content ol { padding-left: 20px; margin: 6px 0; }
+.lesson-content li { margin: 2px 0; }
+.lesson-content blockquote { border-left: 3px solid #185FA5; padding-left: 12px; margin: 8px 0; color: #666; font-style: italic; }
+.lesson-content hr { border: none; border-top: 0.5px solid #e5e7eb; margin: 14px 0; }
+.lesson-content table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
+.lesson-content td, .lesson-content th { border: 0.5px solid #e5e7eb; padding: 6px 10px; }
+.lesson-content th { background: #f9fafb; font-weight: 600; }
+.lesson-content img { max-width: 100%; border-radius: 8px; margin: 8px 0; display: block; }
+.lesson-content pre { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; overflow-x: auto; margin: 8px 0; white-space: pre; }
+.lesson-content details { border: 0.5px solid #e5e7eb; border-radius: 8px; margin: 8px 0; overflow: hidden; }
+.lesson-content summary { padding: 9px 12px; background: #f9fafb; cursor: pointer; font-weight: 500; list-style: none; }
+.lesson-content details[open] summary { border-bottom: 0.5px solid #e5e7eb; }
+.lesson-content details > *:not(summary) { padding: 10px 12px; }
+
+/* Check question widget */
+.lesson-content [data-cq] { background: #f3f9ff; border: 0.5px solid #B5D4F4; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+.lesson-content .cq-label { font-size: 10px; font-weight: 700; color: #185FA5; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.lesson-content .cq-q { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+.lesson-content .cq-solved-bar { display: none; align-items: center; gap: 7px; padding: 8px 12px; background: #EAF3DE; color: #27500A; border-radius: 8px; font-size: 13px; cursor: pointer; }
+
+/* Try-it widget */
+.lesson-content [data-tryit], .lesson-content > div[style*="background:#1a1b26"] { border-radius: 8px; overflow: hidden; margin: 10px 0; }
