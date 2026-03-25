@@ -46,7 +46,6 @@ export default async function StudentModulesPage() {
         enrollments={enrollments}
         progressMap={progressMap}
         messages={(msgs ?? []) as any[]}
-        studentId={(user as any).id}
       />
     </AppShell>
   )
