@@ -2,12 +2,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import { Card, PageHeader } from '@/components/ui'
 
 export default function ProfileClient({ profile }: { profile: any }) {
   const supabase = createClient()
-  const router = useRouter()
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
   const [subject, setSubject] = useState(profile?.subject_specialty ?? '')
   const [bio, setBio] = useState(profile?.bio ?? '')
@@ -15,12 +13,15 @@ export default function ProfileClient({ profile }: { profile: any }) {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
+  // #14 — forgot password
+  const [resetEmail, setResetEmail] = useState(profile?.email ?? '')
+  const [resetSent, setResetSent] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   const initials = (fullName || '?').split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
   const avatarBg = profile?.role === 'teacher' ? { bg: '#E6F1FB', color: '#0C447C' } : { bg: '#EAF3DE', color: '#27500A' }
-
-  const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: '0.5px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 10, color: '#111', background: '#fff', outline: 'none' }
-  const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 500, color: '#666', marginBottom: 3 }
+  const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 10, color: '#111', background: '#fff', outline: 'none' }
+  const lbl: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: '#666', marginBottom: 3 }
 
   async function save() {
     if (!fullName.trim()) { setError('Name is required.'); return }
@@ -38,22 +39,33 @@ export default function ProfileClient({ profile }: { profile: any }) {
       if (perr) { setError(perr.message); setSaving(false); return }
       setNewPass('')
     }
-    setSuccess('Profile saved.')
+    setSuccess('Profile saved successfully.')
     setSaving(false)
-    router.refresh()
+  }
+
+  // #14 — send password reset email
+  async function sendReset() {
+    if (!resetEmail.trim()) return
+    setResetting(true)
+    const { error: err } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback?next=/student/profile`,
+    })
+    if (err) { setError(err.message) } else { setResetSent(true) }
+    setResetting(false)
   }
 
   return (
     <div>
       <PageHeader title="Profile settings" sub="Update your information" />
       <Card style={{ maxWidth: 460 }}>
+        {/* Avatar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-          <div style={{ width: 52, height: 52, borderRadius: '50%', background: avatarBg.bg, color: avatarBg.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, flexShrink: 0 }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: avatarBg.bg, color: avatarBg.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>
             {initials}
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 500 }}>{fullName || 'Your name'}</div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{profile?.role} · {profile?.email}</div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>{fullName || 'Your name'}</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{profile?.role} · {profile?.email}</div>
           </div>
         </div>
 
@@ -79,6 +91,24 @@ export default function ProfileClient({ profile }: { profile: any }) {
           style={{ width: '100%', padding: '9px', background: '#185FA5', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: saving ? .6 : 1 }}>
           {saving ? 'Saving…' : 'Save changes'}
         </button>
+      </Card>
+
+      {/* #14 — Forgot password section */}
+      <Card style={{ maxWidth: 460, marginTop: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Forgot your password?</div>
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>We'll send a password reset link to your email address.</p>
+        <label style={lbl}>Email address</label>
+        <input style={inp} value={resetEmail} onChange={e => setResetEmail(e.target.value)} type="email" />
+        {resetSent ? (
+          <div style={{ fontSize: 12, padding: '8px 11px', background: '#EAF3DE', color: '#27500A', borderRadius: 8 }}>
+            ✓ Password reset email sent! Check your inbox.
+          </div>
+        ) : (
+          <button onClick={sendReset} disabled={resetting || !resetEmail.trim()}
+            style={{ width: '100%', padding: '9px', background: '#f9fafb', color: '#333', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: resetting ? .6 : 1 }}>
+            {resetting ? 'Sending…' : 'Send reset email'}
+          </button>
+        )}
       </Card>
     </div>
   )

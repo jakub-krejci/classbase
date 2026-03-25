@@ -16,8 +16,25 @@ export default async function StudentLessonPage({ params }: { params: any }) {
   const { data: lesson } = await admin.from('lessons').select('*').eq('id', params.lessonId).single()
   if (!lesson) redirect('/student/modules/' + params.id)
 
+  // All lessons in this module for nav panel (#9)
+  const { data: allLessons } = await admin.from('lessons').select('id,title,position').eq('module_id', params.id).order('position')
+
+  // Completion status for all lessons (#9 — show checkmarks in nav)
+  const lessonIds = (allLessons ?? []).map((l: any) => l.id)
+  const { data: progressRows } = lessonIds.length
+    ? await admin.from('lesson_progress').select('lesson_id').eq('student_id', (user as any).id).in('lesson_id', lessonIds)
+    : { data: [] }
+  const completedIds = new Set((progressRows ?? []).map((r: any) => r.lesson_id))
+
   const { data: prog } = await admin.from('lesson_progress')
-    .select('id').eq('student_id', (user as any).id).eq('lesson_id', params.lessonId).single()
+    .select('id,status').eq('student_id', (user as any).id).eq('lesson_id', params.lessonId).maybeSingle()
+
+  // Author name (#11)
+  let authorName = ''
+  if ((lesson as any).author_id) {
+    const { data: author } = await admin.from('profiles').select('full_name').eq('id', (lesson as any).author_id).single()
+    authorName = (author as any)?.full_name ?? ''
+  }
 
   return (
     <AppShell user={profile} role="student">
@@ -25,7 +42,10 @@ export default async function StudentLessonPage({ params }: { params: any }) {
         lesson={lesson as any}
         moduleId={params.id}
         studentId={(user as any).id}
-        completed={!!prog}
+        completionStatus={(prog as any)?.status ?? (completedIds.has(params.lessonId) ? 'completed' : 'none')}
+        allLessons={(allLessons ?? []) as any[]}
+        completedIds={Array.from(completedIds) as string[]}
+        authorName={authorName}
       />
     </AppShell>
   )
