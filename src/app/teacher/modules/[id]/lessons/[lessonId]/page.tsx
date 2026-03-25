@@ -222,29 +222,17 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
           <button onClick={onDelete} style={{ fontSize:11,color:'#f38ba8',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>✕</button>
         </div>
       </div>
-      {/* Highlighted overlay: pre behind transparent textarea */}
-      <div style={{ position:'relative', background:'#1e1e2e' }}>
-        <pre ref={preRef} aria-hidden="true"
-          style={{ fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, lineHeight:1.7, padding:'14px 16px', margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all', position:'absolute', inset:0, overflow:'hidden', color:'#cdd6f4', background:'transparent', pointerEvents:'none', minHeight:60, boxSizing:'border-box' }} />
-        <textarea
-          ref={taRef}
-          value={code}
-          spellCheck={false}
-          onChange={e => { setCode(e.target.value); onChange(e.target.value); syncHL(e.target.value); syncH() }}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
-            if (e.key === 'Tab') {
-              e.preventDefault()
-              const s=e.currentTarget.selectionStart,en=e.currentTarget.selectionEnd,v=e.currentTarget.value
-              const nv=v.slice(0,s)+'    '+v.slice(en)
-              setCode(nv); onChange(nv); syncHL(nv)
-              requestAnimationFrame(()=>{ if(taRef.current){taRef.current.selectionStart=taRef.current.selectionEnd=s+4} })
-            }
-          }}
-          style={{ width:'100%', background:'transparent', color:'transparent', caretColor:'#cdd6f4', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, padding:'14px 16px', border:'none', outline:'none', resize:'none', lineHeight:1.7, display:'block', boxSizing:'border-box', minHeight:60, overflow:'hidden', position:'relative', zIndex:1 }}
-          placeholder="# Ctrl+Enter to run&#10;print('Hello!')"
-        />
-      </div>
+      <textarea
+        ref={taRef}
+        value={code}
+        spellCheck={false}
+        onChange={e => { setCode(e.target.value); onChange(e.target.value); autoResize() }}
+        onKeyDown={e => {
+          if (e.key === 'Tab') { e.preventDefault(); const s=e.currentTarget.selectionStart,en=e.currentTarget.selectionEnd,v=e.currentTarget.value; e.currentTarget.value=v.slice(0,s)+'    '+v.slice(en); e.currentTarget.selectionStart=e.currentTarget.selectionEnd=s+4; setCode(e.currentTarget.value); onChange(e.currentTarget.value) }
+        }}
+        style={{ width: '100%', background: '#1e1e2e', color: '#cdd6f4', fontFamily: 'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize: 14, padding: '14px 16px', border: 'none', outline: 'none', resize: 'none', lineHeight: 1.7, display: 'block', boxSizing: 'border-box', minHeight: 60, overflow: 'hidden' }}
+        placeholder="# Write Python here&#10;print('Hello, world!')"
+      />
     </div>
   )
 }
@@ -305,18 +293,29 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
           <button onClick={onDelete} style={{ fontSize:11,color:'#f38ba8',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>✕</button>
         </div>
       </div>
-      <textarea
-        ref={taRef}
-        value={code}
-        spellCheck={false}
-        onChange={e => { setCode(e.target.value); onChange(e.target.value); autoResize() }}
-        onKeyDown={e => {
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
-          if (e.key === 'Tab') { e.preventDefault(); const s=e.currentTarget.selectionStart,en=e.currentTarget.selectionEnd,v=e.currentTarget.value; e.currentTarget.value=v.slice(0,s)+'    '+v.slice(en); e.currentTarget.selectionStart=e.currentTarget.selectionEnd=s+4; setCode(e.currentTarget.value); onChange(e.currentTarget.value) }
-        }}
-        style={{ width:'100%', background:'#1a1b26', color:'#cdd6f4', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, padding:'14px 16px', border:'none', outline:'none', resize:'none', lineHeight:1.7, display:'block', boxSizing:'border-box', minHeight:60, overflow:'hidden' }}
-        placeholder="# Ctrl+Enter to run&#10;print('Hello!')"
-      />
+      {/* Overlay: highlighted pre behind transparent textarea */}
+      <div style={{ position:'relative', background:'#1e1e2e' }}>
+        <pre ref={preRef} aria-hidden="true"
+          style={{ fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, lineHeight:1.7, padding:'14px 16px', margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all', position:'absolute', inset:0, overflow:'hidden', color:'#cdd6f4', background:'transparent', pointerEvents:'none', minHeight:60, boxSizing:'border-box' }} />
+        <textarea
+          ref={taRef}
+          value={code}
+          spellCheck={false}
+          onChange={e => { setCode(e.target.value); onChange(e.target.value); syncHL(e.target.value); syncH() }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              const s=e.currentTarget.selectionStart, en=e.currentTarget.selectionEnd, v=e.currentTarget.value
+              const nv = v.slice(0,s)+'    '+v.slice(en)
+              setCode(nv); onChange(nv); syncHL(nv)
+              requestAnimationFrame(() => { if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s+4 } })
+            }
+          }}
+          style={{ width:'100%', background:'transparent', color:'transparent', caretColor:'#cdd6f4', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, padding:'14px 16px', border:'none', outline:'none', resize:'none', lineHeight:1.7, display:'block', boxSizing:'border-box', minHeight:60, overflow:'hidden', position:'relative', zIndex:1 }}
+          placeholder="# Ctrl+Enter to run&#10;print('Hello!')"
+        />
+      </div>
       {output !== null && (
         <div style={{ background:'#0d1117', color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, padding:'10px 16px', borderTop:'1px solid #2a2a4a', whiteSpace:'pre-wrap' }}>
           <span style={{ color:'#6c7086', fontSize:10, display:'block', marginBottom:3 }}>OUTPUT</span>
