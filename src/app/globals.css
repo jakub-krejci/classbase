@@ -190,60 +190,45 @@ body { font-family: var(--font-sans); background: #f9fafb; }
   border-top: 1px solid #2a2a4a;
 }
 
-/* ── Dark mode ──────────────────────────────────────────── */
+/* ── Dark mode ─────────────────────────────────────────────── */
 body[data-theme="dark"] {
-  background: #111827 !important;
-  color: #f3f4f6 !important;
+  background: #111827;
+  color: #f3f4f6;
 }
-/* Cards, panels, surfaces */
-body[data-theme="dark"] .lesson-card,
-body[data-theme="dark"] [style*="background: #fff"],
-body[data-theme="dark"] [style*="background:#fff"],
-body[data-theme="dark"] [style*="background: rgb(255"],
-body[data-theme="dark"] [style*="background: white"] {
-  background: #1f2937 !important;
-  border-color: #374151 !important;
-  color: #f3f4f6 !important;
+/* All white surfaces */
+body[data-theme="dark"] div,
+body[data-theme="dark"] section,
+body[data-theme="dark"] main {
+  color: inherit;
 }
-/* Muted text */
-body[data-theme="dark"] [style*="color: #888"],
-body[data-theme="dark"] [style*="color:#888"],
-body[data-theme="dark"] [style*="color: #aaa"],
-body[data-theme="dark"] [style*="color:#aaa"],
-body[data-theme="dark"] [style*="color: #666"],
-body[data-theme="dark"] [style*="color:#666"],
-body[data-theme="dark"] [style*="color: #555"],
-body[data-theme="dark"] [style*="color:#555"],
-body[data-theme="dark"] [style*="color: #333"],
-body[data-theme="dark"] [style*="color:#333"] {
-  color: #9ca3af !important;
+/* Target the specific background values used in the app */
+body[data-theme="dark"] [class*="lesson"],
+body[data-theme="dark"] [class*="cb-"] {
+  color: #f3f4f6;
 }
-/* Borders */
-body[data-theme="dark"] [style*="border: 0.5px solid #e5e7eb"],
-body[data-theme="dark"] [style*="border:0.5px solid #e5e7eb"],
-body[data-theme="dark"] [style*="border: 1px solid #e5e7eb"],
-body[data-theme="dark"] [style*="border:1px solid #e5e7eb"],
-body[data-theme="dark"] [style*="border-color: #e5e7eb"],
-body[data-theme="dark"] [style*="borderColor: #e5e7eb"] {
-  border-color: #374151 !important;
+/* Lesson content card */
+body[data-theme="dark"] .lesson-content {
+  color: #e5e7eb;
 }
-/* Inputs */
-body[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
-body[data-theme="dark"] textarea,
-body[data-theme="dark"] select {
-  background: #1f2937 !important;
-  color: #f3f4f6 !important;
-  border-color: #374151 !important;
+body[data-theme="dark"] .lesson-content blockquote {
+  border-color: #7aa2f7;
+  color: #9ca3af;
 }
-/* Gray backgrounds (stat boxes, code labels etc) */
-body[data-theme="dark"] [style*="background: #f3f4f6"],
-body[data-theme="dark"] [style*="background:#f3f4f6"],
-body[data-theme="dark"] [style*="background: #f9fafb"],
-body[data-theme="dark"] [style*="background:#f9fafb"] {
-  background: #1f2937 !important;
-  color: #f3f4f6 !important;
+body[data-theme="dark"] .lesson-content td,
+body[data-theme="dark"] .lesson-content th {
+  border-color: #374151;
 }
-/* Links */
-body[data-theme="dark"] a:not([style*="color: #185FA5"]):not([style*="color:#185FA5"]):not([style*="color: #E6F1FB"]):not([class]) {
-  color: #93c5fd;
+body[data-theme="dark"] .lesson-content th {
+  background: #1f2937;
 }
+body[data-theme="dark"] .lesson-content details {
+  border-color: #374151;
+}
+body[data-theme="dark"] .lesson-content summary {
+  background: #1f2937;
+}
+/* Rich editor */
+body[data-theme="dark"] .cb-rich blockquote { color: #9ca3af; border-color: #7aa2f7; }
+body[data-theme="dark"] .cb-rich td,
+body[data-theme="dark"] .cb-rich th { border-color: #374151; }
+body[data-theme="dark"] .cb-rich th { background: #1f2937; }
