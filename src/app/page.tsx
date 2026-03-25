@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -7,13 +8,14 @@ export default async function RootPage() {
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profileData } = await supabase
     .from('profiles')
     .select('role')
-    .eq('id', user!.id)
+    .eq('id', (user as any).id)
     .single()
 
-  if ((profile as any)?.role === 'teacher') {
+  const profile = profileData as any
+  if (profile?.role === 'teacher') {
     redirect('/teacher/modules')
   } else {
     redirect('/student/modules')

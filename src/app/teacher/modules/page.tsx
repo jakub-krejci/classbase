@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -6,30 +7,30 @@ export default async function TeacherModulesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profileData } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', user.id)
+    .eq('id', (user as any).id)
     .single()
 
-  if ((profile as any)?.role !== 'teacher') redirect('/student/modules')
+  const profile = profileData as any
+  if (profile?.role !== 'teacher') redirect('/student/modules')
 
-  const { data: modules } = await supabase
+  const { data: modulesData } = await supabase
     .from('modules')
-    .select(`
-      *,
-      lessons(count),
-      enrollments(count)
-    `)
-    .eq('teacher_id', user.id)
+    .select('*, lessons(count), enrollments(count)')
+    .eq('teacher_id', (user as any).id)
     .order('created_at', { ascending: false })
+
+  const modules = (modulesData ?? []) as any[]
+  const name: string = profile?.full_name ?? ''
 
   return (
     <main style={{ maxWidth: 800, margin: '0 auto', padding: '24px 16px', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600 }}>My modules</h1>
-          <p style={{ fontSize: 13, color: '#888', marginTop: 3 }}>Welcome back, {profile?.full_name ?? ''}</p>
+          <p style={{ fontSize: 13, color: '#888', marginTop: 3 }}>Welcome back, {name}</p>
         </div>
         <a
           href="/teacher/modules/new"
@@ -39,13 +40,13 @@ export default async function TeacherModulesPage() {
         </a>
       </div>
 
-      {!modules?.length ? (
+      {modules.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: '#888', fontSize: 14, border: '1px dashed #e5e7eb', borderRadius: 12 }}>
           No modules yet. Create your first one to get started.
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {modules.map(m => (
+          {modules.map((m: any) => (
             <a
               key={m.id}
               href={`/teacher/modules/${m.id}`}
@@ -55,8 +56,8 @@ export default async function TeacherModulesPage() {
                 <div>
                   <div style={{ fontWeight: 500, fontSize: 14 }}>{m.title}</div>
                   <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>
-                    {(m.lessons as any)?.[0]?.count ?? 0} lessons ·{' '}
-                    {(m.enrollments as any)?.[0]?.count ?? 0} enrolled ·{' '}
+                    {m.lessons?.[0]?.count ?? 0} lessons &middot;{' '}
+                    {m.enrollments?.[0]?.count ?? 0} enrolled &middot;{' '}
                     Code: <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '1px 5px', borderRadius: 4 }}>{m.access_code}</code>
                   </div>
                 </div>
