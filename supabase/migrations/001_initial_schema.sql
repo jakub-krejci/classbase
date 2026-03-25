@@ -236,3 +236,9 @@ create policy "messages_select" on public.messages for select using (
 -- Run this separately if you already ran the initial schema:
 -- alter table public.modules add column if not exists enrollment_password text;
 alter table public.modules add column if not exists enrollment_password text;
+
+-- ── ALLOW ACCESS CODE LOOKUP (run this after initial schema) ──
+-- Students need to look up a module by access_code before they are enrolled.
+-- This policy allows anyone authenticated to read a module by its access_code.
+create policy "modules_access_code_lookup" on public.modules for select
+  using (auth.uid() is not null);
