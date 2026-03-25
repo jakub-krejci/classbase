@@ -78,7 +78,7 @@ export default function AssignmentView({ assignment, moduleId, studentId, existi
     if (error) { setSubmitting(false); return }
     setSubmitted(true)
     setSubmitting(false)
-    router.refresh()
+    window.location.reload()
   }
 
   const qs = assignment.questions ?? []

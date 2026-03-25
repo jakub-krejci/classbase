@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import { Card, Btn, BackLink } from '@/components/ui'
 
 const TAGS = ['Science', 'Math', 'Geography', 'Programming', 'History', 'Language', 'Graduation Exam', 'Other']
@@ -16,11 +15,11 @@ function genCode() {
 
 export default function NewModulePage() {
   const supabase = createClient()
-  const router = useRouter()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [tag, setTag] = useState('Science')
   const [unlock, setUnlock] = useState<'all' | 'sequential'>('all')
+  const [enrollPass, setEnrollPass] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -31,7 +30,7 @@ export default function NewModulePage() {
     if (!title.trim()) { setError('Title is required.'); return }
     setSaving(true); setError('')
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
+    if (!user) { window.location.href = '/login'; return }
     const { error: err } = await supabase.from('modules').insert({
       teacher_id: user.id,
       title: title.trim(),
@@ -39,10 +38,11 @@ export default function NewModulePage() {
       tag,
       access_code: genCode(),
       unlock_mode: unlock,
+      enrollment_password: enrollPass.trim() || null,
     } as any)
     if (err) { setError(err.message); setSaving(false); return }
-    router.push('/teacher/modules')
-    router.refresh()
+    // Full navigation — forces server re-render so new module appears immediately
+    window.location.href = '/teacher/modules'
   }
 
   return (
@@ -62,13 +62,21 @@ export default function NewModulePage() {
         </select>
 
         <label style={lbl}>Lesson unlocking</label>
-        <div style={{ display: 'flex', border: '0.5px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ display: 'flex', border: '0.5px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
           {(['all', 'sequential'] as const).map(v => (
             <div key={v} onClick={() => setUnlock(v)}
               style={{ flex: 1, padding: '7px', textAlign: 'center', fontSize: 12, fontWeight: 500, cursor: 'pointer', background: unlock === v ? '#185FA5' : '#f9fafb', color: unlock === v ? '#E6F1FB' : '#666' }}>
               {v === 'all' ? 'All visible' : 'Sequential (unlock on completion)'}
             </div>
           ))}
+        </div>
+
+        <label style={lbl}>Enrollment password (optional)</label>
+        <input style={inp} value={enrollPass} onChange={e => setEnrollPass(e.target.value)}
+          placeholder="e.g. physics2026 — leave blank for open enrollment"
+          type="text" autoComplete="off" />
+        <div style={{ fontSize: 11, color: '#888', marginTop: -8, marginBottom: 12 }}>
+          If set, students must enter this password in addition to the access code when joining.
         </div>
 
         {error && <div style={{ fontSize: 12, padding: '7px 10px', background: '#FCEBEB', color: '#791F1F', borderRadius: 8, marginBottom: 10 }}>{error}</div>}

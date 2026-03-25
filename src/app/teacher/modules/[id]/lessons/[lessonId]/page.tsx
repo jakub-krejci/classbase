@@ -48,8 +48,7 @@ export default function LessonEditorPage() {
       const { error: err } = await supabase.from('lessons').update({ title: title.trim(), content_html: html, updated_at: new Date().toISOString() } as any).eq('id', lessonId)
       if (err) { setError(err.message); setSaving(false); return }
     }
-    router.push('/teacher/modules/' + moduleId)
-    router.refresh()
+    window.location.href = '/teacher/modules/' + moduleId
   }
 
   const tbBtn: React.CSSProperties = { padding: '3px 7px', fontSize: 11, border: '0.5px solid transparent', borderRadius: 5, background: 'none', cursor: 'pointer', fontFamily: 'inherit' }

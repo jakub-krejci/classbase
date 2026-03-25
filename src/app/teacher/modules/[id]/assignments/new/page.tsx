@@ -59,8 +59,7 @@ export default function AssignmentEditorPage() {
       ? await supabase.from('assignments').insert(payload as any)
       : await supabase.from('assignments').update(payload as any).eq('id', assignmentId)
     if (err) { setError(err.message); setSaving(false); return }
-    router.push('/teacher/modules/' + moduleId)
-    router.refresh()
+    window.location.href = '/teacher/modules/' + moduleId
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading…</div>

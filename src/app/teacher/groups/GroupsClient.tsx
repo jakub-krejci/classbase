@@ -25,13 +25,13 @@ export default function GroupsClient({ groups, students, teacherId }: { groups: 
       await supabase.from('group_members').insert(selected.map(sid => ({ group_id: (g as any).id, student_id: sid })))
     }
     setCreating(false); setName(''); setDesc(''); setSelected([]); setSaving(false)
-    router.refresh()
+    window.location.reload()
   }
 
   async function deleteGroup(id: string) {
     if (!confirm('Delete this group?')) return
     await supabase.from('groups').delete().eq('id', id)
-    router.refresh()
+    window.location.reload()
   }
 
   return (

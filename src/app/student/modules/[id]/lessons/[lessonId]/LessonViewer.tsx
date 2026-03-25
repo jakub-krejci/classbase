@@ -117,7 +117,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completed }:
     await supabase.from('lesson_progress').upsert({ student_id: studentId, lesson_id: lesson.id } as any)
     setDone(true)
     setMarking(false)
-    router.refresh()
+    window.location.reload()
   }
 
   return (

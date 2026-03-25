@@ -26,7 +26,7 @@ export default function MessagesClient({ messages, groups, students, senderId }:
     await supabase.from('messages').insert({ sender_id: senderId, recipient_type, recipient_id, body: body.trim() } as any)
     setBody('')
     setSending(false)
-    router.refresh()
+    window.location.reload()
   }
 
   return (

@@ -21,11 +21,13 @@ export default function EditModulePage() {
   const [unlock, setUnlock] = useState<'all' | 'sequential'>('all')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [enrollPass, setEnrollPass] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase.from('modules').select('*').eq('id', id).single().then(({ data }) => {
-      if (data) { setTitle(data.title); setDescription((data as any).description ?? ''); setTag((data as any).tag ?? 'Science'); setUnlock((data as any).unlock_mode ?? 'all') }
+      if (data) { setTitle(data.title); setDescription((data as any).description ?? ''); setTag((data as any).tag ?? 'Science'); setUnlock((data as any).unlock_mode ?? 'all')
+        setEnrollPass((data as any).enrollment_password ?? '') }
       setLoading(false)
     })
   }, [])
@@ -33,10 +35,9 @@ export default function EditModulePage() {
   async function save() {
     if (!title.trim()) { setError('Title is required.'); return }
     setSaving(true); setError('')
-    const { error: err } = await supabase.from('modules').update({ title: title.trim(), description: description.trim() || null, tag, unlock_mode: unlock } as any).eq('id', id)
+    const { error: err } = await supabase.from('modules').update({ title: title.trim(), description: description.trim() || null, tag, unlock_mode: unlock, enrollment_password: enrollPass.trim() || null } as any).eq('id', id)
     if (err) { setError(err.message); setSaving(false); return }
-    router.push('/teacher/modules/' + id)
-    router.refresh()
+    window.location.href = '/teacher/modules/' + id
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading…</div>
@@ -61,6 +62,12 @@ export default function EditModulePage() {
               {v === 'all' ? 'All visible' : 'Sequential'}
             </div>
           ))}
+        </div>
+        <label style={lbl}>Enrollment password (optional)</label>
+        <input style={inp} value={enrollPass} onChange={e => setEnrollPass(e.target.value)}
+          placeholder="Leave blank for open enrollment" autoComplete="off" />
+        <div style={{ fontSize: 11, color: '#888', marginTop: -4, marginBottom: 10 }}>
+          If set, students must enter this password when joining with the access code.
         </div>
         {error && <div style={{ fontSize: 12, padding: '7px 10px', background: '#FCEBEB', color: '#791F1F', borderRadius: 8, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>

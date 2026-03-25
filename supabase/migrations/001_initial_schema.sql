@@ -231,3 +231,8 @@ create policy "messages_select" on public.messages for select using (
     where gm.group_id = recipient_id and gm.student_id = auth.uid()
   ))
 );
+
+-- ── ENROLLMENT PASSWORD (add after initial schema runs) ───────
+-- Run this separately if you already ran the initial schema:
+-- alter table public.modules add column if not exists enrollment_password text;
+alter table public.modules add column if not exists enrollment_password text;

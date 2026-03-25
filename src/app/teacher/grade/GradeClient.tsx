@@ -23,7 +23,7 @@ export default function GradeClient({ submissions }: { submissions: any[] }) {
       graded_at: new Date().toISOString(),
     } as any).eq('id', sub.id)
     setSaving(prev => ({ ...prev, [sub.id]: false }))
-    router.refresh()
+    window.location.reload()
   }
 
   return (

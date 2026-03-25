@@ -20,8 +20,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
   async function deleteModule() {
     if (!confirm('Delete this module and all its content?')) return
     await supabase.from('modules').delete().eq('id', module.id)
-    router.push('/teacher/modules')
-    router.refresh()
+    window.location.href = '/teacher/modules'
   }
 
   async function deleteLesson(id: string) {
@@ -33,7 +32,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
   async function deleteAssignment(id: string) {
     if (!confirm('Delete this assignment?')) return
     await supabase.from('assignments').delete().eq('id', id)
-    router.refresh()
+    window.location.reload()
   }
 
   async function saveOrder(newList: any[]) {
@@ -68,6 +67,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Access code</div>
           <div style={codeBox}>{module.access_code}</div>
+        {module.enrollment_password && <div style={{ fontSize: 11, color: '#633806', background: '#FAEEDA', borderRadius: 6, padding: '3px 8px', marginTop: 4 }}>🔑 Password protected</div>}
         </div>
       </div>
 
