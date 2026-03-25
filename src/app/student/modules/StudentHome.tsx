@@ -23,7 +23,7 @@ export default function StudentHome({ profile, enrollments, progressMap, message
     setEnrolling(true); setEnrollError(''); setEnrollSuccess('')
     const { data: mod } = await supabase.from('modules').select('id,title').eq('access_code', code.trim().toUpperCase()).single()
     if (!mod) { setEnrollError('Invalid access code. Please check with your teacher.'); setEnrolling(false); return }
-    const { error } = await supabase.from('enrollments').insert({ student_id: studentId, module_id: (mod as any).id })
+    const { error } = await supabase.from('enrollments').insert({ student_id: studentId, module_id: (mod as any).id } as any)
     if (error?.code === '23505') { setEnrollError('You are already enrolled in this module.'); setEnrolling(false); return }
     if (error) { setEnrollError(error.message); setEnrolling(false); return }
     setEnrollSuccess('Enrolled in ' + (mod as any).title + '!')
