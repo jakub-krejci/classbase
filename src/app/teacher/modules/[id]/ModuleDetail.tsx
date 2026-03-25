@@ -39,7 +39,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
   async function saveOrder(newList: any[]) {
     setLessonList(newList)
     await Promise.all(newList.map((l, i) =>
-      supabase.from('lessons').update({ position: i }).eq('id', l.id)
+      supabase.from('lessons').update({ position: i } as any).eq('id', l.id)
     ))
   }
 

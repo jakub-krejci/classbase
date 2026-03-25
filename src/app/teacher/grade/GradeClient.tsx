@@ -21,7 +21,7 @@ export default function GradeClient({ submissions }: { submissions: any[] }) {
       teacher_feedback: feedback[sub.id] ?? '',
       status: 'graded',
       graded_at: new Date().toISOString(),
-    }).eq('id', sub.id)
+    } as any).eq('id', sub.id)
     setSaving(prev => ({ ...prev, [sub.id]: false }))
     router.refresh()
   }

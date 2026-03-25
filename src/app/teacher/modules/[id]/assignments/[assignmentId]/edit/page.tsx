@@ -68,7 +68,7 @@ export default function EditAssignmentPage() {
       instructions: type === 'homework' ? hwInstr : null,
       deadline: deadline || null,
     }
-    const { error: err } = await supabase.from('assignments').update(payload).eq('id', assignmentId)
+    const { error: err } = await supabase.from('assignments').update(payload as any).eq('id', assignmentId)
     if (err) { setError(err.message); setSaving(false); return }
     router.push('/teacher/modules/' + moduleId)
     router.refresh()

@@ -20,7 +20,7 @@ export default function GroupsClient({ groups, students, teacherId }: { groups: 
   async function saveGroup() {
     if (!name.trim()) return
     setSaving(true)
-    const { data: g } = await supabase.from('groups').insert({ teacher_id: teacherId, name: name.trim(), description: desc.trim() || null }).select().single()
+    const { data: g } = await supabase.from('groups').insert({ teacher_id: teacherId, name: name.trim(), description: desc.trim() || null } as any).select().single()
     if (g && selected.length) {
       await supabase.from('group_members').insert(selected.map(sid => ({ group_id: (g as any).id, student_id: sid })))
     }

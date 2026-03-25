@@ -74,7 +74,7 @@ export default function AssignmentView({ assignment, moduleId, studentId, existi
       setResult(autoCount > 0 ? `Auto-graded: ${correct}/${autoCount} correct (${autoScore}%)` + (hasOpen ? ' · Open answers sent for review' : '') : 'Submitted for teacher review.')
     }
 
-    const { error } = await supabase.from('submissions').insert(payload)
+    const { error } = await supabase.from('submissions').insert(payload as any)
     if (error) { setSubmitting(false); return }
     setSubmitted(true)
     setSubmitting(false)

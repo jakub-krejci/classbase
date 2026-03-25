@@ -33,7 +33,7 @@ export default function EditModulePage() {
   async function save() {
     if (!title.trim()) { setError('Title is required.'); return }
     setSaving(true); setError('')
-    const { error: err } = await supabase.from('modules').update({ title: title.trim(), description: description.trim() || null, tag, unlock_mode: unlock }).eq('id', id)
+    const { error: err } = await supabase.from('modules').update({ title: title.trim(), description: description.trim() || null, tag, unlock_mode: unlock } as any).eq('id', id)
     if (err) { setError(err.message); setSaving(false); return }
     router.push('/teacher/modules/' + id)
     router.refresh()

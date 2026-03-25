@@ -23,7 +23,7 @@ export default function MessagesClient({ messages, groups, students, senderId }:
     let recipient_id: string | null = null
     if (to.startsWith('group:')) { recipient_type = 'group'; recipient_id = to.replace('group:', '') }
     else if (to.startsWith('student:')) { recipient_type = 'student'; recipient_id = to.replace('student:', '') }
-    await supabase.from('messages').insert({ sender_id: senderId, recipient_type, recipient_id, body: body.trim() })
+    await supabase.from('messages').insert({ sender_id: senderId, recipient_type, recipient_id, body: body.trim() } as any)
     setBody('')
     setSending(false)
     router.refresh()

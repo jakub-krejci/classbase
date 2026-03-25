@@ -56,8 +56,8 @@ export default function AssignmentEditorPage() {
     setSaving(true); setError('')
     const payload: any = { module_id: moduleId, title: title.trim(), type, lesson_id: lessonId || null, questions: type === 'homework' ? [] : questions, instructions: type === 'homework' ? hwInstr : null, deadline: deadline || null }
     const { error: err } = isNew
-      ? await supabase.from('assignments').insert(payload)
-      : await supabase.from('assignments').update(payload).eq('id', assignmentId)
+      ? await supabase.from('assignments').insert(payload as any)
+      : await supabase.from('assignments').update(payload as any).eq('id', assignmentId)
     if (err) { setError(err.message); setSaving(false); return }
     router.push('/teacher/modules/' + moduleId)
     router.refresh()

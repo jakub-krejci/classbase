@@ -42,10 +42,10 @@ export default function LessonEditorPage() {
     if (isNew) {
       const { data: existing } = await supabase.from('lessons').select('id').eq('module_id', moduleId).order('position', { ascending: false }).limit(1).single()
       const pos = (existing as any)?.position != null ? (existing as any).position + 1 : 0
-      const { error: err } = await supabase.from('lessons').insert({ module_id: moduleId, title: title.trim(), content_html: html, position: pos })
+      const { error: err } = await supabase.from('lessons').insert({ module_id: moduleId, title: title.trim(), content_html: html, position: pos } as any)
       if (err) { setError(err.message); setSaving(false); return }
     } else {
-      const { error: err } = await supabase.from('lessons').update({ title: title.trim(), content_html: html, updated_at: new Date().toISOString() }).eq('id', lessonId)
+      const { error: err } = await supabase.from('lessons').update({ title: title.trim(), content_html: html, updated_at: new Date().toISOString() } as any).eq('id', lessonId)
       if (err) { setError(err.message); setSaving(false); return }
     }
     router.push('/teacher/modules/' + moduleId)

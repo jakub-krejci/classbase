@@ -30,7 +30,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
       subject_specialty: subject.trim() || null,
       bio: bio.trim() || null,
       updated_at: new Date().toISOString(),
-    }).eq('id', profile.id)
+    } as any).eq('id', profile.id)
     if (err) { setError(err.message); setSaving(false); return }
     if (newPass.trim()) {
       if (newPass.length < 6) { setError('Password must be at least 6 characters.'); setSaving(false); return }

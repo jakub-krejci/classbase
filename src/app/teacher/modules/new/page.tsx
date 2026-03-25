@@ -39,7 +39,7 @@ export default function NewModulePage() {
       tag,
       access_code: genCode(),
       unlock_mode: unlock,
-    })
+    } as any)
     if (err) { setError(err.message); setSaving(false); return }
     router.push('/teacher/modules')
     router.refresh()
