@@ -67,13 +67,40 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     // Remove edit buttons (table +row/col buttons, etc.)
     el.querySelectorAll('button[onclick^="cbTable"]').forEach(b => (b as HTMLElement).style.display = 'none')
 
-    // #1 — Apply Python syntax highlighting to all code blocks
+    // #1 — Apply Python syntax highlighting
+    // Handle new format: code stored in data-code on .cb-code-block
+    el.querySelectorAll('.cb-code-block').forEach(block => {
+      const b = block as HTMLElement
+      const pre = b.querySelector('pre')
+      const enc = b.getAttribute('data-code')
+      if (pre && enc) {
+        try { pre.innerHTML = highlightPython(decodeURIComponent(enc)) } catch { pre.innerHTML = highlightPython(enc) }
+      } else if (pre && !b.dataset.hl) {
+        b.dataset.hl = '1'
+        pre.innerHTML = highlightPython(pre.textContent ?? '')
+      }
+      // Hide edit button in student view
+      const editBtn = b.querySelector('button')
+      if (editBtn) editBtn.style.display = 'none'
+    })
+    // Also highlight any plain <pre> blocks not in .cb-code-block
     el.querySelectorAll('pre').forEach(pre => {
       const p = pre as HTMLElement
+      if (p.closest('.cb-code-block')) return // already handled
       if (p.dataset.highlighted) return
       p.dataset.highlighted = '1'
-      const raw = p.textContent ?? ''
-      p.innerHTML = highlightPython(raw)
+      p.innerHTML = highlightPython(p.textContent ?? '')
+    })
+    // Restore try-it content from data-code
+    el.querySelectorAll('.tryit-widget').forEach(widget => {
+      const w = widget as HTMLElement
+      const enc = w.getAttribute('data-code')
+      const ta = w.querySelector('textarea') as HTMLTextAreaElement
+      if (ta && enc) {
+        try { ta.value = decodeURIComponent(enc) } catch { ta.value = enc }
+        ta.style.height = 'auto'
+        ta.style.height = ta.scrollHeight + 'px'
+      }
     })
 
     // Add copy buttons to code blocks

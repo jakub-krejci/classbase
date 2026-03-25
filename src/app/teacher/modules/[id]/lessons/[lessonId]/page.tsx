@@ -12,27 +12,25 @@ function QuizModal({ onInsert, onClose }: { onInsert: (h: string) => void; onClo
   const [opts, setOpts] = useState(['', '', '', ''])
   const [correct, setCorrect] = useState(0)
   const [expl, setExpl] = useState(['', '', '', ''])
-
+  const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 8 }
   function build() {
     const o = opts.filter(x => x.trim())
-    const oEnc = JSON.stringify(o).replace(/"/g, '&quot;')
-    const eEnc = JSON.stringify(expl.slice(0, o.length)).replace(/"/g, '&quot;')
-    return `<div class="cb-quiz" data-q="${q.replace(/"/g,'&quot;')}" data-opts="${oEnc}" data-correct="${correct}" data-expl="${eEnc}" contenteditable="false" style="background:#f0f7ff;border:1px solid #B5D4F4;border-radius:10px;margin:12px 0;padding:0;overflow:hidden"><div style="padding:10px 14px;background:#E6F1FB;font-size:10px;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em">✓ Quiz question</div><div style="padding:10px 14px;font-size:14px;font-weight:600;color:#333">${q}</div></div>`
+    const oE = JSON.stringify(o).replace(/"/g, '&quot;')
+    const eE = JSON.stringify(expl.slice(0, o.length)).replace(/"/g, '&quot;')
+    return `<div class="cb-quiz" data-q="${q.replace(/"/g, '&quot;')}" data-opts="${oE}" data-correct="${correct}" data-expl="${eE}" contenteditable="false" style="background:#f0f7ff;border:1px solid #B5D4F4;border-radius:10px;margin:12px 0;padding:0;overflow:hidden"><div style="padding:10px 14px;background:#E6F1FB;font-size:10px;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em">✓ Quiz — ${q}</div></div>`
   }
-
-  const i: React.CSSProperties = { width: '100%', padding: '7px 9px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 8 }
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 540, maxHeight: '90vh', overflowY: 'auto' }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Insert quiz question</h2>
-        <label style={{ fontSize: 11, fontWeight: 600, color: '#555', display: 'block', marginBottom: 3 }}>Question text</label>
-        <input value={q} onChange={e => setQ(e.target.value)} style={i} placeholder="e.g. What does F = ma represent?" />
-        <label style={{ fontSize: 11, fontWeight: 600, color: '#555', display: 'block', margin: '8px 0 6px' }}>Options <span style={{ fontWeight: 400, color: '#888' }}>(click the dot to mark the correct one)</span></label>
-        {opts.map((o, idx) => (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-            <div onClick={() => setCorrect(idx)} style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid', borderColor: correct === idx ? '#185FA5' : '#ccc', background: correct === idx ? '#185FA5' : '#fff', cursor: 'pointer', flexShrink: 0 }} />
-            <input value={o} onChange={e => setOpts(p => p.map((x, j) => j === idx ? e.target.value : x))} style={{ ...i, flex: 1, marginBottom: 0 }} placeholder={`Option ${idx + 1}`} />
-            <input value={expl[idx]} onChange={e => setExpl(p => p.map((x, j) => j === idx ? e.target.value : x))} style={{ ...i, flex: 1, marginBottom: 0, background: '#fff8f9', borderColor: '#fce4ec' }} placeholder="Explanation if wrong" />
+        <label style={{ fontSize: 11, fontWeight: 600, color: '#555', display: 'block', marginBottom: 3 }}>Question</label>
+        <input value={q} onChange={e => setQ(e.target.value)} style={inp} placeholder="What does F = ma represent?" />
+        <label style={{ fontSize: 11, fontWeight: 600, color: '#555', display: 'block', margin: '8px 0 6px' }}>Options <span style={{ fontWeight: 400, color: '#888' }}>(● = correct answer)</span></label>
+        {opts.map((o, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+            <div onClick={() => setCorrect(i)} style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid', borderColor: correct === i ? '#185FA5' : '#ccc', background: correct === i ? '#185FA5' : '#fff', cursor: 'pointer', flexShrink: 0 }} />
+            <input value={o} onChange={e => setOpts(p => p.map((x, j) => j === i ? e.target.value : x))} style={{ ...inp, flex: 1, marginBottom: 0 }} placeholder={`Option ${i + 1}`} />
+            <input value={expl[i]} onChange={e => setExpl(p => p.map((x, j) => j === i ? e.target.value : x))} style={{ ...inp, flex: 1, marginBottom: 0, background: '#fff8f9', borderColor: '#fce4ec' }} placeholder="Explanation if wrong" />
           </div>
         ))}
         <button onClick={() => setOpts(p => [...p, ''])} style={{ fontSize: 12, color: '#185FA5', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 14 }}>+ Add option</button>
@@ -47,17 +45,16 @@ function QuizModal({ onInsert, onClose }: { onInsert: (h: string) => void; onClo
 }
 
 function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) => void; onClose: () => void }) {
-  const [rows, setRows] = useState(3)
-  const [cols, setCols] = useState(3)
-  const i: React.CSSProperties = { width: 70, padding: '6px 8px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, outline: 'none', textAlign: 'center' }
+  const [rows, setRows] = useState(3); const [cols, setCols] = useState(3)
+  const n: React.CSSProperties = { width: 70, padding: '6px 8px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, outline: 'none', textAlign: 'center' }
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 300 }}>
         <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Insert table</h2>
-        {[['Rows', rows, setRows], ['Columns', cols, setCols]].map(([lbl, val, set]: any) => (
+        {[['Rows', rows, setRows] as const, ['Columns', cols, setCols] as const].map(([lbl, val, set]) => (
           <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
             <span style={{ width: 70, fontSize: 13 }}>{lbl}</span>
-            <input type="number" min={1} max={20} value={val} onChange={e => set(Math.max(1, Math.min(20, +e.target.value || 1)))} style={i} />
+            <input type="number" min={1} max={20} value={val} onChange={e => (set as any)(Math.max(1, Math.min(20, +e.target.value || 1)))} style={n} />
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -70,18 +67,14 @@ function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) =>
 }
 
 function MediaModal({ type, lessons, moduleId, onInsert, onClose }: {
-  type: 'image' | 'video' | 'file' | 'link'
-  lessons: any[]; moduleId: string
+  type: 'image' | 'video' | 'file' | 'link'; lessons: any[]; moduleId: string
   onInsert: (h: string) => void; onClose: () => void
 }) {
-  const [url, setUrl] = useState('')
-  const [label, setLabel] = useState('')
+  const [url, setUrl] = useState(''); const [label, setLabel] = useState('')
   const [tab, setTab] = useState<'url' | 'upload'>('url')
-  const [uploading, setUploading] = useState(false)
-  const [err, setErr] = useState('')
+  const [uploading, setUploading] = useState(false); const [err, setErr] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 10 }
-
   async function upload(f: File) {
     setUploading(true); setErr('')
     const fd = new FormData(); fd.append('file', f)
@@ -90,8 +83,7 @@ function MediaModal({ type, lessons, moduleId, onInsert, onClose }: {
     if (!res.ok) { setErr(data.error); setUploading(false); return }
     setUrl(data.url); setLabel(f.name); setUploading(false)
   }
-
-  function build(): string {
+  function build() {
     if (type === 'image') return `<img src="${url}" alt="${label || 'image'}" style="max-width:100%;border-radius:8px;margin:8px 0;display:block">`
     if (type === 'video') {
       const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/)
@@ -103,13 +95,11 @@ function MediaModal({ type, lessons, moduleId, onInsert, onClose }: {
     if (type === 'link') return `<a href="${url}" target="${url.startsWith('/') ? '_self' : '_blank'}">${label || url}</a>`
     return ''
   }
-
-  const titles = { image: 'Insert image / animation', video: 'Embed video', file: 'Attach downloadable file', link: 'Insert hyperlink' }
+  const titles: any = { image: 'Insert image / animation', video: 'Embed video', file: 'Attach file', link: 'Insert hyperlink' }
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 460 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>{titles[type]}</h2>
-
         {(type === 'image' || type === 'file') && (
           <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e5e7eb', marginBottom: 14 }}>
             {(['url', 'upload'] as const).map(t => (
@@ -119,7 +109,6 @@ function MediaModal({ type, lessons, moduleId, onInsert, onClose }: {
             ))}
           </div>
         )}
-
         {tab === 'upload' && (type === 'image' || type === 'file') ? (
           <div>
             <div onClick={() => fileRef.current?.click()} style={{ border: '2px dashed #e5e7eb', borderRadius: 10, padding: 20, textAlign: 'center', cursor: 'pointer', color: url ? '#27500A' : '#888', fontSize: 13, background: url ? '#f0fff4' : '#fafafa', marginBottom: 10 }}>
@@ -130,20 +119,17 @@ function MediaModal({ type, lessons, moduleId, onInsert, onClose }: {
         ) : (
           <>
             <label style={{ fontSize: 11, fontWeight: 600, color: '#555', display: 'block', marginBottom: 3 }}>
-              {type === 'video' ? 'YouTube / Vimeo URL' : type === 'link' ? 'URL (https:// or /student/modules/...)' : 'Image URL'}
+              {type === 'video' ? 'YouTube / Vimeo URL' : type === 'link' ? 'URL or /student/modules/...' : 'Image URL'}
             </label>
             <input value={url} onChange={e => setUrl(e.target.value)} style={inp} placeholder={type === 'video' ? 'https://youtube.com/watch?v=...' : 'https://'} />
           </>
         )}
-
         {(type === 'image' || type === 'file' || type === 'link') && (
           <>
             <label style={{ fontSize: 11, fontWeight: 600, color: '#555', display: 'block', marginBottom: 3 }}>{type === 'link' ? 'Link text' : 'Label / alt text'}</label>
-            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder={type === 'link' ? 'Click here' : 'Describe this'} />
+            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder={type === 'link' ? 'Click here' : 'Description'} />
           </>
         )}
-
-        {/* Internal lesson links */}
         {type === 'link' && lessons.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 6 }}>Or link to a lesson in this module:</div>
@@ -155,7 +141,6 @@ function MediaModal({ type, lessons, moduleId, onInsert, onClose }: {
             ))}
           </div>
         )}
-
         {err && <div style={{ fontSize: 12, color: '#791F1F', marginBottom: 8 }}>{err}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => { if (url) { onInsert(build()); onClose() } }} disabled={!url || uploading}
@@ -186,7 +171,8 @@ export default function LessonEditorPage() {
   const editorRef = useRef<HTMLDivElement>(null)
   const savedRange = useRef<Range | null>(null)
 
-  // #10 — Load existing lesson content reliably
+  // #6 / #10 — Load existing lesson content
+  // Key fix: we set innerHTML via ref, and re-render highlighted code blocks
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -201,35 +187,42 @@ export default function LessonEditorPage() {
       if (!isNew && lessonId) {
         const { data, error: le } = await supabase.from('lessons').select('*').eq('id', lessonId).single()
         if (le) { setError('Failed to load lesson: ' + le.message); setLoading(false); return }
-        if (data && editorRef.current) {
+        if (data) {
           setTitle((data as any).title ?? '')
-          // #10 — set innerHTML directly (must happen after DOM is ready)
-          editorRef.current.innerHTML = (data as any).content_html ?? '<p><br></p>'
-          // Apply syntax highlighting to loaded code blocks
-          editorRef.current.querySelectorAll('pre').forEach(pre => {
-            const p = pre as HTMLElement
-            if (!p.dataset.hl && !p.querySelector('span.py-kw')) {
-              p.dataset.hl = '1'
-              p.innerHTML = highlightPython(p.textContent ?? '')
+          // Store HTML to inject after state update causes re-render
+          const html = (data as any).content_html ?? '<p><br></p>'
+          setLoading(false)
+          // Wait for next tick so ref is available
+          setTimeout(() => {
+            if (editorRef.current) {
+              editorRef.current.innerHTML = html
+              // Render code block previews (highlighted but read-only display — actual code in textarea)
+              editorRef.current.querySelectorAll('.cb-code-preview').forEach(el => {
+                const raw = el.getAttribute('data-code') ?? ''
+                el.innerHTML = highlightPython(raw)
+              })
             }
-          })
+          }, 0)
+          return
         }
-      } else if (isNew && editorRef.current) {
-        editorRef.current.innerHTML = '<p><br></p>'
       }
       setLoading(false)
+      setTimeout(() => {
+        if (editorRef.current && !editorRef.current.innerHTML.trim()) {
+          editorRef.current.innerHTML = '<p><br></p>'
+        }
+      }, 0)
     }
     load()
   }, [])
 
-  // Register global table helpers
+  // Table helpers
   useEffect(() => {
     const w = window as any
     w.cbTblAddRow = (id: string) => {
       const t = document.getElementById(id) as HTMLTableElement; if (!t) return
       const cols = t.rows[0]?.cells.length ?? 1
-      const tbody = t.tBodies[0] ?? t
-      const r = tbody.insertRow()
+      const tbody = t.tBodies[0] ?? t; const r = tbody.insertRow()
       for (let i = 0; i < cols; i++) { const c = r.insertCell(); c.contentEditable = 'true'; c.style.cssText = 'border:1px solid #e5e7eb;padding:7px 11px'; c.textContent = 'Cell' }
     }
     w.cbTblDelRow = (id: string) => {
@@ -248,15 +241,9 @@ export default function LessonEditorPage() {
       const t = document.getElementById(id) as HTMLTableElement; if (!t) return
       Array.from(t.rows).forEach(r => { if (r.cells.length > 1) r.deleteCell(r.cells.length - 1) })
     }
-    w.cbCopy = (id: string) => {
-      const p = document.getElementById(id); if (!p) return
-      navigator.clipboard?.writeText(p.textContent ?? '')
-      const btn = document.querySelector(`[data-copy="${id}"]`) as HTMLButtonElement
-      if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500) }
-    }
   }, [])
 
-  // ── Cursor helpers ────────────────────────────────────────────────────────
+  // ── Cursor helpers ─────────────────────────────────────────────────────────
   function saveRange() {
     const sel = window.getSelection()
     if (sel && sel.rangeCount) savedRange.current = sel.getRangeAt(0).cloneRange()
@@ -289,19 +276,12 @@ export default function LessonEditorPage() {
     editorRef.current?.focus()
   }
 
-  // ── Commands ──────────────────────────────────────────────────────────────
   function exec(cmd: string, val?: string) { editorRef.current?.focus(); document.execCommand(cmd, false, val ?? '') }
   function heading(t: 'h1' | 'h2' | 'h3') { editorRef.current?.focus(); document.execCommand('formatBlock', false, t) }
-
-  function insertBlockquote() {
-    editorRef.current?.focus()
-    document.execCommand('formatBlock', false, 'blockquote')
-  }
-
+  function insertBlockquote() { editorRef.current?.focus(); document.execCommand('formatBlock', false, 'blockquote') }
   function highlight(color: string) {
     editorRef.current?.focus()
-    const sel = window.getSelection()
-    const text = sel?.toString() || 'highlighted text'
+    const text = window.getSelection()?.toString() || 'highlighted text'
     document.execCommand('insertHTML', false, `<span style="background:${color};border-radius:2px;padding:0 2px">${text}</span>`)
   }
 
@@ -310,42 +290,110 @@ export default function LessonEditorPage() {
     const hdr = Array.from({ length: cols }, (_, i) => `<th style="border:1px solid #e5e7eb;padding:7px 11px;background:#f9fafb;font-weight:600" contenteditable="true">Header ${i + 1}</th>`).join('')
     const row = Array.from({ length: cols }, () => `<td style="border:1px solid #e5e7eb;padding:7px 11px" contenteditable="true">Cell</td>`).join('')
     const body = Array.from({ length: rows - 1 }, () => `<tr>${row}</tr>`).join('')
-    const btnStyle = `padding:3px 9px;font-size:11px;border:1px solid #e5e7eb;border-radius:6px;background:#f9fafb;cursor:pointer;font-family:inherit`
+    const bs = `padding:3px 9px;font-size:11px;border:1px solid #e5e7eb;border-radius:6px;background:#f9fafb;cursor:pointer;font-family:inherit`
     insertAtCursor(`<div contenteditable="false" style="margin:10px 0;overflow-x:auto">
 <table id="${id}" style="border-collapse:collapse;width:100%;min-width:200px"><thead><tr>${hdr}</tr></thead><tbody>${body}</tbody></table>
 <div style="display:flex;gap:6px;margin-top:5px">
-  <button style="${btnStyle}" onclick="cbTblAddRow('${id}')">+ Row</button>
-  <button style="${btnStyle}" onclick="cbTblDelRow('${id}')">− Row</button>
-  <button style="${btnStyle}" onclick="cbTblAddCol('${id}')">+ Col</button>
-  <button style="${btnStyle}" onclick="cbTblDelCol('${id}')">− Col</button>
+<button style="${bs}" onclick="cbTblAddRow('${id}')">+ Row</button>
+<button style="${bs}" onclick="cbTblDelRow('${id}')">− Row</button>
+<button style="${bs}" onclick="cbTblAddCol('${id}')">+ Col</button>
+<button style="${bs}" onclick="cbTblDelCol('${id}')">− Col</button>
 </div></div>`)
   }
 
+  // #3 #4 #5 — CODE BLOCKS: use textarea for editing, data-code for storage
+  // The raw code is stored in data-code attribute.
+  // A preview div shows highlighted HTML. Never use contenteditable pre.
   function insertCodeBlock() {
-    const id = 'pre' + Date.now()
-    const defaultCode = `# Python example\nprint("Hello, world!")`
+    const id = 'code' + Date.now()
+    const defaultCode = '# Write Python here\nprint("Hello, world!")'
     const highlighted = highlightPython(defaultCode)
-    insertAtCursor(`<div contenteditable="false" style="background:#1e1e2e;border-radius:8px;overflow:hidden;margin:10px 0;position:relative">
+    insertAtCursor(`<div class="cb-code-block" contenteditable="false" data-code="${encodeURIComponent(defaultCode)}" style="background:#1e1e2e;border-radius:8px;overflow:hidden;margin:10px 0">
 <div style="background:#16213e;padding:6px 14px;font-size:10px;color:#7aa2f7;font-family:monospace;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between">
   <span>PYTHON</span>
-  <button data-copy="${id}" style="padding:2px 8px;font-size:10px;background:transparent;color:#7aa2f7;border:1px solid #7aa2f7;border-radius:4px;cursor:pointer;font-family:inherit" onclick="cbCopy('${id}')">Copy</button>
+  <button onclick="cbToggleCodeEdit('${id}')" style="padding:2px 8px;font-size:10px;background:transparent;color:#7aa2f7;border:1px solid #7aa2f7;border-radius:4px;cursor:pointer;font-family:inherit">Edit</button>
 </div>
-<pre id="${id}" contenteditable="true" spellcheck="false" data-lang="python" style="background:#1e1e2e;color:#cdd6f4;padding:14px;font-family:ui-monospace,monospace;font-size:13px;margin:0;white-space:pre;overflow-x:auto;border-radius:0;outline:none;line-height:1.6">${highlighted}</pre>
+<pre id="${id}_pre" style="background:#1e1e2e;color:#cdd6f4;padding:14px;font-family:ui-monospace,monospace;font-size:13px;margin:0;white-space:pre;overflow-x:auto;border-radius:0;line-height:1.6">${highlighted}</pre>
+<textarea id="${id}_ta" spellcheck="false" style="display:none;width:100%;background:#1a1b26;color:#cdd6f4;font-family:ui-monospace,monospace;font-size:13px;padding:14px;border:none;outline:none;resize:vertical;min-height:100px;line-height:1.6;box-sizing:border-box">${defaultCode}</textarea>
 </div>`)
+    // Register toggle function
+    const w = window as any
+    if (!w.cbToggleCodeEdit) {
+      w.cbToggleCodeEdit = (id: string) => {
+        const pre = document.getElementById(id + '_pre')
+        const ta = document.getElementById(id + '_ta') as HTMLTextAreaElement
+        const block = pre?.closest('.cb-code-block') as HTMLElement
+        if (!pre || !ta || !block) return
+        if (ta.style.display === 'none') {
+          // Switch to edit mode
+          ta.value = block.getAttribute('data-code') ? decodeURIComponent(block.getAttribute('data-code')!) : (pre.textContent ?? '')
+          ta.style.display = 'block'; pre.style.display = 'none'
+          ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'
+          ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px' }
+        } else {
+          // Switch back to preview mode — save code and re-highlight
+          const code = ta.value
+          block.setAttribute('data-code', encodeURIComponent(code))
+          // Dynamically import highlighter
+          const highlighted = (window as any).__highlightPython?.(code) ?? code
+          pre.innerHTML = highlighted; ta.style.display = 'none'; pre.style.display = 'block'
+        }
+      }
+    }
   }
 
+  // Expose highlightPython to window so onclick can use it
+  useEffect(() => {
+    (window as any).__highlightPython = highlightPython
+  }, [])
+
+  // #4 — TRY-IT: textarea is editable, code stored in data-code
   function insertTryIt() {
-    const id = 'tryit' + Date.now()
     const defaultCode = `mass = 5\nacceleration = 3\nforce = mass * acceleration\nprint(f"Force = {force} N")`
-    insertAtCursor(`<div class="tryit-widget" id="${id}" contenteditable="false" style="background:#1a1b26;border-radius:8px;overflow:hidden;margin:10px 0">
+    const enc = encodeURIComponent(defaultCode)
+    insertAtCursor(`<div class="tryit-widget" contenteditable="false" data-code="${enc}" style="background:#1a1b26;border-radius:8px;overflow:hidden;margin:10px 0">
 <div style="background:#16213e;padding:7px 14px;font-family:monospace;font-size:10px;color:#7aa2f7;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between">
   <span>▶ Try it — Python</span>
-  <button style="padding:3px 10px;font-size:11px;background:#7aa2f7;color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit" onclick="(function(b){var w=b.closest('.tryit-widget');var ta=w.querySelector('textarea');var out=w.querySelector('.tryit-output');var code=ta.value;var output='';try{var vars={};code.split('\\n').forEach(function(line){var pm=line.trim().match(/^print\\((.+)\\)$/);if(pm){try{var r=pm[1];var f=r.match(/^f[\"\\'](.+)[\"\\']$/);if(f){output+=f[1].replace(/\\{([^}]+)\\}/g,function(_,v){try{return eval(v.replace(/\\b(\\w+)\\b/g,function(m){return vars[m]!==undefined?JSON.stringify(vars[m]):m}))}catch(e){return v}})+'\\n'}else{output+=String(eval(r.replace(/\\b(\\w+)\\b/g,function(m){return vars[m]!==undefined?JSON.stringify(vars[m]):m})))+'\\n'}}catch(e){output+='Error: '+e.message+'\\n'}}var a=line.trim().match(/^(\\w+)\\s*=\\s*(.+)$/);if(a&&!line.trim().startsWith('print')){try{vars[a[1]]=eval(a[2].replace(/\\b(\\w+)\\b/g,function(m){return vars[m]!==undefined?JSON.stringify(vars[m]):m}))}catch(e){}}})}catch(e){output='Error: '+e.message}out.textContent=output.trim()||'(no output)';out.style.display='block'})(this)">Run ▶</button>
+  <button style="padding:3px 10px;font-size:11px;background:#7aa2f7;color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit" onclick="cbRunTryIt(this)">Run ▶</button>
 </div>
-<textarea spellcheck="false" style="width:100%;background:#1a1b26;color:#cdd6f4;font-family:ui-monospace,monospace;font-size:13px;padding:12px 14px;border:none;outline:none;resize:none;line-height:1.6;min-height:80px;display:block;box-sizing:border-box" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${defaultCode}</textarea>
+<textarea class="tryit-code" spellcheck="false" style="width:100%;background:#1a1b26;color:#cdd6f4;font-family:ui-monospace,monospace;font-size:13px;padding:12px 14px;border:none;outline:none;resize:none;line-height:1.6;min-height:80px;display:block;box-sizing:border-box;overflow:hidden" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${defaultCode}</textarea>
 <div class="tryit-output" style="background:#0d1117;color:#a6e3a1;font-family:ui-monospace,monospace;font-size:13px;padding:8px 14px;white-space:pre-wrap;display:none;border-top:1px solid #2a2a4a"></div>
 </div>`)
   }
+
+  // Register tryit runner globally
+  useEffect(() => {
+    (window as any).cbRunTryIt = (btn: HTMLElement) => {
+      const w = btn.closest('.tryit-widget')!
+      const ta = w.querySelector('textarea') as HTMLTextAreaElement
+      const out = w.querySelector('.tryit-output') as HTMLElement
+      const code = ta.value; let output = ''
+      try {
+        const vars: Record<string, any> = {}
+        code.split('\n').forEach(line => {
+          const t = line.trim()
+          const pm = t.match(/^print\((.+)\)$/)
+          if (pm) {
+            try {
+              const r = pm[1]; const fstr = r.match(/^f["'](.*)["']$/)
+              if (fstr) {
+                output += fstr[1].replace(/\{([^}]+)\}/g, (_: any, v: string) => {
+                  try { return String(eval(v.replace(/\b(\w+)\b/g, (m: string) => vars[m] !== undefined ? JSON.stringify(vars[m]) : m))) } catch { return v }
+                }) + '\n'
+              } else {
+                output += String(eval(r.replace(/\b(\w+)\b/g, (m: string) => vars[m] !== undefined ? JSON.stringify(vars[m]) : m))) + '\n'
+              }
+            } catch (e: any) { output += 'Error: ' + e.message + '\n' }
+          }
+          const asgn = t.match(/^(\w+)\s*=\s*(.+)$/)
+          if (asgn && !t.startsWith('print')) {
+            try { vars[asgn[1]] = eval(asgn[2].replace(/\b(\w+)\b/g, (m: string) => vars[m] !== undefined ? JSON.stringify(vars[m]) : m)) } catch {}
+          }
+        })
+      } catch (e: any) { output = 'Error: ' + e.message }
+      out.textContent = output.trim() || '(no output)'; out.style.display = 'block'
+    }
+  }, [])
 
   function insertAccordion() {
     insertAtCursor(`<details style="border:1px solid #e5e7eb;border-radius:8px;margin:10px 0;overflow:hidden">
@@ -361,13 +409,12 @@ export default function LessonEditorPage() {
 </div>`)
   }
 
-  // ── Key handler ───────────────────────────────────────────────────────────
+  // ── Key handler ────────────────────────────────────────────────────────────
   function onKeyDown(e: React.KeyboardEvent) {
     const sel = window.getSelection()
     if (!sel || !sel.rangeCount) return
     const range = sel.getRangeAt(0)
 
-    // Shift+Enter exits blockquote (#5)
     if (e.key === 'Enter' && e.shiftKey) {
       let node: Node | null = range.startContainer
       while (node && (node as HTMLElement).tagName !== 'BLOCKQUOTE') node = node.parentElement
@@ -381,7 +428,6 @@ export default function LessonEditorPage() {
       }
     }
 
-    // Enter after contenteditable=false block — insert paragraph
     if (e.key === 'Enter' && !e.shiftKey) {
       let node: Node | null = range.startContainer
       while (node && node !== editorRef.current) {
@@ -399,15 +445,33 @@ export default function LessonEditorPage() {
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
+  // #3 #4: Before saving, sync textarea values to data-code attributes on code blocks and try-it widgets
   async function save() {
     if (!title.trim()) { setError('Title is required.'); return }
     if (!moduleId || moduleId === 'undefined') { setError('Module ID missing.'); return }
     setSaving(true); setError('')
-    // Strip contenteditable before saving (#10)
+
+    // Sync code block textareas → data-code (in case user edited without clicking back to preview)
+    editorRef.current?.querySelectorAll('.cb-code-block').forEach(block => {
+      const ta = block.querySelector('textarea') as HTMLTextAreaElement
+      if (ta && ta.style.display !== 'none') {
+        block.setAttribute('data-code', encodeURIComponent(ta.value))
+        const pre = block.querySelector('pre')
+        if (pre) pre.innerHTML = highlightPython(ta.value)
+        ta.style.display = 'none'
+        if (pre) pre.style.display = 'block'
+      }
+    })
+
+    // Sync try-it textareas → data-code
+    editorRef.current?.querySelectorAll('.tryit-widget').forEach(block => {
+      const ta = block.querySelector('textarea') as HTMLTextAreaElement
+      if (ta) block.setAttribute('data-code', encodeURIComponent(ta.value))
+    })
+
     const clone = editorRef.current?.cloneNode(true) as HTMLElement
+    // Strip contenteditable attrs from clone before saving
     clone?.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'))
-    // Strip data-hl so re-highlighting works on next load
-    clone?.querySelectorAll('[data-hl]').forEach(el => el.removeAttribute('data-hl'))
     const html = clone?.innerHTML ?? ''
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -425,7 +489,6 @@ export default function LessonEditorPage() {
     window.location.href = '/teacher/modules/' + moduleId
   }
 
-  // ── Toolbar styles ─────────────────────────────────────────────────────────
   const TB: React.CSSProperties = { padding: '4px 8px', fontSize: 12, border: '1px solid transparent', borderRadius: 5, background: 'none', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1 }
   const SEP = <div style={{ width: 1, background: '#e5e7eb', margin: '2px 3px', alignSelf: 'stretch' }} />
 
@@ -446,13 +509,11 @@ export default function LessonEditorPage() {
         .cb-editor table{border-collapse:collapse;width:100%}
         .cb-editor td,.cb-editor th{border:1px solid #e5e7eb;padding:6px 10px;min-width:50px}
         .cb-editor th{background:#f9fafb;font-weight:600}
-        .cb-editor pre{position:relative}
         .cb-quiz{background:#f0f7ff;border:1px solid #B5D4F4;border-radius:10px;margin:12px 0;overflow:hidden}
       `}</style>
 
       <BackLink href={'/teacher/modules/' + moduleId} label="Back to module" />
       <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>{isNew ? 'New lesson' : 'Edit lesson'}</h1>
-      {/* #11 — show author */}
       {authorName && <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Author: {authorName}</div>}
 
       <label style={{ fontSize: 11, fontWeight: 600, color: '#666', display: 'block', marginBottom: 3 }}>Lesson title</label>
@@ -463,46 +524,39 @@ export default function LessonEditorPage() {
 
       {/* Toolbar */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, padding: '6px 8px', border: '1px solid #e5e7eb', borderBottom: 'none', borderRadius: '8px 8px 0 0', background: '#f9fafb', alignItems: 'center' }}>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); exec('bold') }}><b>B</b></button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); exec('italic') }}><i>I</i></button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); exec('underline') }}><u>U</u></button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('bold')}}><b>B</b></button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('italic')}}><i>I</i></button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('underline')}}><u>U</u></button>
         {SEP}
-        <button style={{ ...TB, fontWeight: 700, fontSize: 13 }} onMouseDown={e => { e.preventDefault(); heading('h1') }}>H1</button>
-        <button style={{ ...TB, fontWeight: 700, fontSize: 12 }} onMouseDown={e => { e.preventDefault(); heading('h2') }}>H2</button>
-        <button style={{ ...TB, fontWeight: 700, fontSize: 11 }} onMouseDown={e => { e.preventDefault(); heading('h3') }}>H3</button>
+        <button style={{...TB,fontWeight:700,fontSize:13}} onMouseDown={e=>{e.preventDefault();heading('h1')}}>H1</button>
+        <button style={{...TB,fontWeight:700,fontSize:12}} onMouseDown={e=>{e.preventDefault();heading('h2')}}>H2</button>
+        <button style={{...TB,fontWeight:700,fontSize:11}} onMouseDown={e=>{e.preventDefault();heading('h3')}}>H3</button>
         {SEP}
-        <button style={TB} onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList') }}>• list</button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); exec('insertOrderedList') }}>1. list</button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); insertBlockquote() }} title="Shift+Enter to exit quote">" quote</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('insertUnorderedList')}}>• list</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('insertOrderedList')}}>1. list</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();insertBlockquote()}} title="Shift+Enter to exit">" quote</button>
         {SEP}
-        <button style={{ ...TB, background: '#fff59d', color: '#333', fontWeight: 700 }} onMouseDown={e => { e.preventDefault(); highlight('#fff59d') }}>A</button>
-        <button style={{ ...TB, background: '#bbdefb', color: '#0d47a1', fontWeight: 700 }} onMouseDown={e => { e.preventDefault(); highlight('#bbdefb') }}>A</button>
-        <button style={{ ...TB, background: '#b9f6ca', color: '#1b5e20', fontWeight: 700 }} onMouseDown={e => { e.preventDefault(); highlight('#b9f6ca') }}>A</button>
-        <button style={{ ...TB, background: '#fce4ec', color: '#880e4f', fontWeight: 700 }} onMouseDown={e => { e.preventDefault(); highlight('#fce4ec') }}>A</button>
+        <button style={{...TB,background:'#fff59d',color:'#333',fontWeight:700}} onMouseDown={e=>{e.preventDefault();highlight('#fff59d')}}>A</button>
+        <button style={{...TB,background:'#bbdefb',color:'#0d47a1',fontWeight:700}} onMouseDown={e=>{e.preventDefault();highlight('#bbdefb')}}>A</button>
+        <button style={{...TB,background:'#b9f6ca',color:'#1b5e20',fontWeight:700}} onMouseDown={e=>{e.preventDefault();highlight('#b9f6ca')}}>A</button>
+        <button style={{...TB,background:'#fce4ec',color:'#880e4f',fontWeight:700}} onMouseDown={e=>{e.preventDefault();highlight('#fce4ec')}}>A</button>
         {SEP}
-        <button style={{ ...TB, background: '#FAEEDA', color: '#633806' }} onMouseDown={e => { e.preventDefault(); insertImportant() }}>! Imp</button>
-        <button style={{ ...TB, background: '#E1F5EE', color: '#085041' }} onMouseDown={e => { e.preventDefault(); insertAccordion() }}>▾ Fold</button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); openModal('table') }}>⊞ Table</button>
+        <button style={{...TB,background:'#FAEEDA',color:'#633806'}} onMouseDown={e=>{e.preventDefault();insertImportant()}}>! Imp</button>
+        <button style={{...TB,background:'#E1F5EE',color:'#085041'}} onMouseDown={e=>{e.preventDefault();insertAccordion()}}>▾ Fold</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();openModal('table')}}>⊞ Table</button>
         {SEP}
-        <button style={{ ...TB, background: '#1e1e2e', color: '#cdd6f4' }} onMouseDown={e => { e.preventDefault(); insertCodeBlock() }}>&lt;/&gt; Code</button>
-        <button style={{ ...TB, background: '#1a1b26', color: '#7aa2f7' }} onMouseDown={e => { e.preventDefault(); insertTryIt() }}>&gt;_ Try</button>
-        <button style={{ ...TB, background: '#f0f7ff', color: '#185FA5' }} onMouseDown={e => { e.preventDefault(); openModal('quiz') }}>✓ Quiz</button>
+        <button style={{...TB,background:'#1e1e2e',color:'#cdd6f4'}} onMouseDown={e=>{e.preventDefault();insertCodeBlock()}}>&lt;/&gt; Code</button>
+        <button style={{...TB,background:'#1a1b26',color:'#7aa2f7'}} onMouseDown={e=>{e.preventDefault();insertTryIt()}}>&gt;_ Try</button>
+        <button style={{...TB,background:'#f0f7ff',color:'#185FA5'}} onMouseDown={e=>{e.preventDefault();openModal('quiz')}}>✓ Quiz</button>
         {SEP}
-        <button style={TB} onMouseDown={e => { e.preventDefault(); openModal('image') }}>🖼 Image</button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); openModal('video') }}>▶ Video</button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); openModal('file') }}>📎 File</button>
-        <button style={TB} onMouseDown={e => { e.preventDefault(); openModal('link') }}>🔗 Link</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();openModal('image')}}>🖼 Image</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();openModal('video')}}>▶ Video</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();openModal('file')}}>📎 File</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault();openModal('link')}}>🔗 Link</button>
       </div>
 
-      {/* Editor */}
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        className="cb-editor"
-        onKeyDown={onKeyDown}
-        style={{ minHeight: 360, padding: '14px 16px', border: '1px solid #e5e7eb', borderRadius: '0 0 8px 8px', background: '#fff', fontSize: 14, lineHeight: 1.75, outline: 'none', color: '#111', fontFamily: 'system-ui,sans-serif' }}
-      />
+      <div ref={editorRef} contentEditable suppressContentEditableWarning className="cb-editor" onKeyDown={onKeyDown}
+        style={{ minHeight: 360, padding: '14px 16px', border: '1px solid #e5e7eb', borderRadius: '0 0 8px 8px', background: '#fff', fontSize: 14, lineHeight: 1.75, outline: 'none', color: '#111', fontFamily: 'system-ui,sans-serif' }} />
 
       {error && <div style={{ fontSize: 12, padding: '8px 11px', background: '#FCEBEB', color: '#791F1F', borderRadius: 8, margin: '12px 0' }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -510,13 +564,9 @@ export default function LessonEditorPage() {
           style={{ padding: '9px 20px', background: '#185FA5', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: saving ? .6 : 1 }}>
           {saving ? 'Saving…' : 'Save lesson'}
         </button>
-        <a href={'/teacher/modules/' + moduleId}
-          style={{ padding: '9px 16px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, textDecoration: 'none', color: '#555', background: '#fff', display: 'inline-flex', alignItems: 'center' }}>
-          Cancel
-        </a>
+        <a href={'/teacher/modules/' + moduleId} style={{ padding: '9px 16px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, textDecoration: 'none', color: '#555', background: '#fff', display: 'inline-flex', alignItems: 'center' }}>Cancel</a>
       </div>
 
-      {/* Modals */}
       {modal === 'quiz' && <QuizModal onInsert={insertAtCursor} onClose={() => setModal(null)} />}
       {modal === 'table' && <TableModal onInsert={insertTable} onClose={() => setModal(null)} />}
       {(modal === 'image' || modal === 'video' || modal === 'file' || modal === 'link') && (

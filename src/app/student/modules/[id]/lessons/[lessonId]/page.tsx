@@ -22,9 +22,10 @@ export default async function StudentLessonPage({ params }: { params: any }) {
   // Completion status for all lessons (#9 — show checkmarks in nav)
   const lessonIds = (allLessons ?? []).map((l: any) => l.id)
   const { data: progressRows } = lessonIds.length
-    ? await admin.from('lesson_progress').select('lesson_id').eq('student_id', (user as any).id).in('lesson_id', lessonIds)
+    ? await admin.from('lesson_progress').select('lesson_id,status').eq('student_id', (user as any).id).in('lesson_id', lessonIds)
     : { data: [] }
-  const completedIds = new Set((progressRows ?? []).map((r: any) => r.lesson_id))
+  // Only 'completed' status shows checkmarks in nav (not bookmarks)
+  const completedIds = new Set((progressRows ?? []).filter((r: any) => r.status === 'completed').map((r: any) => r.lesson_id))
 
   const { data: prog } = await admin.from('lesson_progress')
     .select('id,status').eq('student_id', (user as any).id).eq('lesson_id', params.lessonId).maybeSingle()
