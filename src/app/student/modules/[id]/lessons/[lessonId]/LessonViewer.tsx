@@ -114,7 +114,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completed }:
 
   async function markComplete() {
     setMarking(true)
-    await supabase.from('lesson_progress').upsert({ student_id: studentId, lesson_id: lesson.id })
+    await supabase.from('lesson_progress').upsert({ student_id: studentId, lesson_id: lesson.id } as any)
     setDone(true)
     setMarking(false)
     router.refresh()
