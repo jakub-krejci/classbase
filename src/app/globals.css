@@ -37,3 +37,155 @@ body { font-family: var(--font-sans); background: #f9fafb; }
 
 /* Try-it widget */
 .lesson-content [data-tryit], .lesson-content > div[style*="background:#1a1b26"] { border-radius: 8px; overflow: hidden; margin: 10px 0; }
+
+
+/* ── Lesson content rich text ───────────────────────────── */
+.lesson-content { font-size: 14px; line-height: 1.75; color: #111; }
+.lesson-content h1 { font-size: 22px; font-weight: 700; margin: 16px 0 7px; }
+.lesson-content h2 { font-size: 18px; font-weight: 700; margin: 14px 0 6px; }
+.lesson-content h3 { font-size: 15px; font-weight: 700; margin: 12px 0 5px; }
+.lesson-content p  { margin: 6px 0; }
+.lesson-content ul, .lesson-content ol { padding-left: 22px; margin: 8px 0; }
+.lesson-content li { margin: 3px 0; }
+.lesson-content strong, .lesson-content b { font-weight: 700; }
+.lesson-content em, .lesson-content i { font-style: italic; }
+.lesson-content u { text-decoration: underline; }
+.lesson-content blockquote {
+  border-left: 3px solid #185FA5;
+  padding: 4px 0 4px 14px;
+  margin: 10px 0;
+  color: #555;
+  font-style: italic;
+}
+.lesson-content hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
+.lesson-content table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+.lesson-content td, .lesson-content th { border: 1px solid #e5e7eb; padding: 7px 11px; }
+.lesson-content th { background: #f9fafb; font-weight: 600; }
+.lesson-content img { max-width: 100%; border-radius: 8px; margin: 8px 0; display: block; }
+.lesson-content iframe { width: 100%; aspect-ratio: 16/9; border-radius: 8px; border: none; margin: 8px 0; display: block; }
+.lesson-content pre {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 13px;
+  overflow-x: auto;
+  margin: 10px 0;
+  white-space: pre;
+  line-height: 1.6;
+}
+.lesson-content code {
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 13px;
+  background: #f3f4f6;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #d63384;
+}
+.lesson-content pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  border-radius: 0;
+}
+
+/* Accordions (details/summary) */
+.lesson-content details {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin: 10px 0;
+  overflow: hidden;
+}
+.lesson-content summary {
+  padding: 10px 14px;
+  background: #f9fafb;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  list-style: none;
+  user-select: none;
+}
+.lesson-content summary::-webkit-details-marker { display: none; }
+.lesson-content details[open] summary { border-bottom: 1px solid #e5e7eb; }
+.lesson-content details > *:not(summary) { padding: 12px 14px; }
+
+/* Important callout */
+.lesson-content .important-callout,
+.lesson-content [style*="background:#FAEEDA"],
+.lesson-content [style*="background: #FAEEDA"] {
+  border-left: 3px solid #BA7517 !important;
+  border-radius: 0 8px 8px 0 !important;
+  padding: 10px 14px !important;
+  margin: 10px 0 !important;
+}
+
+/* Python syntax colours (applied by highlightCode) */
+.py-kw  { color: #cba6f7; }
+.py-str { color: #a6e3a1; }
+.py-num { color: #fab387; }
+.py-cmt { color: #6c7086; font-style: italic; }
+.py-bi  { color: #89b4fa; }
+.py-fn  { color: #89dceb; }
+
+/* Code block header */
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background: #16213e;
+  border-radius: 8px 8px 0 0;
+  font-family: monospace;
+  font-size: 11px;
+  color: #7aa2f7;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.code-block-header + pre {
+  border-radius: 0 0 8px 8px;
+  margin-top: 0;
+}
+
+/* Try-it widget */
+.tryit-widget {
+  background: #1a1b26;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+.tryit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 13px;
+  background: #16213e;
+  font-family: monospace;
+  font-size: 11px;
+  color: #7aa2f7;
+}
+.tryit-widget textarea {
+  width: 100%;
+  background: #1a1b26;
+  color: #cdd6f4;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  padding: 12px 14px;
+  border: none;
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.6;
+}
+.tryit-output {
+  background: #0d1117;
+  color: #a6e3a1;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  padding: 8px 14px;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+  display: none;
+  border-top: 1px solid #2a2a4a;
+}
