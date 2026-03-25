@@ -29,7 +29,7 @@ export default async function TeacherModulesPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600 }}>My modules</h1>
-          <p style={{ fontSize: 13, color: '#888', marginTop: 3 }}>Welcome back, {profile?.full_name}</p>
+          <p style={{ fontSize: 13, color: '#888', marginTop: 3 }}>Welcome back, {profile?.full_name ?? ''}</p>
         </div>
         <a
           href="/teacher/modules/new"

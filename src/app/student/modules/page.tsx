@@ -22,7 +22,7 @@ export default async function StudentModulesPage() {
   return (
     <main style={{ maxWidth: 800, margin: '0 auto', padding: '24px 16px', fontFamily: 'system-ui, sans-serif' }}>
       <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>My learning</h1>
-      <p style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Hello, {profile?.full_name}</p>
+      <p style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Hello, {profile?.full_name ?? ''}</p>
 
       {!enrollments?.length ? (
         <div style={{ textAlign: 'center', padding: '48px 0', color: '#888', fontSize: 14, border: '1px dashed #e5e7eb', borderRadius: 12 }}>
