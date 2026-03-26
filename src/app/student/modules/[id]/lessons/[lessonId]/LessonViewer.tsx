@@ -622,9 +622,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
             <textarea
               value={notes}
               onChange={e => handleNotesChange(e.target.value)}
-              placeholder={"Take notes while reading...
-
-Your notes are private and auto-saved."}
+              placeholder={"Take notes while reading...\n\nYour notes are private and auto-saved."}
               style={{ width:'100%', minHeight:320, maxHeight:'calc(100vh - 200px)', padding:'12px 14px', border:'none', outline:'none', resize:'vertical', fontSize:13, lineHeight:1.6, fontFamily:'system-ui,sans-serif', color:'#111', background:'#fff', boxSizing:'border-box' }}
             />
             <div style={{ padding:'6px 14px', background:'#f9fafb', borderTop:'1px solid #e5e7eb', fontSize:10, color:'#bbb' }}>
