@@ -927,8 +927,7 @@ function handleCodeKeyDown(
     e.preventDefault()
     if (e.shiftKey) {
       // Shift+Tab: remove up to 4 spaces from line start
-      const lineStart = v.lastIndexOf('
-', s - 1) + 1
+      const lineStart = v.lastIndexOf('\n', s - 1) + 1
       const spaces = v.slice(lineStart).match(/^ {1,4}/)?.[0] ?? ''
       if (spaces) {
         const nv = v.slice(0, lineStart) + v.slice(lineStart + spaces.length)
@@ -945,13 +944,11 @@ function handleCodeKeyDown(
   if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
     e.preventDefault()
     // Auto-indent: match current line indent + add extra indent after : 
-    const lineStart = v.lastIndexOf('
-', s - 1) + 1
+    const lineStart = v.lastIndexOf('\n', s - 1) + 1
     const currentLine = v.slice(lineStart, s)
     const indent = currentLine.match(/^(\s*)/)?.[1] ?? ''
     const extraIndent = currentLine.trimEnd().endsWith(':') ? '    ' : ''
-    const nv = v.slice(0, s) + '
-' + indent + extraIndent + v.slice(en)
+    const nv = v.slice(0, s) + '\n' + indent + extraIndent + v.slice(en)
     ta.value = nv
     ta.selectionStart = ta.selectionEnd = s + 1 + indent.length + extraIndent.length
     return nv
