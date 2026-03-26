@@ -85,11 +85,12 @@ const EDITOR_CSS = `
 .cb-rich details > *:not(summary){padding:10px 14px}
 `
 
-function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia }: {
+function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz }: {
   block: Block; onChange: (content: string) => void
   onAddAfter: (type: BlockType) => void; onDelete: () => void
   onMoveUp: () => void; onMoveDown: () => void; canDelete: boolean
   onOpenMedia: (type: 'image'|'video'|'file'|'link', insertFn: (html: string) => void) => void
+  onInsertQuiz: (insertFn: (html: string) => void) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
@@ -107,12 +108,15 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   function updateActiveFormats() {
     try {
       const formats = new Set<string>()
-      // Use try/catch since queryCommandState may throw in some browsers
       try { if (document.queryCommandState('bold')) formats.add('bold') } catch {}
       try { if (document.queryCommandState('italic')) formats.add('italic') } catch {}
       try { if (document.queryCommandState('underline')) formats.add('underline') } catch {}
       try { if (document.queryCommandState('insertUnorderedList')) formats.add('ul') } catch {}
       try { if (document.queryCommandState('insertOrderedList')) formats.add('ol') } catch {}
+      try { if (document.queryCommandState('justifyLeft')) formats.add('justifyLeft') } catch {}
+      try { if (document.queryCommandState('justifyCenter')) formats.add('justifyCenter') } catch {}
+      try { if (document.queryCommandState('justifyRight')) formats.add('justifyRight') } catch {}
+      try { if (document.queryCommandState('justifyFull')) formats.add('justifyFull') } catch {}
       try {
         const block = document.queryCommandValue('formatBlock').toLowerCase().replace(/[<>]/g, '')
         if (block) formats.add(block)
@@ -253,43 +257,127 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
 
   return (
     <div style={{ marginBottom: 6 }}>
-      {/* Toolbar */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:1, padding:'4px 8px', background:'#f9fafb', border:`1px solid #e5e7eb`, borderBottom:'none', borderRadius:'8px 8px 0 0', alignItems:'center' }}>
-        <button style={tbActive('bold')} onMouseDown={e=>{e.preventDefault();exec('bold')}}><b>B</b></button>
-        <button style={tbActive('italic')} onMouseDown={e=>{e.preventDefault();exec('italic')}}><i>I</i></button>
-        <button style={tbActive('underline')} onMouseDown={e=>{e.preventDefault();exec('underline')}}><u>U</u></button>
-        {SEP}
-        <button style={tbActive('h1', {fontWeight:700,fontSize:13})} onMouseDown={e=>{e.preventDefault();heading('h1')}}>H1</button>
-        <button style={tbActive('h2', {fontWeight:700,fontSize:12})} onMouseDown={e=>{e.preventDefault();heading('h2')}}>H2</button>
-        <button style={tbActive('h3', {fontWeight:700,fontSize:11})} onMouseDown={e=>{e.preventDefault();heading('h3')}}>H3</button>
-        {SEP}
-        <button style={tbActive('ul')} onMouseDown={e=>{e.preventDefault();exec('insertUnorderedList')}}>• list</button>
-        <button style={tbActive('ol')} onMouseDown={e=>{e.preventDefault();exec('insertOrderedList')}}>1. list</button>
-        <button style={tbActive('blockquote')} onMouseDown={e=>{e.preventDefault();heading('blockquote')}} title="Shift+Enter to exit">" quote</button>
-        {SEP}
-        <button style={{...TB,background:'#fff59d',color:'#333',fontWeight:700}} onMouseDown={e=>{e.preventDefault();hl('#fff59d')}}>A</button>
-        <button style={{...TB,background:'#bbdefb',color:'#0d47a1',fontWeight:700}} onMouseDown={e=>{e.preventDefault();hl('#bbdefb')}}>A</button>
-        <button style={{...TB,background:'#b9f6ca',color:'#1b5e20',fontWeight:700}} onMouseDown={e=>{e.preventDefault();hl('#b9f6ca')}}>A</button>
-        <button style={{...TB,background:'#fce4ec',color:'#880e4f',fontWeight:700}} onMouseDown={e=>{e.preventDefault();hl('#fce4ec')}}>A</button>
-        {SEP}
-        <button style={{...TB,background:'#FAEEDA',color:'#633806',fontSize:11}} onMouseDown={e=>{e.preventDefault();insertHtml('<div contenteditable="false" style="background:#FAEEDA;border-left:3px solid #BA7517;border-radius:0 8px 8px 0;padding:10px 14px;margin:8px 0"><div style="font-size:10px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">⚠ Important</div><div contenteditable="true" style="color:#412402">Write here.</div></div>')}} >! Imp</button>
-        <button style={{...TB,background:'#E1F5EE',color:'#085041',fontSize:11}} onMouseDown={e=>{e.preventDefault();insertHtml('<details><summary>▶ Click to reveal</summary><div contenteditable="true">Hidden content.</div></details>')}}>▾ Fold</button>
-        <button style={tbActive('table')} onMouseDown={e=>{e.preventDefault(); setShowTableModal(true)}}>⊞ Table</button>
-        {SEP}
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('image', insertHtml)}}>🖼 Image</button>
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('video', insertHtml)}}>▶ Video</button>
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('file', insertHtml)}}>📎 File</button>
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('link', insertHtml)}}>🔗 Link</button>
-        <button style={TB} onMouseDown={e=>{e.preventDefault(); insertHtml('<hr style="border:none;border-top:2px solid #e5e7eb;margin:12px 0">')}} title="Horizontal divider">— HR</button>
-        {SEP}
-        <button style={{...TB,background:'#1e1e2e',color:'#cdd6f4',fontSize:11}} onMouseDown={e=>{e.preventDefault();onAddAfter('code')}}>+ Code</button>
-        <button style={{...TB,background:'#1a1b26',color:'#7aa2f7',fontSize:11}} onMouseDown={e=>{e.preventDefault();onAddAfter('tryit')}}>+ Try it</button>
-        <div style={{flex:1}}/>
-        <button style={{...TB,fontSize:11,color:'#888'}} onMouseDown={e=>{e.preventDefault();onMoveUp()}} title="Move up">↑</button>
-        <button style={{...TB,fontSize:11,color:'#888'}} onMouseDown={e=>{e.preventDefault();onMoveDown()}} title="Move down">↓</button>
-        {canDelete && <button style={{...TB,fontSize:11,color:'#A32D2D'}} onMouseDown={e=>{e.preventDefault();onDelete()}} title="Delete block">✕</button>}
+      <style>{`
+        .cb-toolbar { display:flex; flex-wrap:wrap; gap:2px; padding:5px 8px; background:#f8f9fa; border:1px solid #e5e7eb; border-bottom:none; border-radius:8px 8px 0 0; align-items:center; }
+        .cb-tb-group { display:flex; align-items:center; gap:2px; }
+        .cb-tb-label { font-size:9px; color:#aaa; text-transform:uppercase; letter-spacing:.05em; padding:0 4px; user-select:none; }
+        .cb-tb-sep { width:1px; background:#e0e0e0; height:18px; margin:0 4px; flex-shrink:0; }
+        .cb-tb-row { display:flex; flex-wrap:wrap; gap:2px; align-items:center; width:100%; }
+        .cb-tb-row + .cb-tb-row { margin-top:3px; padding-top:3px; border-top:1px solid #f0f0f0; }
+      `}</style>
+      <div className="cb-toolbar">
+
+        {/* Row 1: Format + Headings + Align */}
+        <div className="cb-tb-row">
+          <div className="cb-tb-group">
+            <button style={tbActive('bold')} title="Bold (Ctrl+B)" onMouseDown={e=>{e.preventDefault();exec('bold')}}><b>B</b></button>
+            <button style={tbActive('italic')} title="Italic (Ctrl+I)" onMouseDown={e=>{e.preventDefault();exec('italic')}}><i>I</i></button>
+            <button style={tbActive('underline')} title="Underline (Ctrl+U)" onMouseDown={e=>{e.preventDefault();exec('underline')}}><u>U</u></button>
+            <button style={{...TB,textDecoration:'line-through',fontSize:12}} title="Strikethrough" onMouseDown={e=>{e.preventDefault();exec('strikeThrough')}}>S</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <div className="cb-tb-group">
+            <button style={tbActive('h1',{fontWeight:700,fontSize:13})} title="Heading 1" onMouseDown={e=>{e.preventDefault();heading('h1')}}>H1</button>
+            <button style={tbActive('h2',{fontWeight:700,fontSize:12})} title="Heading 2" onMouseDown={e=>{e.preventDefault();heading('h2')}}>H2</button>
+            <button style={tbActive('h3',{fontWeight:700,fontSize:11})} title="Heading 3" onMouseDown={e=>{e.preventDefault();heading('h3')}}>H3</button>
+            <button style={tbActive('p',{fontSize:11})} title="Normal paragraph" onMouseDown={e=>{e.preventDefault();heading('p')}}>¶</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <div className="cb-tb-group">
+            <button style={tbActive('justifyLeft',{fontSize:13})} title="Align left" onMouseDown={e=>{e.preventDefault();exec('justifyLeft')}}>⬸</button>
+            <button style={tbActive('justifyCenter',{fontSize:13})} title="Align center" onMouseDown={e=>{e.preventDefault();exec('justifyCenter')}}>≡</button>
+            <button style={tbActive('justifyRight',{fontSize:13})} title="Align right" onMouseDown={e=>{e.preventDefault();exec('justifyRight')}}>⇥</button>
+            <button style={tbActive('justifyFull',{fontSize:13})} title="Justify" onMouseDown={e=>{e.preventDefault();exec('justifyFull')}}>☰</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <div className="cb-tb-group">
+            <button style={tbActive('ul')} title="Bullet list" onMouseDown={e=>{e.preventDefault();exec('insertUnorderedList')}}>• list</button>
+            <button style={tbActive('ol')} title="Numbered list" onMouseDown={e=>{e.preventDefault();exec('insertOrderedList')}}>1. list</button>
+            <button style={TB} title="Indent (increase list level)" onMouseDown={e=>{e.preventDefault();exec('indent')}}>→ in</button>
+            <button style={TB} title="Outdent (decrease list level)" onMouseDown={e=>{e.preventDefault();exec('outdent')}}>← out</button>
+            <button style={tbActive('blockquote')} title="Blockquote (Shift+Enter to exit)" onMouseDown={e=>{e.preventDefault();heading('blockquote')}}>" quote</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <div className="cb-tb-group">
+            <button style={{...TB,fontFamily:'Consolas,monospace',fontSize:11,border:'1px solid #e5e7eb'}} title="Inline code (Consolas font)" onMouseDown={e=>{
+              e.preventDefault()
+              const sel = window.getSelection()
+              const txt = sel?.toString() || 'code'
+              exec('insertHTML', `<code style="font-family:Consolas,monospace;background:#f3f4f6;padding:1px 5px;border-radius:4px;font-size:92%">${txt}</code>`)
+            }}>code</button>
+          </div>
+        </div>
+
+        {/* Row 2: Highlight + Text color + Clear + Specials + Media */}
+        <div className="cb-tb-row">
+          <span className="cb-tb-label">Highlight</span>
+          <div className="cb-tb-group">
+            {([['#fff59d','#333'],['#bbdefb','#0d47a1'],['#b9f6ca','#1b5e20'],['#fce4ec','#880e4f'],['#e8d5ff','#4a1a7a'],['#ffe0b2','#7c3a00']] as [string,string][]).map(([bg,fg]) => (
+              <button key={bg} style={{...TB,background:bg,color:fg,fontWeight:700,width:20,height:20,padding:0,fontSize:12,borderRadius:3}} title={`Highlight ${bg}`}
+                onMouseDown={e=>{e.preventDefault();hl(bg)}}>A</button>
+            ))}
+            <button style={{...TB,fontSize:11,border:'1px solid #e5e7eb',color:'#555'}} title="Remove all highlighting from selection"
+              onMouseDown={e=>{
+                e.preventDefault()
+                const sel = window.getSelection()
+                if (!sel || !sel.rangeCount) return
+                const range = sel.getRangeAt(0)
+                const frag = range.extractContents()
+                const tmp = document.createElement('div')
+                tmp.appendChild(frag)
+                // Strip background from all spans
+                tmp.querySelectorAll('span').forEach(s => { s.style.background = ''; s.style.backgroundColor = '' })
+                range.insertNode(tmp)
+                const p = document.createElement('span'); range.insertNode(p)
+                sel.removeAllRanges(); const r2 = document.createRange(); r2.selectNodeContents(tmp); sel.addRange(r2)
+                onChange(ref.current?.innerHTML ?? '')
+              }}>✕ hl</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <span className="cb-tb-label">Color</span>
+          <div className="cb-tb-group">
+            {(['#e53e3e','#dd6b20','#d69e2e','#38a169','#3182ce','#805ad5','#111'] as string[]).map(clr => (
+              <button key={clr} style={{...TB,background:clr,width:20,height:20,padding:0,borderRadius:3,border:'1px solid rgba(0,0,0,.15)'}} title={`Text color ${clr}`}
+                onMouseDown={e=>{e.preventDefault();exec('foreColor',clr)}} />
+            ))}
+            <label style={{...TB,border:'1px solid #e5e7eb',padding:'2px 5px',cursor:'pointer',fontSize:11,display:'inline-flex',alignItems:'center',gap:3}} title="Custom text color">
+              <input type="color" defaultValue="#111111"
+                style={{width:16,height:16,padding:0,border:'none',background:'none',cursor:'pointer'}}
+                onInput={e=>exec('foreColor',(e.target as HTMLInputElement).value)} />
+              <span>RGB</span>
+            </label>
+            <button style={{...TB,fontSize:11,border:'1px solid #e5e7eb',color:'#555'}} title="Remove text color"
+              onMouseDown={e=>{e.preventDefault();exec('removeFormat')}}>✕ clr</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <div className="cb-tb-group">
+            <button style={{...TB,background:'#FAEEDA',color:'#633806',fontSize:11}} title="Important callout" onMouseDown={e=>{e.preventDefault();insertHtml('<div contenteditable="false" style="background:#FAEEDA;border-left:3px solid #BA7517;border-radius:0 8px 8px 0;padding:10px 14px;margin:8px 0"><div style="font-size:10px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">⚠ Important</div><div contenteditable="true" style="color:#412402">Write here.</div></div>')}}>! Callout</button>
+            <button style={{...TB,background:'#E1F5EE',color:'#085041',fontSize:11}} title="Foldable section" onMouseDown={e=>{e.preventDefault();insertHtml('<details><summary>▶ Click to reveal</summary><div contenteditable="true">Hidden content.</div></details>')}}>▾ Fold</button>
+            <button style={tbActive('table',{fontSize:11})} title="Insert table" onMouseDown={e=>{e.preventDefault();setShowTableModal(true)}}>⊞ Table</button>
+            <button style={{...TB,fontSize:11}} title="Horizontal divider" onMouseDown={e=>{e.preventDefault();insertHtml('<hr style="border:none;border-top:2px solid #e5e7eb;margin:12px 0">')}}>— HR</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <div className="cb-tb-group">
+            <button style={{...TB,fontSize:11}} title="Insert image" onMouseDown={e=>{e.preventDefault();onOpenMedia('image',insertHtml)}}>🖼 Img</button>
+            <button style={{...TB,fontSize:11}} title="Embed video" onMouseDown={e=>{e.preventDefault();onOpenMedia('video',insertHtml)}}>▶ Video</button>
+            <button style={{...TB,fontSize:11}} title="Attach file" onMouseDown={e=>{e.preventDefault();onOpenMedia('file',insertHtml)}}>📎 File</button>
+            <button style={{...TB,fontSize:11}} title="Insert hyperlink" onMouseDown={e=>{e.preventDefault();onOpenMedia('link',insertHtml)}}>🔗 Link</button>
+          </div>
+          <div className="cb-tb-sep" />
+          <div className="cb-tb-group">
+            <button style={{...TB,background:'#1e1e2e',color:'#cdd6f4',fontSize:11}} title="Insert code block below" onMouseDown={e=>{e.preventDefault();onAddAfter('code')}}>+ Code</button>
+            <button style={{...TB,background:'#1a1b26',color:'#7aa2f7',fontSize:11}} title="Insert try-it block below" onMouseDown={e=>{e.preventDefault();onAddAfter('tryit')}}>+ Try</button>
+            <button style={{...TB,background:'#E6F1FB',color:'#0C447C',fontSize:11}} title="Insert quiz" onMouseDown={e=>{e.preventDefault();onInsertQuiz(insertHtml)}}>✓ Quiz</button>
+          </div>
+          <div style={{flex:1}}/>
+          <div className="cb-tb-group">
+            <button style={{...TB,fontSize:11,color:'#888'}} title="Move block up" onMouseDown={e=>{e.preventDefault();onMoveUp()}}>↑</button>
+            <button style={{...TB,fontSize:11,color:'#888'}} title="Move block down" onMouseDown={e=>{e.preventDefault();onMoveDown()}}>↓</button>
+            {canDelete && <button style={{...TB,fontSize:11,color:'#A32D2D'}} title="Delete block" onMouseDown={e=>{e.preventDefault();onDelete()}}>✕</button>}
+          </div>
+        </div>
       </div>
-      {/* Editable area */}
+
       <div
         ref={ref}
         contentEditable
@@ -299,13 +387,9 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
         onKeyUp={updateActiveFormats}
         onMouseUp={e => {
           updateActiveFormats()
-          // Image click — show resize toolbar
           const target = e.target as HTMLElement
-          if (target.tagName === 'IMG') {
-            showImageToolbar(target as HTMLImageElement)
-          } else {
-            hideImageToolbar()
-          }
+          if (target.tagName === 'IMG') showImageToolbar(target as HTMLImageElement)
+          else hideImageToolbar()
         }}
         onClick={updateActiveFormats}
         onKeyDown={e => {
@@ -320,7 +404,6 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
               const sel = window.getSelection(); sel?.removeAllRanges(); sel?.addRange(r)
             }
           }
-          // On plain Enter: strip highlight background from the new paragraph after browser inserts it
           if (e.key === 'Enter' && !e.shiftKey) {
             requestAnimationFrame(() => {
               const sel = window.getSelection()
@@ -328,10 +411,6 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
               let node: Node | null = sel.getRangeAt(0).startContainer
               while (node && node !== ref.current) {
                 const el = node as HTMLElement
-                if (el.style && el.style.background && el.tagName !== 'SPAN') {
-                  el.style.background = ''
-                }
-                // If cursor landed inside a highlight span, move out of it
                 if (el.tagName === 'SPAN' && el.style.background) {
                   const after = document.createRange()
                   after.setStartAfter(el); after.collapse(true)
@@ -344,7 +423,7 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
             })
           }
         }}
-        style={{ minHeight: 80, padding: '10px 14px', border: `1px solid #e5e7eb`, borderRadius: '0 0 8px 8px', background: '#fff', fontSize: 14, lineHeight: 1.75, outline: 'none', color: '#111', fontFamily: 'system-ui,sans-serif' }}
+        style={{ minHeight: 80, padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '0 0 8px 8px', background: '#fff', fontSize: 14, lineHeight: 1.75, outline: 'none', color: '#111', fontFamily: 'system-ui,sans-serif' }}
       />
       {showTableModal && (
         <TableModal
@@ -356,7 +435,6 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   )
 }
 
-// ─── Code block ───────────────────────────────────────────────────────────────
 function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
   block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
 }) {
@@ -735,6 +813,7 @@ export default function LessonEditorPage() {
   const [loading, setLoading] = useState(true)
   const [lessonLinks, setLessonLinks] = useState<any[]>([])
   const pendingInsertFn = useRef<((html: string) => void) | null>(null)
+  const pendingQuizInsertFn = useRef<((html: string) => void) | null>(null)
   const [showQuiz, setShowQuiz] = useState(false)
   const [quizTargetId, setQuizTargetId] = useState<string | null>(null)
   const [mediaModal, setMediaModal] = useState<null | 'image' | 'video' | 'file' | 'link'>(null)
@@ -843,6 +922,10 @@ export default function LessonEditorPage() {
                 pendingInsertFn.current = insertFn
                 setMediaModal(type)
               }}
+              onInsertQuiz={(insertFn) => {
+                pendingQuizInsertFn.current = insertFn
+                setShowQuiz(true)
+              }}
             />
           )}
           {block.type === 'code' && (
@@ -877,11 +960,12 @@ export default function LessonEditorPage() {
       </div>
 
       {showQuiz && <QuizModal onInsert={html => {
-        if (quizTargetId) {
-          setBlocks(prev => prev.map(b => b.id === quizTargetId ? { ...b, content: b.content + html } : b))
+        if (pendingQuizInsertFn.current) {
+          pendingQuizInsertFn.current(html)
+          pendingQuizInsertFn.current = null
         }
         setShowQuiz(false)
-      }} onClose={() => setShowQuiz(false)} />}
+      }} onClose={() => { setShowQuiz(false); pendingQuizInsertFn.current = null }} />}
       {mediaModal && (
         <MediaModal
           type={mediaModal}
