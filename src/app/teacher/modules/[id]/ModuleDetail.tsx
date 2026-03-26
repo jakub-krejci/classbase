@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Tag, Btn, BackLink, Pill } from '@/components/ui'
 
-export default function ModuleDetail({ module, lessons, assignments, enrollments }: {
-  module: any; lessons: any[]; assignments: any[]; enrollments: any[]
+export default function ModuleDetail({ module, lessons, assignments, enrollments, allProgress }: {
+  module: any; lessons: any[]; assignments: any[]; enrollments: any[]; allProgress?: any[]
 }) {
   const [tab, setTab] = useState<'lessons' | 'assignments' | 'students'>('lessons')
   const [lessonList, setLessonList] = useState(lessons)
@@ -140,19 +140,64 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
       {tab === 'students' && (
         <div>
           {enrollments.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No students enrolled yet.</p>}
-          {enrollments.map((e: any, i: number) => {
-            const p = e.profiles as any
-            const initials = (p?.full_name ?? p?.email ?? '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-            return (
-              <div key={e.student_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '0.5px solid #f3f4f6' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{p?.full_name ?? 'Unknown'}</div>
-                  <div style={{ fontSize: 11, color: '#888' }}>{p?.email}</div>
-                </div>
+          {enrollments.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              {/* Header row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '200px repeat(' + lessons.length + ', 1fr)', gap: 0, marginBottom: 4, minWidth: 400 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', padding: '4px 8px' }}>Student</div>
+                {lessons.map((l: any, i: number) => (
+                  <div key={l.id} title={l.title} style={{ fontSize: 9, color: '#888', padding: '4px 4px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderLeft: '1px solid #f3f4f6' }}>
+                    {i + 1}. {l.title.slice(0, 12)}{l.title.length > 12 ? '…' : ''}
+                  </div>
+                ))}
               </div>
-            )
-          })}
+              {/* Student rows */}
+              {enrollments.map((e: any) => {
+                const p = e.profiles as any
+                const initials = (p?.full_name ?? p?.email ?? '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
+                // Build progress map for this student
+                const studentProgress = (allProgress ?? []).filter((r: any) => r.student_id === e.student_id)
+                const progressMap: Record<string, any> = {}
+                studentProgress.forEach((r: any) => { progressMap[r.lesson_id] = r })
+                const completedCount = studentProgress.filter((r: any) => r.status === 'completed').length
+                const overallPct = lessons.length > 0 ? Math.round(completedCount / lessons.length * 100) : 0
+                return (
+                  <div key={e.student_id} style={{ display: 'grid', gridTemplateColumns: '200px repeat(' + lessons.length + ', 1fr)', gap: 0, borderTop: '0.5px solid #f3f4f6', alignItems: 'center', minWidth: 400 }}>
+                    {/* Student name cell */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px' }}>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#E6F1FB', color: '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p?.full_name ?? 'Unknown'}</div>
+                        <div style={{ fontSize: 10, color: '#888' }}>{overallPct}% done</div>
+                      </div>
+                    </div>
+                    {/* Per-lesson progress cells */}
+                    {lessons.map((l: any) => {
+                      const prog = progressMap[l.id]
+                      const status = prog?.status
+                      const scroll = prog?.scroll_pct ?? 0
+                      const bg = status === 'completed' ? '#EAF3DE' : status === 'bookmark' ? '#FFF3CD' : scroll > 0 ? '#E6F1FB' : '#f9fafb'
+                      const icon = status === 'completed' ? '✓' : status === 'bookmark' ? '🔖' : scroll > 0 ? scroll + '%' : '—'
+                      const color = status === 'completed' ? '#27500A' : status === 'bookmark' ? '#856404' : scroll > 0 ? '#0C447C' : '#ccc'
+                      return (
+                        <div key={l.id} title={status === 'completed' ? 'Completed' : status === 'bookmark' ? 'Bookmarked' : scroll > 0 ? scroll + '% read' : 'Not started'}
+                          style={{ background: bg, borderLeft: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 36, fontSize: 10, fontWeight: 600, color }}>
+                          {icon}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+              {/* Legend */}
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: '#888', flexWrap: 'wrap' }}>
+                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#EAF3DE', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />Completed</span>
+                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#FFF3CD', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />Bookmarked</span>
+                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#E6F1FB', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />In progress (% read)</span>
+                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#f9fafb', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />Not started</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -24,6 +24,16 @@ export default async function ModuleDetailPage({ params }: { params: any }) {
   const { data: assignments } = await admin.from('assignments').select('*').eq('module_id', moduleId).order('created_at')
   const { data: enrollments } = await admin.from('enrollments').select('student_id, profiles(full_name, email)').eq('module_id', moduleId)
 
+  // Fetch lesson progress for all enrolled students
+  const lessonIds = (lessons ?? []).map((l: any) => l.id)
+  const studentIds = (enrollments ?? []).map((e: any) => e.student_id)
+  const { data: allProgress } = lessonIds.length && studentIds.length
+    ? await admin.from('lesson_progress')
+        .select('student_id, lesson_id, status, scroll_pct')
+        .in('lesson_id', lessonIds)
+        .in('student_id', studentIds)
+    : { data: [] }
+
   return (
     <AppShell user={profile} role="teacher">
       <ModuleDetail
@@ -31,6 +41,7 @@ export default async function ModuleDetailPage({ params }: { params: any }) {
         lessons={(lessons ?? []) as any[]}
         assignments={(assignments ?? []) as any[]}
         enrollments={(enrollments ?? []) as any[]}
+        allProgress={(allProgress ?? []) as any[]}
       />
     </AppShell>
   )

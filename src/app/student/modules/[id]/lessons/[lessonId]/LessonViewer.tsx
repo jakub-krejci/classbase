@@ -381,12 +381,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   const [scrollPct, setScrollPct] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Notes
-  const [notes, setNotes] = useState('')
-  const [notesOpen, setNotesOpen] = useState(false)
-  const [notesSaving, setNotesSaving] = useState(false)
-  const notesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const currentIndex = allLessons.findIndex(l => l.id === lesson.id)
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null
   const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
@@ -409,16 +403,15 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   useEffect(() => {
     setBlocks(parseBlocks(lesson.content_html ?? ''))
 
-    // Load existing scroll progress and notes
+    // Load existing scroll progress
     supabase.from('lesson_progress')
-      .select('scroll_pct, notes')
+      .select('scroll_pct')
       .eq('student_id', studentId)
       .eq('lesson_id', lesson.id)
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setScrollPct((data as any).scroll_pct ?? 0)
-          setNotes((data as any).notes ?? '')
         }
       })
   }, [lesson.id])
@@ -463,24 +456,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
       student_id: studentId, lesson_id: lesson.id,
       status: status === 'none' ? 'completed' : status,
       scroll_pct: pct,
-      notes,
     } as any)
-  }
-
-  // ── Notes auto-save (debounced 3s) ─────────────────────────────────────────
-  function handleNotesChange(val: string) {
-    setNotes(val)
-    setNotesSaving(true)
-    if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current)
-    notesSaveTimer.current = setTimeout(async () => {
-      await supabase.from('lesson_progress').upsert({
-        student_id: studentId, lesson_id: lesson.id,
-        status: status === 'none' ? 'completed' : status,
-        scroll_pct: scrollPct,
-        notes: val,
-      } as any)
-      setNotesSaving(false)
-    }, 3000)
   }
 
   // ── Status toggle ──────────────────────────────────────────────────────────
@@ -492,10 +468,90 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     } else {
       await supabase.from('lesson_progress').upsert({
         student_id: studentId, lesson_id: lesson.id,
-        status: newStatus, scroll_pct: scrollPct, notes,
+        status: newStatus, scroll_pct: scrollPct,
       } as any)
     }
     setStatus(newStatus); setSaving(false)
+  }
+
+  // ── Export to PDF ──────────────────────────────────────────────────────────
+  function exportPDF() {
+    // Build a clean printable HTML document
+    const katexCss = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css'
+    const contentHtml = lesson.content_html ?? ''
+
+    // Parse the cb-code and cb-tryit blocks for display in PDF
+    const tmp = document.createElement('div')
+    tmp.innerHTML = contentHtml
+    tmp.querySelectorAll('.cb-code').forEach(el => {
+      const code = decodeURIComponent((el as HTMLElement).getAttribute('data-code') ?? '')
+      const pre = document.createElement('pre')
+      pre.style.cssText = 'background:#1e1e2e;color:#cdd6f4;padding:14px 16px;border-radius:8px;font-size:13px;font-family:monospace;white-space:pre-wrap;word-break:break-word;margin:12px 0'
+      pre.textContent = code
+      el.replaceWith(pre)
+    })
+    tmp.querySelectorAll('.cb-tryit').forEach(el => {
+      const code = decodeURIComponent((el as HTMLElement).getAttribute('data-code') ?? '')
+      const wrap = document.createElement('div')
+      wrap.style.cssText = 'border:1px solid #7aa2f7;border-radius:8px;overflow:hidden;margin:12px 0'
+      wrap.innerHTML = '<div style="background:#16213e;color:#7aa2f7;padding:5px 12px;font-size:10px;font-family:monospace;letter-spacing:.06em">▶ TRY IT — Python</div>'
+      const pre = document.createElement('pre')
+      pre.style.cssText = 'background:#1a1b26;color:#cdd6f4;padding:14px 16px;font-size:13px;font-family:monospace;white-space:pre-wrap;word-break:break-word;margin:0'
+      pre.textContent = code
+      wrap.appendChild(pre)
+      el.replaceWith(wrap)
+    })
+    tmp.querySelectorAll('.cb-math').forEach(el => {
+      const latex = decodeURIComponent((el as HTMLElement).getAttribute('data-latex') ?? '')
+      const span = document.createElement('div')
+      span.style.cssText = 'text-align:center;margin:16px 0;font-style:italic;color:#444'
+      span.textContent = latex
+      el.replaceWith(span)
+    })
+
+    const printHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${lesson.title}</title>
+  <link rel="stylesheet" href="${katexCss}">
+  <style>
+    body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; color: #111; line-height: 1.7; font-size: 15px; }
+    h1 { font-size: 26px; margin-bottom: 4px; }
+    h2 { font-size: 20px; margin: 22px 0 6px; }
+    h3 { font-size: 17px; margin: 18px 0 4px; }
+    p { margin: 8px 0; }
+    blockquote { border-left: 3px solid #185FA5; margin: 12px 0; padding: 4px 16px; color: #555; font-style: italic; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    td, th { border: 1px solid #ddd; padding: 8px 12px; }
+    th { background: #f5f5f5; font-weight: 600; }
+    img { max-width: 100%; border-radius: 6px; }
+    a { color: #185FA5; }
+    ul, ol { padding-left: 24px; }
+    .cb-quiz { background: #f0f7ff; border: 1px solid #B5D4F4; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+    details { border: 1px solid #ddd; border-radius: 6px; margin: 10px 0; }
+    summary { padding: 8px 12px; background: #f9fafb; cursor: pointer; }
+    .meta { font-size: 12px; color: #888; margin-bottom: 24px; border-bottom: 1px solid #eee; padding-bottom: 12px; }
+    @media print { body { margin: 20px; } }
+  </style>
+</head>
+<body>
+  <h1>${lesson.title}</h1>
+  <div class="meta">${authorName ? 'By ' + authorName + ' · ' : ''}${readTime}</div>
+  ${tmp.innerHTML}
+</body>
+</html>`
+
+    const blob = new Blob([printHtml], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const win = window.open(url, '_blank')
+    if (win) {
+      win.onload = () => {
+        win.focus()
+        win.print()
+        URL.revokeObjectURL(url)
+      }
+    }
   }
 
   return (
@@ -548,12 +604,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           })}
         </div>
 
-        {/* Notes toggle button */}
-        <button onClick={() => setNotesOpen(o => !o)}
-          style={{ marginTop:8, width:'100%', padding:'8px', background: notesOpen ? '#185FA5' : '#fff', color: notesOpen ? '#E6F1FB' : '#555', border:'1px solid #e5e7eb', borderRadius:8, fontSize:12, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-          📝 {notesOpen ? 'Close notes' : 'My notes'}
-          {notes.trim() && !notesOpen && <span style={{ width:7, height:7, borderRadius:'50%', background:'#185FA5', flexShrink:0 }} />}
-        </button>
       </div>
 
       {/* ── Main content ──────────────────────────────────────────────────── */}
@@ -561,13 +611,20 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         <BackLink href={`/student/modules/${moduleId}`} label="Back to module" />
 
         {/* Title + meta */}
-        <div style={{ display:'flex', alignItems:'baseline', gap:12, flexWrap:'wrap', marginBottom:4 }}>
-          <h1 style={{ fontSize:22, fontWeight:700, margin:0 }}>{lesson.title}</h1>
-          {readTime && (
-            <span style={{ fontSize:12, color:'#888', background:'#f3f4f6', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' }}>
-              🕐 {readTime}
-            </span>
+        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom:4, justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:12, flexWrap:'wrap' }}>
+            <h1 style={{ fontSize:22, fontWeight:700, margin:0 }}>{lesson.title}</h1>
+            {readTime && (
+              <span style={{ fontSize:12, color:'#888', background:'#f3f4f6', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' }}>
+                🕐 {readTime}
+              </span>
           )}
+          </div>
+          <button onClick={exportPDF}
+            style={{ padding:'6px 14px', fontSize:12, background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, cursor:'pointer', color:'#555', display:'flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}
+            title="Export lesson as printable PDF">
+            ⬇ Export PDF
+          </button>
         </div>
         {authorName && <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>By {authorName}</div>}
 
@@ -622,28 +679,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         </div>
       </div>
 
-      {/* ── Notes sidebar ─────────────────────────────────────────────────── */}
-      {notesOpen && (
-        <div style={{ width:260, flexShrink:0, position:'sticky', top:80 }}>
-          <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden', boxShadow:'0 4px 16px rgba(0,0,0,.06)' }}>
-            <div style={{ padding:'10px 14px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <span style={{ fontSize:13, fontWeight:600, color:'#111' }}>📝 My notes</span>
-              <div style={{ fontSize:10, color:'#aaa' }}>
-                {notesSaving ? 'Saving…' : notes.trim() ? 'Saved ✓' : ''}
-              </div>
-            </div>
-            <textarea
-              value={notes}
-              onChange={e => handleNotesChange(e.target.value)}
-              placeholder={"Take notes while reading...\n\nYour notes are private and auto-saved."}
-              style={{ width:'100%', minHeight:320, maxHeight:'calc(100vh - 200px)', padding:'12px 14px', border:'none', outline:'none', resize:'vertical', fontSize:13, lineHeight:1.6, fontFamily:'system-ui,sans-serif', color:'#111', background:'#fff', boxSizing:'border-box' }}
-            />
-            <div style={{ padding:'6px 14px', background:'#f9fafb', borderTop:'1px solid #e5e7eb', fontSize:10, color:'#bbb' }}>
-              {notes.trim().split(/\s+/).filter(Boolean).length} words · auto-saved
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   )
 }

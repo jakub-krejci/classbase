@@ -560,6 +560,19 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicat
         <button onClick={() => setFontSize(f => Math.max(10, f - 1))} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }} title="Decrease font size">A−</button>
         <button onClick={() => setFontSize(f => Math.min(20, f + 1))} style={{ fontSize: 12, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }} title="Increase font size">A+</button>
         <button onClick={() => { navigator.clipboard?.writeText(code) }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Copy code">⎘</button>
+          <button onClick={() => {
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(new Blob([code], { type: 'text/x-python' }))
+            a.download = 'code.py'; a.click(); URL.revokeObjectURL(a.href)
+          }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Download as .py">⬇ .py</button>
+          <label style={{ fontSize: 10, color: '#6c7086', cursor: 'pointer', padding: '1px 6px' }} title="Import .py file">⬆ .py
+            <input type="file" accept=".py,.txt" style={{ display: 'none' }} onChange={e => {
+              const f = e.target.files?.[0]; if (!f) return
+              new FileReader().onload = (ev) => { update(ev.target?.result as string) }
+              const r = new FileReader(); r.onload = ev => update(ev.target?.result as string); r.readAsText(f)
+              e.target.value = ''
+            }} />
+          </label>
         <button onClick={onMoveUp} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↑</button>
         <button onClick={onMoveDown} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↓</button>
         <button onClick={onDuplicate} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px' }} title="Duplicate">⎘</button>
@@ -675,6 +688,18 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplica
         <button onClick={() => setFontSize(f => Math.min(20, f+1))} style={{ fontSize:12, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A+</button>
         <button onClick={() => setShowExpected(s => !s)} style={{ fontSize:10, color: showExpected?'#f9e2af':'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Set expected output">✓ Expected</button>
         <button onClick={() => { update(originalCode.current); syncHL(originalCode.current) }} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Reset to original code">↺ Reset</button>
+        <button onClick={() => {
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(new Blob([code], { type: 'text/x-python' }))
+          a.download = 'tryit.py'; a.click(); URL.revokeObjectURL(a.href)
+        }} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Download as .py">⬇ .py</button>
+        <label style={{ fontSize:10, color:'#6c7086', cursor:'pointer', padding:'1px 6px' }} title="Import .py file">⬆ .py
+          <input type="file" accept=".py,.txt" style={{ display:'none' }} onChange={e => {
+            const f = e.target.files?.[0]; if (!f) return
+            const r = new FileReader(); r.onload = ev => update(ev.target?.result as string); r.readAsText(f)
+            e.target.value = ''
+          }} />
+        </label>
         <button onClick={run} disabled={running}
           style={{ padding:'2px 10px', fontSize:11, background: pyReady?'#a6e3a1':'#7aa2f7', color:'#1a1b26', border:'none', borderRadius:4, cursor:'pointer', fontWeight:600 }}>
           {running ? (pkgStatus || '⏳') : '▶ Run'}
@@ -1138,6 +1163,7 @@ export default function LessonEditorPage() {
   const [loading, setLoading] = useState(true)
   const [lessonLinks, setLessonLinks] = useState<any[]>([])
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lessonIdRef = useRef<string | null>(isNew ? null : lessonId)
@@ -1357,11 +1383,26 @@ export default function LessonEditorPage() {
           {saving ? 'Saving…' : 'Save lesson'}
         </button>
         <a href={'/teacher/modules/' + moduleId} style={{ padding: '10px 16px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, textDecoration: 'none', color: '#111', background: '#fff', display: 'inline-flex', alignItems: 'center' }}>Cancel</a>
-        <div style={{ marginLeft: 8, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ marginLeft: 8, fontSize: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
           {autoSaveStatus === 'saving' && <span style={{ color: '#888' }}>⟳ Auto-saving…</span>}
           {autoSaveStatus === 'saved' && <span style={{ color: '#27500A' }}>✓ Auto-saved {lastSaved ? lastSaved.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''}</span>}
           {autoSaveStatus === 'error' && <span style={{ color: '#791F1F' }}>⚠ Auto-save failed</span>}
           {autoSaveStatus === 'idle' && !isNew && <span style={{ color: '#bbb' }}>Auto-saves every 30s</span>}
+          <span style={{ color: '#ccc' }}>|</span>
+          <span style={{ color: '#aaa' }}>{(() => {
+            const tmp = document.createElement ? document.createElement('div') : null
+            if (!tmp) return ''
+            const html = blocksToHtml(blocks)
+            tmp.innerHTML = html
+            const words = (tmp.textContent ?? '').trim().split(/\s+/).filter(Boolean).length
+            const codeBlocks = blocks.filter(b => b.type === 'code' || b.type === 'tryit').length
+            return words + ' words' + (codeBlocks ? ' · ' + codeBlocks + ' code block' + (codeBlocks > 1 ? 's' : '') : '')
+          })()}</span>
+          <button onClick={() => setShowShortcuts(s => !s)}
+            style={{ fontSize: 11, color: '#aaa', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px' }}
+            title="Keyboard shortcuts">
+            ⌨ Shortcuts
+          </button>
         </div>
       </div>
 
@@ -1372,6 +1413,37 @@ export default function LessonEditorPage() {
         }
         setShowQuiz(false)
       }} onClose={() => { setShowQuiz(false); pendingQuizInsertFn.current = null }} />}
+      {showShortcuts && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => setShowShortcuts(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', borderRadius:14, padding:24, width:'100%', maxWidth:500, maxHeight:'80vh', overflowY:'auto' }}>
+            <h2 style={{ fontSize:16, fontWeight:600, marginBottom:16 }}>⌨ Keyboard shortcuts</h2>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 20px' }}>
+              {([
+                ['Ctrl+B', 'Bold'],
+                ['Ctrl+I', 'Italic'],
+                ['Ctrl+U', 'Underline'],
+                ['Ctrl+Z', 'Undo'],
+                ['Ctrl+Y', 'Redo'],
+                ['Ctrl+Enter', 'Run code (in code blocks)'],
+                ['Tab', 'Indent (in code blocks)'],
+                ['Shift+Tab', 'Unindent (in code blocks)'],
+                ['Shift+Enter', 'Exit blockquote'],
+                ['Ctrl+S', 'Save lesson (browser shortcut)'],
+              ] as [string, string][]).map(([key, desc]) => (
+                <div key={key} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', borderBottom:'0.5px solid #f3f4f6' }}>
+                  <kbd style={{ background:'#f3f4f6', border:'1px solid #e5e7eb', borderRadius:5, padding:'2px 7px', fontSize:11, fontFamily:'monospace', whiteSpace:'nowrap', flexShrink:0 }}>{key}</kbd>
+                  <span style={{ fontSize:13, color:'#555' }}>{desc}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setShowShortcuts(false)}
+              style={{ marginTop:16, width:'100%', padding:'9px', background:'#f3f4f6', border:'none', borderRadius:8, fontSize:13, cursor:'pointer' }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       {mediaModal && (
         <MediaModal
           type={mediaModal}

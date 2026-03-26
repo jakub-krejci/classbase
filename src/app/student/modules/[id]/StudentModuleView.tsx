@@ -7,9 +7,13 @@ export default function StudentModuleView({ module, lessons, assignments, comple
   module: any; lessons: any[]; assignments: any[]; completedIds: string[]; bookmarkedIds: string[]; submissions: any[]; studentId: string
 }) {
   const [tab, setTab] = useState<'lessons' | 'assignments'>('lessons')
+  const [search, setSearch] = useState('')
   const done = new Set(completedIds)
   const bookmarked = new Set(bookmarkedIds)
   const pct = lessons.length > 0 ? Math.round(done.size / lessons.length * 100) : 0
+  const filteredLessons = search.trim()
+    ? lessons.filter((l: any) => l.title.toLowerCase().includes(search.toLowerCase()))
+    : lessons
 
   const tabStyle = (t: string): React.CSSProperties => ({
     padding: '8px 14px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'inherit',
@@ -60,17 +64,31 @@ export default function StudentModuleView({ module, lessons, assignments, comple
       {/* Lessons */}
       {tab === 'lessons' && (
         <div>
+          {lessons.length > 4 && (
+            <div style={{ marginBottom: 12, position: 'relative' }}>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search lessons…"
+                style={{ width: '100%', padding: '8px 12px 8px 32px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              />
+              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
+              {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: 14 }}>✕</button>}
+            </div>
+          )}
+          {filteredLessons.length === 0 && search && <p style={{ color: '#aaa', fontSize: 13 }}>No lessons match "{search}"</p>}
           {lessons.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No lessons yet.</p>}
-          {lessons.map((l: any, i: number) => {
+          {filteredLessons.map((l: any, i: number) => {
+            const realIndex = lessons.findIndex((x: any) => x.id === l.id)
             const completed = done.has(l.id)
-            const unlocked = isUnlocked(i)
+            const unlocked = isUnlocked(realIndex)
             return (
               <div key={l.id}>
                 {unlocked ? (
                   <a href={'/student/modules/' + module.id + '/lessons/' + l.id}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, textDecoration: 'none', color: 'inherit' }}>
                     <div style={{ width: 22, height: 22, borderRadius: '50%', background: completed ? '#EAF3DE' : bookmarked.has(l.id) ? '#FFF3CD' : '#E6F1FB', color: completed ? '#27500A' : bookmarked.has(l.id) ? '#856404' : '#0C447C', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {completed ? '✓' : bookmarked.has(l.id) ? '🔖' : (i + 1)}
+                      {completed ? '✓' : bookmarked.has(l.id) ? '🔖' : (realIndex + 1)}
                     </div>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{l.title}</span>
                     {completed && <Pill label="Done" color="green" />}
