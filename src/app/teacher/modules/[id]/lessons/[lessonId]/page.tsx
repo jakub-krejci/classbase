@@ -93,8 +93,9 @@ const EDITOR_CSS = `
 .cb-rich details > *:not(summary){padding:10px 14px}
 `
 
-function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz, onDuplicate }: {
+function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz, onDuplicate }: {
   block: Block; onChange: (content: string) => void
+  onMount?: (el: HTMLDivElement) => void
   onAddAfter: (type: BlockType) => void; onDelete: () => void
   onMoveUp: () => void; onMoveDown: () => void; canDelete: boolean
   onOpenMedia: (type: 'image'|'video'|'file'|'link', insertFn: (html: string) => void) => void
@@ -108,8 +109,11 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
 
   // Sync content into div on first render / when block changes externally
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== block.content) {
-      ref.current.innerHTML = block.content || ''
+    if (ref.current) {
+      if (ref.current.innerHTML !== block.content) {
+        ref.current.innerHTML = block.content || ''
+      }
+      onMount?.(ref.current)
     }
   }, [])
 
@@ -1139,6 +1143,7 @@ export default function LessonEditorPage() {
   const lessonIdRef = useRef<string | null>(isNew ? null : lessonId)
   const pendingInsertFn = useRef<((html: string) => void) | null>(null)
   const pendingQuizInsertFn = useRef<((html: string) => void) | null>(null)
+  const blockDomRefs = useRef<Record<string, HTMLDivElement>>({})
   const [showQuiz, setShowQuiz] = useState(false)
   const [quizTargetId, setQuizTargetId] = useState<string | null>(null)
   const [mediaModal, setMediaModal] = useState<null | 'image' | 'video' | 'file' | 'link'>(null)
@@ -1180,7 +1185,14 @@ export default function LessonEditorPage() {
       if (!lessonIdRef.current) return
       setAutoSaveStatus('saving')
       try {
-        const html = blocksToHtml(blocks)
+        // Sync RichBlock DOM content into blocks state before serializing
+    const syncedBlocks = blocks.map(b => {
+      if (b.type === 'html' && blockDomRefs.current[b.id]) {
+        return { ...b, content: blockDomRefs.current[b.id].innerHTML }
+      }
+      return b
+    })
+    const html = blocksToHtml(syncedBlocks)
         const { error } = await supabase.from('lessons').update({
           title: title.trim(), content_html: html, updated_at: new Date().toISOString()
         } as any).eq('id', lessonIdRef.current)
@@ -1233,7 +1245,14 @@ export default function LessonEditorPage() {
   async function save() {
     if (!title.trim()) { setError('Title is required.'); return }
     setSaving(true); setError('')
-    const html = blocksToHtml(blocks)
+    // Sync RichBlock DOM content into blocks state before serializing
+    const syncedBlocks = blocks.map(b => {
+      if (b.type === 'html' && blockDomRefs.current[b.id]) {
+        return { ...b, content: blockDomRefs.current[b.id].innerHTML }
+      }
+      return b
+    })
+    const html = blocksToHtml(syncedBlocks)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { window.location.href = '/login'; return }
     if (isNew) {
@@ -1268,6 +1287,7 @@ export default function LessonEditorPage() {
           {block.type === 'html' && (
             <RichBlock
               block={block}
+              onMount={(el: HTMLDivElement) => { blockDomRefs.current[block.id] = el }}
               onChange={c => updateBlock(block.id, c)}
               onAddAfter={type => addBlockAfter(block.id, type)}
               onDelete={() => deleteBlock(block.id)}
@@ -1313,7 +1333,18 @@ export default function LessonEditorPage() {
             <button onClick={() => addBlockAfter(block.id,'code')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1e1e2e', cursor:'pointer', color:'#cdd6f4' }}>+ Code</button>
             <button onClick={() => addBlockAfter(block.id,'tryit')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1a1b26', cursor:'pointer', color:'#7aa2f7' }}>+ Try it</button>
             <button onClick={() => addBlockAfter(block.id,'math')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #d6bcfa', borderRadius:4, background:'#faf9ff', cursor:'pointer', color:'#6b46c1' }}>+ Math</button>
-            <button onClick={() => { setQuizTargetId(block.id); setShowQuiz(true) }} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #B5D4F4', borderRadius:4, background:'#E6F1FB', cursor:'pointer', color:'#0C447C' }}>+ Quiz</button>
+            <button onClick={() => {
+              // Create an insertFn that directly appends to this block's state content
+              pendingQuizInsertFn.current = (html: string) => {
+                setBlocks(prev => prev.map(b =>
+                  b.id === block.id ? { ...b, content: b.content + html } : b
+                ))
+                // Also update the DOM ref if available
+                const el = document.querySelector(`[data-block-id="${block.id}"]`) as HTMLElement
+                if (el) el.innerHTML = el.innerHTML + html
+              }
+              setShowQuiz(true)
+            }} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #B5D4F4', borderRadius:4, background:'#E6F1FB', cursor:'pointer', color:'#0C447C' }}>+ Quiz</button>
           </div>
         </div>
       ))}
