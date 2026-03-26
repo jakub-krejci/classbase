@@ -1334,14 +1334,15 @@ export default function LessonEditorPage() {
             <button onClick={() => addBlockAfter(block.id,'tryit')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1a1b26', cursor:'pointer', color:'#7aa2f7' }}>+ Try it</button>
             <button onClick={() => addBlockAfter(block.id,'math')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #d6bcfa', borderRadius:4, background:'#faf9ff', cursor:'pointer', color:'#6b46c1' }}>+ Math</button>
             <button onClick={() => {
-              // Create an insertFn that directly appends to this block's state content
+              // Create a new html block after this one and insert the quiz into it
               pendingQuizInsertFn.current = (html: string) => {
-                setBlocks(prev => prev.map(b =>
-                  b.id === block.id ? { ...b, content: b.content + html } : b
-                ))
-                // Also update the DOM ref if available
-                const el = document.querySelector(`[data-block-id="${block.id}"]`) as HTMLElement
-                if (el) el.innerHTML = el.innerHTML + html
+                setBlocks(prev => {
+                  const idx = prev.findIndex(b => b.id === block.id)
+                  const newBlock = { id: uid(), type: 'html' as const, content: html }
+                  const next = [...prev]
+                  next.splice(idx + 1, 0, newBlock)
+                  return next
+                })
               }
               setShowQuiz(true)
             }} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #B5D4F4', borderRadius:4, background:'#E6F1FB', cursor:'pointer', color:'#0C447C' }}>+ Quiz</button>
