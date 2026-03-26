@@ -433,8 +433,7 @@ function MediaModal({ type, onInsert, onClose }: {
           <div>
             <div onClick={() => fileRef.current?.click()}
               style={{ border:'2px dashed #e5e7eb', borderRadius:10, padding:24, textAlign:'center', cursor:'pointer', color:url?'#27500A':'#888', fontSize:13, background:url?'#f0fff4':'#fafafa', marginBottom:10 }}>
-              {uploading ? 'Uploading to Supabase Storage…' : url ? '✓ ' + (label || 'File uploaded — ready to insert') : 'Click to choose a file from your computer
-(saves to Supabase Storage)'}
+              {uploading ? 'Uploading to Supabase Storage…' : url ? '✓ ' + (label || 'File uploaded — ready to insert') : 'Click to choose a file from your computer (saves to Supabase Storage)'}
             </div>
             <input ref={fileRef} type="file"
               accept={type === 'image' ? 'image/*,image/gif' : type === 'video' ? 'video/*' : undefined}
