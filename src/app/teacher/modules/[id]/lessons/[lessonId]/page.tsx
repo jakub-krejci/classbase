@@ -4,11 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams } from 'next/navigation'
 import { BackLink } from '@/components/ui'
-import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
+import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
 // ─── Block types ──────────────────────────────────────────────────────────────
 type BlockType = 'html' | 'code' | 'tryit' | 'math'
-interface Block { id: string; type: BlockType; content: string }
+interface Block { id: string; type: BlockType; content: string; language?: Language }
 
 function uid() { return Math.random().toString(36).slice(2) }
 
@@ -18,7 +18,7 @@ function blocksToHtml(blocks: Block[]): string {
     if (b.type === 'html') return b.content
     if (b.type === 'code') {
       const enc = encodeURIComponent(b.content)
-      return `<div class="cb-code" data-code="${enc}"></div>`
+      return `<div class="cb-code" data-code="${enc}" data-lang="${b.language ?? 'python'}"></div>`
     }
     if (b.type === 'tryit') {
       const enc = encodeURIComponent(b.content)
@@ -525,16 +525,24 @@ function handleCodeKeyDown(
 }
 
 // ─── Code block (teacher editor) ──────────────────────────────────────────────
-function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
-  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
+function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate, onLanguageChange }: {
+  block: Block; onChange: (c: string) => void; onDelete: () => void
+  onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
+  onLanguageChange: (lang: Language) => void
 }) {
   const [code, setCode] = useState(block.content)
+  const lang: Language = block.language ?? 'python'
   const [fontSize, setFontSize] = useState(14)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
 
-  function syncHL(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
-  function syncH() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
+  function syncHL(val: string) {
+    if (preRef.current) preRef.current.innerHTML = highlightCode(val, lang) + '\n'
+  }
+  function syncH() {
+    if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' }
+  }
+  useEffect(() => { syncHL(code); syncH() }, [lang])
   useEffect(() => { syncHL(code); syncH() }, [])
 
   function update(val: string) { setCode(val); onChange(val); syncHL(val); syncH() }
@@ -545,52 +553,60 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicat
     whiteSpace: 'pre-wrap', wordBreak: 'break-all',
     display: 'block', boxSizing: 'border-box', width: '100%',
   }
-
-  // Generate line numbers
   const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
+
+  const placeholders: Record<Language, string> = {
+    python:     '# Write Python here\nprint("Hello, world!")',
+    javascript: '// Write JavaScript here\nconsole.log("Hello, world!")',
+    typescript: '// Write TypeScript here\nconst greet = (name: string) => `Hello, ${name}!`',
+    sql:        '-- Write SQL here\nSELECT * FROM users WHERE active = true;',
+    html:       '<!-- Write HTML here -->\n<h1>Hello, world!</h1>',
+    css:        '/* Write CSS here */\nbody { font-family: sans-serif; }',
+    pseudocode: '// Write pseudocode here\nFUNCTION greet(name)\n  PRINT "Hello, " + name\nEND FUNCTION',
+  }
 
   return (
     <div style={{ background: '#1e1e2e', borderRadius: 8, overflow: 'hidden', margin: '8px 0', border: '2px solid #313244' }}>
-      {/* Header */}
       <div style={{ background: '#16213e', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f38ba8', flexShrink: 0 }} />
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f9e2af', flexShrink: 0 }} />
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#a6e3a1', flexShrink: 0 }} />
-        <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em', flex: 1, marginLeft: 4 }}>PYTHON</span>
+        {/* Language selector */}
+        <select value={lang} onChange={e => { onLanguageChange(e.target.value as Language); syncHL(code) }}
+          style={{ fontSize: 10, fontFamily: 'monospace', color: '#7aa2f7', background: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', marginLeft: 4, letterSpacing: '.04em' }}>
+          {(Object.entries(LANGUAGE_LABELS) as [Language, string][]).map(([k, v]) => (
+            <option key={k} value={k} style={{ background: '#16213e' }}>{v}</option>
+          ))}
+        </select>
+        <div style={{ flex: 1 }} />
         <button onClick={() => setFontSize(f => Math.max(10, f - 1))} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }} title="Decrease font size">A−</button>
         <button onClick={() => setFontSize(f => Math.min(20, f + 1))} style={{ fontSize: 12, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }} title="Increase font size">A+</button>
-        <button onClick={() => { navigator.clipboard?.writeText(code) }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Copy code">⎘</button>
-          <button onClick={() => {
-            const a = document.createElement('a')
-            a.href = URL.createObjectURL(new Blob([code], { type: 'text/x-python' }))
-            a.download = 'code.py'; a.click(); URL.revokeObjectURL(a.href)
-          }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Download as .py">⬇ .py</button>
-          <label style={{ fontSize: 10, color: '#6c7086', cursor: 'pointer', padding: '1px 6px' }} title="Import .py file">⬆ .py
-            <input type="file" accept=".py,.txt" style={{ display: 'none' }} onChange={e => {
-              const f = e.target.files?.[0]; if (!f) return
-              new FileReader().onload = (ev) => { update(ev.target?.result as string) }
-              const r = new FileReader(); r.onload = ev => update(ev.target?.result as string); r.readAsText(f)
-              e.target.value = ''
-            }} />
-          </label>
+        <button onClick={() => { navigator.clipboard?.writeText(code) }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Copy code">⎘ Copy</button>
+        <button onClick={() => {
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(new Blob([code], { type: 'text/x-python' }))
+          a.download = `code.${lang === 'python' ? 'py' : lang === 'javascript' ? 'js' : lang === 'typescript' ? 'ts' : lang === 'sql' ? 'sql' : lang === 'html' ? 'html' : lang === 'css' ? 'css' : 'txt'}`
+          a.click(); URL.revokeObjectURL(a.href)
+        }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Download as file">⬇ Export</button>
+        <label style={{ fontSize: 10, color: '#6c7086', cursor: 'pointer', padding: '1px 6px' }} title="Import file">⬆ Import
+          <input type="file" accept=".py,.js,.ts,.sql,.html,.css,.txt" style={{ display: 'none' }} onChange={e => {
+            const f = e.target.files?.[0]; if (!f) return
+            const r = new FileReader(); r.onload = ev => update(ev.target?.result as string); r.readAsText(f)
+            e.target.value = ''
+          }} />
+        </label>
+        <button onClick={onDuplicate} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px' }} title="Duplicate block">⎘</button>
         <button onClick={onMoveUp} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↑</button>
         <button onClick={onMoveDown} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↓</button>
-        <button onClick={onDuplicate} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px' }} title="Duplicate">⎘</button>
         <button onClick={onDelete} style={{ fontSize: 11, color: '#f38ba8', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>✕</button>
       </div>
 
-      {/* Editor with line numbers */}
       <div style={{ position: 'relative', background: '#1e1e2e', display: 'flex' }}>
-        {/* Line numbers */}
         <div style={{ width: 40, flexShrink: 0, background: '#181825', padding: '14px 8px 14px 0', textAlign: 'right', fontFamily: 'ui-monospace,monospace', fontSize, lineHeight: 1.7, color: '#45475a', userSelect: 'none', pointerEvents: 'none', boxSizing: 'border-box' }}>
-          {Array.from({ length: lineCount }, (_, i) => (
-            <div key={i}>{i + 1}</div>
-          ))}
+          {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i + 1}</div>)}
         </div>
-        {/* Highlighted pre */}
         <pre ref={preRef} aria-hidden="true"
           style={{ ...monoStyle, color: '#cdd6f4', background: 'transparent', pointerEvents: 'none', position: 'absolute', left: 40, top: 0, right: 0, bottom: 0, margin: 0, overflow: 'hidden' }} />
-        {/* Textarea */}
         <textarea
           ref={taRef}
           value={code}
@@ -598,17 +614,17 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicat
           onChange={e => update(e.target.value)}
           onKeyDown={e => {
             const nv = handleCodeKeyDown(e)
-            if (nv !== null) { update(nv); requestAnimationFrame(() => { if (taRef.current) { const pos = (taRef.current as any)._nextPos; if (pos !== undefined) { taRef.current.selectionStart = taRef.current.selectionEnd = pos } } }) }
+            if (nv !== null) update(nv)
           }}
           style={{ ...monoStyle, flex: 1, color: 'transparent', caretColor: '#cdd6f4', background: 'transparent', border: 'none', outline: 'none', resize: 'none', overflow: 'hidden', position: 'relative', zIndex: 1, minHeight: 60, paddingLeft: 52 }}
-          placeholder="# Write Python here"
+          placeholder={placeholders[lang]}
         />
       </div>
     </div>
   )
 }
 
-// ─── Try-it block (teacher editor) ────────────────────────────────────────────
+
 function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
   block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
 }) {
@@ -1233,10 +1249,13 @@ export default function LessonEditorPage() {
   function updateBlock(id: string, content: string) {
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b))
   }
+  function updateBlockLanguage(id: string, language: Language) {
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, language } : b))
+  }
   function addBlockAfter(afterId: string, type: BlockType) {
     setBlocks(prev => {
       const idx = prev.findIndex(b => b.id === afterId)
-      const nb: Block = { id: uid(), type, content: type === 'tryit' ? 'print("Hello!")\n' : '# Python code\nprint("Hello, world!")\n' }
+      const nb: Block = { id: uid(), type, content: type === 'tryit' ? 'print("Hello!")\n' : '# Python code\nprint("Hello, world!")\n', language: type === 'code' ? 'python' : undefined }
       const next = [...prev]; next.splice(idx + 1, 0, nb); return next
     })
   }
@@ -1333,6 +1352,7 @@ export default function LessonEditorPage() {
           )}
           {block.type === 'code' && (
             <CodeBlock block={block} onChange={c => updateBlock(block.id, c)}
+              onLanguageChange={lang => updateBlockLanguage(block.id, lang)}
               onDuplicate={() => duplicateBlock(block.id)}
               onDelete={() => deleteBlock(block.id)}
               onMoveUp={() => moveBlock(block.id, -1)}

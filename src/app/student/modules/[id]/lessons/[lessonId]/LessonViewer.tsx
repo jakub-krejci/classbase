@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { BackLink } from '@/components/ui'
-import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
+import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
 // Parse lesson HTML into renderable blocks
-type ViewBlock = { type: 'html' | 'code' | 'tryit' | 'math'; content: string }
+type ViewBlock = { type: 'html' | 'code' | 'tryit' | 'math'; content: string; language?: Language }
 
 function parseBlocks(html: string): ViewBlock[] {
   if (!html) return []
@@ -31,7 +31,8 @@ function parseBlocks(html: string): ViewBlock[] {
       let code = ''
       try { code = decodeURIComponent(el.getAttribute('data-code') ?? '') }
       catch { code = el.getAttribute('data-code') ?? '' }
-      blocks.push({ type: 'code', content: code })
+      const lang = (el.getAttribute('data-lang') ?? 'python') as Language
+      blocks.push({ type: 'code', content: code, language: lang })
     } else if (el.nodeType === 1 && el.classList?.contains('cb-tryit')) {
       flush()
       let code = ''
@@ -82,20 +83,35 @@ function runPy(code: string): string {
 }
 
 // ── Code block viewer (read-only, highlighted) ────────────────────────────────
-function CodeViewer({ code }: { code: string }) {
+function CodeViewer({ code, language = 'python' }: { code: string; language?: Language }) {
   const [copied, setCopied] = useState(false)
-  const highlighted = highlightPython(code)
+  const highlighted = highlightCode(code, language)
+  const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
+  const langLabel = LANGUAGE_LABELS[language] ?? language
+  const ext: Record<Language, string> = { python:'py', javascript:'js', typescript:'ts', sql:'sql', html:'html', css:'css', pseudocode:'txt' }
   return (
     <div style={{ background:'#1e1e2e', borderRadius:8, overflow:'hidden', margin:'12px 0' }}>
       <div style={{ background:'#16213e', padding:'6px 14px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <span style={{ fontFamily:'monospace', fontSize:10, color:'#7aa2f7', letterSpacing:'.06em' }}>PYTHON</span>
-        <button onClick={() => { navigator.clipboard?.writeText(code); setCopied(true); setTimeout(()=>setCopied(false),1500) }}
-          style={{ padding:'2px 8px', fontSize:10, background:'transparent', color:'#7aa2f7', border:'1px solid #7aa2f7', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
+        <span style={{ fontFamily:'monospace', fontSize:10, color:'#7aa2f7', letterSpacing:'.06em' }}>{langLabel.toUpperCase()}</span>
+        <div style={{ display:'flex', gap:6 }}>
+          <button onClick={() => {
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(new Blob([code], { type: 'text/plain' }))
+            a.download = `code.${ext[language] ?? 'txt'}`; a.click(); URL.revokeObjectURL(a.href)
+          }} style={{ padding:'2px 8px', fontSize:10, background:'transparent', color:'#6c7086', border:'1px solid #313244', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>⬇</button>
+          <button onClick={() => { navigator.clipboard?.writeText(code); setCopied(true); setTimeout(()=>setCopied(false),1500) }}
+            style={{ padding:'2px 8px', fontSize:10, background:'transparent', color:'#7aa2f7', border:'1px solid #7aa2f7', borderRadius:4, cursor:'pointer', fontFamily:'inherit' }}>
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
       </div>
-      <pre style={{ background:'#1e1e2e', color:'#cdd6f4', padding:'14px 16px', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, margin:0, whiteSpace:'pre', overflowX:'auto', lineHeight:1.7 }}
-        dangerouslySetInnerHTML={{ __html: highlighted }} />
+      <div style={{ display:'flex', background:'#1e1e2e' }}>
+        <div style={{ width:36, flexShrink:0, background:'#181825', padding:'14px 6px 14px 0', textAlign:'right', fontFamily:'ui-monospace,monospace', fontSize:13, lineHeight:1.7, color:'#45475a', userSelect:'none' }}>
+          {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i + 1}</div>)}
+        </div>
+        <pre style={{ flex:1, background:'transparent', color:'#cdd6f4', padding:'14px 16px', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, margin:0, whiteSpace:'pre-wrap', overflowX:'auto', lineHeight:1.7, wordBreak:'break-word' }}
+          dangerouslySetInnerHTML={{ __html: highlighted }} />
+      </div>
     </div>
   )
 }
@@ -643,7 +659,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           {blocks.map((b, i) => (
             <div key={i}>
               {b.type === 'html'   && <HtmlBlock html={b.content} />}
-              {b.type === 'code'   && <CodeViewer code={b.content} />}
+              {b.type === 'code'   && <CodeViewer code={b.content} language={b.language} />}
               {b.type === 'tryit'  && <TryItViewer initialCode={b.content} />}
               {b.type === 'math'   && <MathViewer latex={b.content} />}
             </div>
