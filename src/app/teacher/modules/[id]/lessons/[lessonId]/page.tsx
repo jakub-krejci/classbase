@@ -92,7 +92,8 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   onOpenMedia: (type: 'image'|'video'|'file'|'link', insertFn: (html: string) => void) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const dark = typeof document !== 'undefined' && document.body.getAttribute('data-theme') === 'dark'
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
+  const [showTableModal, setShowTableModal] = useState(false)
 
   // Sync content into div on first render / when block changes externally
   useEffect(() => {
@@ -224,7 +225,8 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
 function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
   block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
 }) {
-  const dark = typeof document !== 'undefined' && document.body.getAttribute('data-theme') === 'dark'
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
+  const [showTableModal, setShowTableModal] = useState(false)
   const [code, setCode] = useState(block.content)
   const taRef = useRef<HTMLTextAreaElement>(null)
   function autoResize() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
