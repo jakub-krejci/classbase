@@ -346,6 +346,33 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
   )
 }
 
+// ─── Table modal ──────────────────────────────────────────────────────────────
+function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) => void; onClose: () => void }) {
+  const [rows, setRows] = useState(3)
+  const [cols, setCols] = useState(3)
+  const ni: React.CSSProperties = { width: 70, padding: '6px 8px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, outline: 'none', textAlign: 'center' }
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 300 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Insert table</h2>
+        {([['Rows', rows, setRows], ['Columns', cols, setCols]] as const).map(([lbl, val, set]) => (
+          <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <span style={{ width: 70, fontSize: 13 }}>{lbl}</span>
+            <input type="number" min={1} max={20} value={val}
+              onChange={e => (set as any)(Math.max(1, Math.min(20, +e.target.value || 1)))} style={ni} />
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button onClick={() => { onInsert(rows, cols); onClose() }}
+            style={{ flex: 1, padding: '8px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>Insert</button>
+          <button onClick={onClose}
+            style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Quiz modal ───────────────────────────────────────────────────────────────
 function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:()=>void }) {
   const [q,setQ]=useState(''); const [opts,setOpts]=useState(['','','','']); const [correct,setCorrect]=useState(0); const [expl,setExpl]=useState(['','','',''])
