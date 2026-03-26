@@ -102,7 +102,7 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
     }
   }, [])
 
-  function exec(cmd: string, val?: string) { ref.current?.focus(); document.execCommand(cmd, false, val ?? '') }
+  function exec(cmd: string, val?: string) { ref.current?.focus(); document.execCommand(cmd, false, val ?? ''); requestAnimationFrame(() => updateActiveFormats()) }
 
   function updateActiveFormats() {
     try {
@@ -141,61 +141,71 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
 
   // ── Image toolbar ────────────────────────────────────────────────────
   function showImageToolbar(img: HTMLImageElement) {
-    // Remove any existing toolbar
     document.getElementById('cb-img-toolbar')?.remove()
     const toolbar = document.createElement('div')
     toolbar.id = 'cb-img-toolbar'
-    toolbar.style.cssText = 'position:absolute;background:#1f2937;border-radius:8px;padding:4px 6px;display:flex;gap:4px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.3);align-items:center'
+    // Position fixed relative to viewport — outside contenteditable so clicks work
     const rect = img.getBoundingClientRect()
-    const edRect = ref.current!.getBoundingClientRect()
-    toolbar.style.top = (rect.top - edRect.top + ref.current!.scrollTop - 40) + 'px'
-    toolbar.style.left = (rect.left - edRect.left) + 'px'
-    ref.current!.style.position = 'relative'
+    toolbar.style.cssText = `position:fixed;top:${rect.top - 44 + window.scrollY}px;left:${rect.left}px;background:#1f2937;border-radius:8px;padding:4px 6px;display:flex;gap:3px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.4);align-items:center`
 
-    const btnStyle = 'padding:3px 7px;font-size:11px;background:transparent;color:#e5e7eb;border:1px solid #374151;border-radius:4px;cursor:pointer;font-family:inherit'
+    const btnStyle = 'padding:3px 7px;font-size:11px;background:transparent;color:#e5e7eb;border:1px solid #374151;border-radius:4px;cursor:pointer;font-family:inherit;line-height:1.4'
+
+    const addBtn = (label: string, action: () => void) => {
+      const btn = document.createElement('button')
+      btn.textContent = label
+      btn.style.cssText = btnStyle
+      // Use mousedown+preventDefault so click doesn't blur the editor
+      btn.addEventListener('mousedown', (ev) => {
+        ev.preventDefault()
+        ev.stopPropagation()
+        action()
+        // Re-position after size change
+        requestAnimationFrame(() => {
+          const r2 = img.getBoundingClientRect()
+          toolbar.style.top = `${r2.top - 44 + window.scrollY}px`
+          toolbar.style.left = `${r2.left}px`
+        })
+      })
+      toolbar.appendChild(btn)
+    }
 
     // Size buttons
-    const sizes = [['25%','25%'],['50%','50%'],['75%','75%'],['100%','100%'],['200px','200px'],['400px','400px']]
-    sizes.forEach(([label, val]) => {
-      const btn = document.createElement('button')
-      btn.textContent = label; btn.style.cssText = btnStyle
-      btn.onclick = () => { img.style.width = val; img.style.maxWidth = '100%'; onChange(ref.current?.innerHTML ?? '') }
-      toolbar.appendChild(btn)
+    ;[['25%','25%'],['50%','50%'],['75%','75%'],['100%','100%'],['300px','300px'],['500px','500px']].forEach(([label, val]) => {
+      addBtn(label, () => { img.style.width = val; img.style.maxWidth = '100%'; onChange(ref.current?.innerHTML ?? '') })
     })
 
     // Divider
-    const div = document.createElement('div'); div.style.cssText = 'width:1px;background:#374151;height:18px;margin:0 2px'; toolbar.appendChild(div)
+    const sep = document.createElement('div'); sep.style.cssText = 'width:1px;background:#374151;height:18px;margin:0 2px'; toolbar.appendChild(sep)
 
     // Align buttons
-    const aligns: [string, string][] = [['⬅ L','left'],['— C','center'],['➡ R','right']]
-    aligns.forEach(([label, align]) => {
-      const btn = document.createElement('button')
-      btn.textContent = label; btn.style.cssText = btnStyle
-      btn.onclick = () => {
+    ;[['◀ L','left'],['● C','center'],['▶ R','right']].forEach(([label, align]) => {
+      addBtn(label, () => {
         img.style.display = 'block'
-        img.style.marginLeft = align === 'left' ? '0' : align === 'center' ? 'auto' : 'auto'
-        img.style.marginRight = align === 'right' ? '0' : align === 'center' ? 'auto' : '0'
-        if (align === 'right') { img.style.float = 'right'; img.style.marginLeft = '12px' }
-        else if (align === 'left') { img.style.float = 'left'; img.style.marginRight = '12px' }
-        else { img.style.float = 'none'; img.style.margin = '8px auto' }
+        if (align === 'left')   { img.style.float = 'left';  img.style.margin = '4px 12px 4px 0' }
+        if (align === 'right')  { img.style.float = 'right'; img.style.margin = '4px 0 4px 12px' }
+        if (align === 'center') { img.style.float = 'none';  img.style.margin = '8px auto' }
         onChange(ref.current?.innerHTML ?? '')
-      }
-      toolbar.appendChild(btn)
+      })
     })
 
-    ref.current!.appendChild(toolbar)
-    // Hide when clicking elsewhere
-    setTimeout(() => {
-      const hide = (ev: MouseEvent) => {
-        if (!(ev.target as HTMLElement).closest('#cb-img-toolbar') && ev.target !== img) {
-          toolbar.remove(); document.removeEventListener('mousedown', hide)
-        }
+    // Highlight selected image
+    img.style.outline = '2px solid #7aa2f7'
+    document.body.appendChild(toolbar)
+
+    const cleanup = (ev: MouseEvent) => {
+      if (!(ev.target as HTMLElement).closest('#cb-img-toolbar') && ev.target !== img) {
+        toolbar.remove()
+        img.style.outline = ''
+        document.removeEventListener('mousedown', cleanup)
       }
-      document.addEventListener('mousedown', hide)
-    }, 50)
+    }
+    setTimeout(() => document.addEventListener('mousedown', cleanup), 50)
   }
 
-  function hideImageToolbar() { document.getElementById('cb-img-toolbar')?.remove() }
+  function hideImageToolbar() {
+    document.getElementById('cb-img-toolbar')?.remove()
+    ref.current?.querySelectorAll('img').forEach(i => { (i as HTMLElement).style.outline = '' })
+  }
 
   // ── selectionchange ───────────────────────────────────────────────────────
     // Listen to selectionchange for reliable format detection
@@ -204,7 +214,7 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
     document.addEventListener('selectionchange', handler)
     return () => document.removeEventListener('selectionchange', handler)
   }, [])
-  function heading(t: string) { ref.current?.focus(); document.execCommand('formatBlock', false, t) }
+  function heading(t: string) { ref.current?.focus(); document.execCommand('formatBlock', false, t); requestAnimationFrame(() => updateActiveFormats()) }
   function hl(color: string) {
     ref.current?.focus()
     const sel = window.getSelection()?.toString() || 'text'
@@ -309,6 +319,29 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
               const r = document.createRange(); r.setStart(p,0); r.collapse(true)
               const sel = window.getSelection(); sel?.removeAllRanges(); sel?.addRange(r)
             }
+          }
+          // On plain Enter: strip highlight background from the new paragraph after browser inserts it
+          if (e.key === 'Enter' && !e.shiftKey) {
+            requestAnimationFrame(() => {
+              const sel = window.getSelection()
+              if (!sel || !sel.rangeCount) return
+              let node: Node | null = sel.getRangeAt(0).startContainer
+              while (node && node !== ref.current) {
+                const el = node as HTMLElement
+                if (el.style && el.style.background && el.tagName !== 'SPAN') {
+                  el.style.background = ''
+                }
+                // If cursor landed inside a highlight span, move out of it
+                if (el.tagName === 'SPAN' && el.style.background) {
+                  const after = document.createRange()
+                  after.setStartAfter(el); after.collapse(true)
+                  sel.removeAllRanges(); sel.addRange(after)
+                  break
+                }
+                node = node.parentNode
+              }
+              onChange(ref.current?.innerHTML ?? '')
+            })
           }
         }}
         style={{ minHeight: 80, padding: '10px 14px', border: `1px solid #e5e7eb`, borderRadius: '0 0 8px 8px', background: '#fff', fontSize: 14, lineHeight: 1.75, outline: 'none', color: '#111', fontFamily: 'system-ui,sans-serif' }}
@@ -511,8 +544,26 @@ function MediaModal({ type, lessons, moduleId: modId, onInsert, onClose }: {
   const [imgWidth, setImgWidth] = useState('100%')
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
-  const [tab, setTab] = useState<'url' | 'upload'>('url')
+  const [tab, setTab] = useState<'url' | 'upload' | 'storage'>('url')
+  const [storageFiles, setStorageFiles] = useState<{name:string,url:string}[]>([])
+  const [storageLoading, setStorageLoading] = useState(false)
+  const [storageErr, setStorageErr] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const supabaseClient = createClient()
+
+  async function loadStorageFiles() {
+    setStorageLoading(true); setStorageErr('')
+    try {
+      const { data, error } = await supabaseClient.storage.from('lesson-assets').list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } })
+      if (error) { setStorageErr(error.message); setStorageLoading(false); return }
+      const files = (data ?? []).filter(f => f.name !== '.emptyFolderPlaceholder').map(f => {
+        const { data: urlData } = supabaseClient.storage.from('lesson-assets').getPublicUrl(f.name)
+        return { name: f.name, url: urlData.publicUrl }
+      })
+      setStorageFiles(files)
+    } catch(e: any) { setStorageErr(e.message) }
+    setStorageLoading(false)
+  }
 
   async function upload(f: File) {
     setUploading(true); setUploadErr('')
@@ -544,25 +595,60 @@ function MediaModal({ type, lessons, moduleId: modId, onInsert, onClose }: {
   const inp: React.CSSProperties = { width:'100%', padding:'8px 10px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:10 }
   const lbl: React.CSSProperties = { fontSize:11, fontWeight:600, color:'#555', display:'block', marginBottom:3 }
 
-  // Show upload tab for image, file, and video
   const showUploadTab = type === 'image' || type === 'file' || type === 'video'
+  const showStorageTab = type === 'image' || type === 'video' || type === 'file'
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:'#fff', borderRadius:14, padding:24, width:'100%', maxWidth:460, maxHeight:'90vh', overflowY:'auto' }}>
+      <div style={{ background:'#fff', borderRadius:14, padding:24, width:'100%', maxWidth:500, maxHeight:'90vh', overflowY:'auto' }}>
         <h2 style={{ fontSize:16, fontWeight:600, marginBottom:14 }}>{titles[type]}</h2>
 
         {showUploadTab && (
-          <div style={{ display:'flex', borderBottom:'1px solid #e5e7eb', marginBottom:14 }}>
-            {(['url','upload'] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ padding:'6px 14px', fontSize:12, fontWeight:500, background:'none', border:'none', borderBottom:tab===t?'2px solid #185FA5':'2px solid transparent', color:tab===t?'#185FA5':'#888', cursor:'pointer' }}>
-                {t === 'url' ? 'External URL' : 'Upload from computer / Supabase'}
+          <div style={{ display:'flex', borderBottom:'1px solid #e5e7eb', marginBottom:14, gap:0 }}>
+            {[
+              ['url', 'External URL'],
+              ['upload', 'Upload file'],
+              ...(showStorageTab ? [['storage', '☁ Supabase']] : []),
+            ].map(([t, label]) => (
+              <button key={t} onClick={() => { setTab(t as any); if (t === 'storage' && !storageFiles.length) loadStorageFiles() }}
+                style={{ padding:'6px 12px', fontSize:12, fontWeight:500, background:'none', border:'none', borderBottom:tab===t?'2px solid #185FA5':'2px solid transparent', color:tab===t?'#185FA5':'#888', cursor:'pointer', whiteSpace:'nowrap' }}>
+                {label}
               </button>
             ))}
           </div>
         )}
 
-        {tab === 'upload' && showUploadTab ? (
+        {tab === 'storage' ? (
+          <div>
+            {storageLoading && <div style={{ textAlign:'center', padding:20, color:'#888', fontSize:13 }}>Loading files…</div>}
+            {storageErr && <div style={{ fontSize:12, color:'#791F1F', marginBottom:8, padding:'8px 10px', background:'#FCEBEB', borderRadius:8 }}>
+              {storageErr}<br/><span style={{ fontSize:11 }}>Make sure the lesson-assets bucket exists in Supabase Storage.</span>
+            </div>}
+            {!storageLoading && !storageErr && storageFiles.length === 0 && (
+              <div style={{ textAlign:'center', padding:20, color:'#aaa', fontSize:13 }}>No files in storage yet. Upload files first.</div>
+            )}
+            {!storageLoading && storageFiles.length > 0 && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, maxHeight:280, overflowY:'auto', marginBottom:12 }}>
+                {storageFiles.map(f => {
+                  const isImg = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(f.name)
+                  const isVid = /\.(mp4|webm|mov)$/i.test(f.name)
+                  const selected = url === f.url
+                  return (
+                    <div key={f.name} onClick={() => { setUrl(f.url); setLabel(f.name.replace(/\.[^.]+$/, '')) }}
+                      style={{ border: selected ? '2px solid #185FA5' : '1px solid #e5e7eb', borderRadius:8, overflow:'hidden', cursor:'pointer', background: selected ? '#E6F1FB' : '#fafafa', position:'relative' }}>
+                      {isImg && <img src={f.url} alt={f.name} style={{ width:'100%', height:70, objectFit:'cover', display:'block' }} />}
+                      {isVid && <div style={{ height:70, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>🎬</div>}
+                      {!isImg && !isVid && <div style={{ height:70, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>📎</div>}
+                      <div style={{ padding:'4px 6px', fontSize:10, color:'#555', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</div>
+                      {selected && <div style={{ position:'absolute', top:4, right:4, background:'#185FA5', color:'#fff', borderRadius:'50%', width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10 }}>✓</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <button onClick={loadStorageFiles} style={{ fontSize:11, color:'#185FA5', background:'none', border:'none', cursor:'pointer', marginBottom:8 }}>↺ Refresh</button>
+          </div>
+        ) : tab === 'upload' && showUploadTab ? (
           <div>
             <div onClick={() => fileRef.current?.click()}
               style={{ border:'2px dashed #e5e7eb', borderRadius:10, padding:24, textAlign:'center', cursor:'pointer', color:url?'#27500A':'#888', fontSize:13, background:url?'#f0fff4':'#fafafa', marginBottom:10 }}>
