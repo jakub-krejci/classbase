@@ -609,7 +609,7 @@ function MediaModal({ type, lessons, moduleId: modId, onInsert, onClose }: {
             <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
               {lessons.map((l: any) => (
                 <button key={l.id}
-                  onClick={() => { setUrl(\`/student/modules/\${modId}/lessons/\${l.id}\`); setLabel(l.title) }}
+                  onClick={() => { setUrl(`/student/modules/${modId}/lessons/${l.id}`); setLabel(l.title) }}
                   style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: url.includes(l.id) ? '#E6F1FB' : 'transparent', border: 'none', borderBottom: '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', color: '#333' }}>
                   📄 {l.title}
                 </button>
