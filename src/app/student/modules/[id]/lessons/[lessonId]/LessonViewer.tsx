@@ -1,6 +1,6 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { BackLink } from '@/components/ui'
 import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
@@ -295,7 +295,7 @@ function MathViewer({ latex, mode }: { latex: string; mode?: 'display' | 'inline
 }
 
 // ── HTML content block with quiz activation ───────────────────────────────────
-function HtmlBlock({ html }: { html: string }) {
+const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -364,7 +364,7 @@ function HtmlBlock({ html }: { html: string }) {
       style={{ fontSize:14, lineHeight:1.75, color:'inherit' }}
       dangerouslySetInnerHTML={{ __html: html }} />
   )
-}
+})
 
 // ── Main viewer ───────────────────────────────────────────────────────────────
 export default function LessonViewer({ lesson, moduleId, studentId, completionStatus, allLessons, completedIds, authorName }: {
@@ -424,6 +424,15 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }, [lesson.id])
 
   // ── Scroll tracking ────────────────────────────────────────────────────────
+  // Use a ref to track pct without causing re-renders on every scroll event.
+  // Only call setScrollPct when the integer value changes, and debounce DB save.
+  const scrollPctRef = useRef(scrollPct)
+  const scrollSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    scrollPctRef.current = scrollPct
+  }, [scrollPct])
+
   useEffect(() => {
     function onScroll() {
       const el = contentRef.current
@@ -431,19 +440,23 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
       const rect = el.getBoundingClientRect()
       const totalHeight = el.scrollHeight
       const viewportBottom = window.innerHeight
-      // How far the bottom of the element has travelled past the viewport bottom
       const scrolled = Math.max(0, viewportBottom - rect.top)
       const pct = Math.min(100, Math.round((scrolled / totalHeight) * 100))
-      if (pct > scrollPct) {
-        setScrollPct(pct)
-        // Debounce save: only write after 2s of no new scroll
-        if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current)
-        notesSaveTimer.current = setTimeout(() => saveScrollPct(pct), 2000)
+      if (pct > scrollPctRef.current) {
+        scrollPctRef.current = pct
+        // Batch visual update — only trigger React re-render every 5% to avoid
+        // destroying quiz DOM on every scroll tick
+        if (pct % 5 === 0 || pct === 100) {
+          setScrollPct(pct)
+        }
+        // Debounce DB save separately
+        if (scrollSaveTimer.current) clearTimeout(scrollSaveTimer.current)
+        scrollSaveTimer.current = setTimeout(() => saveScrollPct(pct), 2000)
       }
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [scrollPct, lesson.id])
+  }, [lesson.id])
 
   async function saveScrollPct(pct: number) {
     await supabase.from('lesson_progress').upsert({
@@ -512,7 +525,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
       `}</style>
 
       {/* ── Scroll progress bar (fixed top) ─────────────────────────────── */}
-      <div style={{ position:'fixed', top:52, left:0, right:0, height:3, background:'#f0f0f0', zIndex:49 }}>
+      <div style={{ position:'fixed', top:52, left:0, right:0, height:3, background:'#f0f0f0', zIndex:49, pointerEvents:'none' }}>
         <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#27500A' : '#185FA5', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
       </div>
 
