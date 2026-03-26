@@ -383,9 +383,9 @@ function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:(
       <h2 style={{fontSize:16,fontWeight:600,marginBottom:14}}>Insert quiz question</h2>
       <input value={q} onChange={e=>setQ(e.target.value)} style={i} placeholder="Question text" />
       {opts.map((o,idx)=>(<div key={idx} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
-        <div onClick={()=>setCorrect(idx)} style={{width:16,height:16,borderRadius:'50%',border:'2px solid','#e5e7eb':correct===idx?'#185FA5':'#ccc',background:correct===idx?'#185FA5':'#fff',cursor:'pointer',flexShrink:0}}/>
+        <div onClick={()=>setCorrect(idx)} style={{width:16,height:16,borderRadius:'50%',border:'2px solid',borderColor:correct===idx?'#185FA5':'#ccc',background:correct===idx?'#185FA5':'#fff',cursor:'pointer',flexShrink:0}}/>
         <input value={o} onChange={e=>setOpts(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0}} placeholder={`Option ${idx+1}`}/>
-        <input value={expl[idx]} onChange={e=>setExpl(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0,background:'#fff8f9','#e5e7eb':'#fce4ec'}} placeholder="Explanation if wrong"/>
+        <input value={expl[idx]} onChange={e=>setExpl(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0,background:'#fff8f9',borderColor:'#fce4ec'}} placeholder="Explanation if wrong"/>
       </div>))}
       <button onClick={()=>setOpts(p=>[...p,''])} style={{fontSize:12,color:'#185FA5',background:'none',border:'none',cursor:'pointer',marginBottom:14}}>+ Add option</button>
       <div style={{display:'flex',gap:8}}>
