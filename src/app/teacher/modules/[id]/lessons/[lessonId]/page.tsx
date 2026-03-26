@@ -95,6 +95,7 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   const ref = useRef<HTMLDivElement>(null)
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
   const [showTableModal, setShowTableModal] = useState(false)
+  const savedColorRange = useRef<Range | null>(null)
 
   // Sync content into div on first render / when block changes externally
   useEffect(() => {
@@ -340,10 +341,25 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
               <button key={clr} style={{...TB,background:clr,width:20,height:20,padding:0,borderRadius:3,border:'1px solid rgba(0,0,0,.15)'}} title={`Text color ${clr}`}
                 onMouseDown={e=>{e.preventDefault();exec('foreColor',clr)}} />
             ))}
-            <label style={{...TB,border:'1px solid #e5e7eb',padding:'2px 5px',cursor:'pointer',fontSize:11,display:'inline-flex',alignItems:'center',gap:3}} title="Custom text color">
+            <label style={{...TB,border:'1px solid #e5e7eb',padding:'2px 5px',cursor:'pointer',fontSize:11,display:'inline-flex',alignItems:'center',gap:3}} title="Custom text color"
+              onMouseDown={e=>{
+                // Save selection before color picker steals focus
+                const sel = window.getSelection()
+                if (sel && sel.rangeCount) savedColorRange.current = sel.getRangeAt(0).cloneRange()
+              }}>
               <input type="color" defaultValue="#111111"
                 style={{width:16,height:16,padding:0,border:'none',background:'none',cursor:'pointer'}}
-                onInput={e=>exec('foreColor',(e.target as HTMLInputElement).value)} />
+                onChange={e=>{
+                  // Restore selection then apply color
+                  const sel = window.getSelection()
+                  if (savedColorRange.current) {
+                    sel?.removeAllRanges()
+                    sel?.addRange(savedColorRange.current)
+                  }
+                  ref.current?.focus()
+                  document.execCommand('foreColor', false, (e.target as HTMLInputElement).value)
+                  onChange(ref.current?.innerHTML ?? '')
+                }} />
               <span>RGB</span>
             </label>
             <button style={{...TB,fontSize:11,border:'1px solid #e5e7eb',color:'#555'}} title="Remove text color"
@@ -440,6 +456,7 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
 }) {
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
   const [showTableModal, setShowTableModal] = useState(false)
+  const savedColorRange = useRef<Range | null>(null)
   const [code, setCode] = useState(block.content)
   const taRef = useRef<HTMLTextAreaElement>(null)
   function autoResize() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
@@ -588,28 +605,67 @@ function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) =>
 
 // ─── Quiz modal ───────────────────────────────────────────────────────────────
 function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:()=>void }) {
-  const [q,setQ]=useState(''); const [opts,setOpts]=useState(['','','','']); const [correct,setCorrect]=useState(0); const [expl,setExpl]=useState(['','','',''])
-  const i:React.CSSProperties={width:'100%',padding:'7px 9px',border:'1px solid #e5e7eb',borderRadius:7,fontSize:13,fontFamily:'inherit',outline:'none',marginBottom:8}
-  function build(){const o=opts.filter(x=>x.trim());const oE=JSON.stringify(o).replace(/"/g,'&quot;');const eE=JSON.stringify(expl.slice(0,o.length)).replace(/"/g,'&quot;');return`<div class="cb-quiz" data-q="${q.replace(/"/g,'&quot;')}" data-opts="${oE}" data-correct="${correct}" data-expl="${eE}" contenteditable="false" style="background:#f0f7ff;border:1px solid #B5D4F4;border-radius:10px;margin:10px 0;padding:0;overflow:hidden"><div style="padding:9px 14px;background:#E6F1FB;font-size:10px;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em">✓ Quiz — ${q}</div></div>`}
-  return (<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-    <div style={{background:'#fff',borderRadius:14,padding:24,width:'100%',maxWidth:540,maxHeight:'90vh',overflowY:'auto'}}>
-      <h2 style={{fontSize:16,fontWeight:600,marginBottom:14}}>Insert quiz question</h2>
-      <input value={q} onChange={e=>setQ(e.target.value)} style={i} placeholder="Question text" />
-      {opts.map((o,idx)=>(<div key={idx} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
-        <div onClick={()=>setCorrect(idx)} style={{width:16,height:16,borderRadius:'50%',border:'2px solid',borderColor:correct===idx?'#185FA5':'#ccc',background:correct===idx?'#185FA5':'#fff',cursor:'pointer',flexShrink:0}}/>
-        <input value={o} onChange={e=>setOpts(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0}} placeholder={`Option ${idx+1}`}/>
-        <input value={expl[idx]} onChange={e=>setExpl(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0,background:'#fff8f9',borderColor:'#fce4ec'}} placeholder="Explanation if wrong"/>
-      </div>))}
-      <button onClick={()=>setOpts(p=>[...p,''])} style={{fontSize:12,color:'#185FA5',background:'none',border:'none',cursor:'pointer',marginBottom:14}}>+ Add option</button>
-      <div style={{display:'flex',gap:8}}>
-        <button onClick={()=>{if(q.trim()&&opts.filter(x=>x.trim()).length>=2){onInsert(build());onClose()}}} style={{flex:1,padding:'9px',background:'#185FA5',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:500,cursor:'pointer'}}>Insert quiz</button>
-        <button onClick={onClose} style={{padding:'9px 16px',border:'1px solid #e5e7eb',borderRadius:8,fontSize:13,cursor:'pointer'}}>Cancel</button>
+  const [q, setQ] = useState('')
+  const [opts, setOpts] = useState(['', '', '', ''])
+  const [correct, setCorrect] = useState(0)
+  const [expl, setExpl] = useState(['', '', '', ''])
+  const [err, setErr] = useState('')
+  const inp: React.CSSProperties = { width:'100%', padding:'7px 9px', border:'1px solid #e5e7eb', borderRadius:7, fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:8, boxSizing:'border-box' as const }
+
+  function handleInsert() {
+    const filledOpts = opts.filter(x => x.trim())
+    if (!q.trim()) { setErr('Please enter a question.'); return }
+    if (filledOpts.length < 2) { setErr('Please add at least 2 options.'); return }
+    setErr('')
+    const oE = JSON.stringify(filledOpts).replace(/"/g, '&quot;')
+    const eE = JSON.stringify(expl.filter((_, i) => opts[i]?.trim()).slice(0, filledOpts.length)).replace(/"/g, '&quot;')
+    const qE = q.replace(/"/g, '&quot;')
+    const html = '<div class="cb-quiz" data-q="' + qE + '" data-opts="' + oE + '" data-correct="' + correct + '" data-expl="' + eE + '" contenteditable="false" style="background:#f0f7ff;border:1px solid #B5D4F4;border-radius:10px;margin:10px 0;padding:0;overflow:hidden"><div style="padding:9px 14px;background:#E6F1FB;font-size:10px;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em">✓ Quiz — ' + q + '</div></div>'
+    onInsert(html)
+    onClose()
+  }
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{background:'#fff',borderRadius:14,padding:24,width:'100%',maxWidth:560,maxHeight:'90vh',overflowY:'auto'}}>
+        <h2 style={{fontSize:16,fontWeight:600,marginBottom:14}}>Insert quiz question</h2>
+        <label style={{fontSize:11,fontWeight:600,color:'#555',display:'block',marginBottom:3}}>Question</label>
+        <input value={q} onChange={e=>{setQ(e.target.value);setErr('')}} style={inp} placeholder="e.g. What is Newton's first law?" />
+        <label style={{fontSize:11,fontWeight:600,color:'#555',display:'block',margin:'10px 0 4px'}}>
+          Options <span style={{fontWeight:400,color:'#888'}}>(click circle to mark correct answer)</span>
+        </label>
+        {opts.map((o, ii) => (
+          <div key={ii} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            <div onClick={()=>setCorrect(ii)}
+              style={{width:18,height:18,borderRadius:'50%',border:'2px solid',flexShrink:0,cursor:'pointer',
+                borderColor:correct===ii?'#185FA5':'#ccc',background:correct===ii?'#185FA5':'#fff'}} />
+            <input value={o} onChange={e=>setOpts(p=>p.map((x,j)=>j===ii?e.target.value:x))}
+              style={{...inp,flex:2,marginBottom:0,borderColor:correct===ii?'#185FA5':'#e5e7eb'}}
+              placeholder={'Option ' + (ii+1)} />
+            <input value={expl[ii]} onChange={e=>setExpl(p=>p.map((x,j)=>j===ii?e.target.value:x))}
+              style={{...inp,flex:2,marginBottom:0,background:'#fffbf0',borderColor:'#ffe4a0',fontSize:12}}
+              placeholder="Explanation if wrong (optional)" />
+          </div>
+        ))}
+        <button onClick={()=>{setOpts(p=>[...p,'']);setExpl(p=>[...p,''])}}
+          style={{fontSize:12,color:'#185FA5',background:'none',border:'none',cursor:'pointer',marginBottom:8,padding:'2px 0'}}>
+          + Add option
+        </button>
+        {err && <div style={{fontSize:12,color:'#791F1F',background:'#FCEBEB',borderRadius:7,padding:'7px 10px',marginBottom:10}}>{err}</div>}
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <button onClick={handleInsert}
+            style={{flex:1,padding:'10px',background:'#185FA5',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+            Insert quiz
+          </button>
+          <button onClick={onClose}
+            style={{padding:'10px 18px',border:'1px solid #e5e7eb',borderRadius:8,fontSize:13,cursor:'pointer',background:'#fff'}}>
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
-  </div>)
+  )
 }
-
-// ─── Media / Link modal ────────────────────────────────────────────────────────
 function MediaModal({ type, lessons, moduleId: modId, onInsert, onClose }: {
   type: 'image' | 'video' | 'file' | 'link'
   lessons?: any[]
@@ -820,6 +876,7 @@ export default function LessonEditorPage() {
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null)
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
   const [showTableModal, setShowTableModal] = useState(false)
+  const savedColorRange = useRef<Range | null>(null)
 
   useEffect(() => {
     async function load() {
