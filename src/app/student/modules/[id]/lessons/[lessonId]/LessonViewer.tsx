@@ -1,6 +1,7 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useRef } from 'react'
+import { useIsMobile } from '@/lib/useIsMobile'
 import { createClient } from '@/lib/supabase/client'
 import { BackLink } from '@/components/ui'
 import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
@@ -389,9 +390,11 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   allLessons: any[]; completedIds: string[]; authorName: string
 }) {
   const supabase = createClient()
+  const isMobile = useIsMobile()
   const [status, setStatus] = useState<'completed'|'bookmark'|'none'>(completionStatus)
   const [saving, setSaving] = useState(false)
   const [blocks, setBlocks] = useState<ViewBlock[]>([])
+  const [navOpen, setNavOpen] = useState(false)
 
   // Scroll progress
   const [scrollPct, setScrollPct] = useState(0)
@@ -571,7 +574,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }
 
   return (
-    <div style={{ display:'flex', gap:22, alignItems:'flex-start' }}>
+    <div style={{ display: isMobile ? 'block' : 'flex', gap: 22, alignItems: 'flex-start' }}>
       <style>{PYTHON_CSS}{`
         .lesson-content h1{font-size:22px;font-weight:700;margin:14px 0 6px}
         .lesson-content h2{font-size:18px;font-weight:700;margin:12px 0 5px}
@@ -596,48 +599,78 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .cb-quiz-details summary::-webkit-details-marker{display:none}
       `}</style>
 
-      {/* ── Scroll progress bar (fixed top) ─────────────────────────────── */}
+      {/* Scroll progress bar */}
       <div style={{ position:'fixed', top:52, left:0, right:0, height:3, background:'#f0f0f0', zIndex:49, pointerEvents:'none' }}>
         <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#27500A' : '#185FA5', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
       </div>
 
-      {/* ── Left nav ─────────────────────────────────────────────────────── */}
-      <div style={{ width:210, flexShrink:0, position:'sticky', top:80 }}>
-        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
-          <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Lessons</div>
-          {allLessons.map((l:any, i:number) => {
-            const isCurrent = l.id === lesson.id
-            const isDone = completedSet.has(l.id)
-            return (
-              <a key={l.id} href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
-                <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  {isDone ? '✓' : i+1}
-                </div>
-                <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
-              </a>
-            )
-          })}
+      {/* Left nav — hidden on mobile until toggled */}
+      {!isMobile && (
+        <div style={{ width:210, flexShrink:0, position:'sticky', top:80 }}>
+          <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Lessons</div>
+            {allLessons.map((l:any, i:number) => {
+              const isCurrent = l.id === lesson.id
+              const isDone = completedSet.has(l.id)
+              return (
+                <a key={l.id} href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
+                  <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    {isDone ? '✓' : i+1}
+                  </div>
+                  <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
+                </a>
+              )
+            })}
+          </div>
         </div>
+      )}
 
-      </div>
-
-      {/* ── Main content ──────────────────────────────────────────────────── */}
-      <div style={{ flex:1, minWidth:0 }}>
+      {/* Main content */}
+      <div style={{ flex:1, minWidth:0, width:'100%' }}>
         <BackLink href={`/student/modules/${moduleId}`} label="Back to module" />
 
-        {/* Title + meta */}
-        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom:4, justifyContent:'space-between' }}>
-          <div style={{ display:'flex', alignItems:'baseline', gap:12, flexWrap:'wrap' }}>
-            <h1 style={{ fontSize:22, fontWeight:700, margin:0 }}>{lesson.title}</h1>
+        {/* Mobile: inline lesson nav */}
+        {isMobile && (
+          <div style={{ marginBottom:12 }}>
+            <button onClick={() => setNavOpen(o => !o)}
+              style={{ width:'100%', padding:'10px 14px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', fontFamily:'inherit', color:'#555' }}>
+              <span>📚 Lesson {currentIndex+1} of {allLessons.length}: <strong style={{ color:'#111' }}>{lesson.title}</strong></span>
+              <span style={{ color:'#888' }}>{navOpen ? '▲' : '▼'}</span>
+            </button>
+            {navOpen && (
+              <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'6px 0', maxHeight:260, overflowY:'auto' }}>
+                {allLessons.map((l:any, i:number) => {
+                  const isCurrent = l.id === lesson.id
+                  const isDone = completedSet.has(l.id)
+                  return (
+                    <a key={l.id} href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                      onClick={() => setNavOpen(false)}
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent' }}>
+                      <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        {isDone ? '✓' : i+1}
+                      </div>
+                      <span style={{ fontSize:13, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
+                    </a>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Title + read time + export */}
+        <div style={{ display:'flex', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap:10, flexWrap:'wrap', marginBottom:4, justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap' }}>
+            <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight:700, margin:0 }}>{lesson.title}</h1>
             {readTime && (
               <span style={{ fontSize:12, color:'#888', background:'#f3f4f6', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' }}>
                 🕐 {readTime}
               </span>
-          )}
+            )}
           </div>
           <button onClick={exportPDF}
-            style={{ padding:'6px 14px', fontSize:12, background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, cursor:'pointer', color:'#555', display:'flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}
+            style={{ padding:'6px 14px', fontSize:12, background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, cursor:'pointer', color:'#555', display:'flex', alignItems:'center', gap:6, whiteSpace:'nowrap', alignSelf: isMobile ? 'stretch' : 'auto', justifyContent:'center' }}
             title="Export lesson as printable PDF">
             ⬇ Export PDF
           </button>
@@ -655,7 +688,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         )}
 
         {/* Lesson content */}
-        <div ref={contentRef} style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'20px 24px', marginBottom:20 }}>
+        <div ref={contentRef} style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding: isMobile ? '16px 14px' : '20px 24px', marginBottom:20 }}>
           {blocks.map((b, i) => (
             <div key={i}>
               {b.type === 'html'   && <HtmlBlock html={b.content} />}
@@ -669,33 +702,35 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         {/* Progress actions */}
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:20 }}>
           <button onClick={() => setProgress(status==='completed'?'none':'completed')} disabled={saving}
-            style={{ padding:'9px 18px', background:status==='completed'?'#EAF3DE':'#185FA5', color:status==='completed'?'#27500A':'#E6F1FB', border:'none', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer' }}>
-            {status==='completed' ? '✓ Completed — click to undo' : 'Mark as complete'}
+            style={{ padding:'9px 18px', background:status==='completed'?'#EAF3DE':'#185FA5', color:status==='completed'?'#27500A':'#E6F1FB', border:'none', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', flex: isMobile ? 1 : 'none' }}>
+            {status==='completed' ? '✓ Completed' : 'Mark as complete'}
           </button>
           <button onClick={() => setProgress(status==='bookmark'?'none':'bookmark')} disabled={saving}
-            style={{ padding:'9px 18px', background:status==='bookmark'?'#FFF3CD':'#f9fafb', color:status==='bookmark'?'#856404':'#555', border:'1px solid', borderColor:status==='bookmark'?'#FFCA2C':'#e5e7eb', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer' }}>
-            {status==='bookmark' ? '🔖 Bookmarked — click to remove' : '🔖 Come back later'}
+            style={{ padding:'9px 18px', background:status==='bookmark'?'#FFF3CD':'#f9fafb', color:status==='bookmark'?'#856404':'#555', border:'1px solid', borderColor:status==='bookmark'?'#FFCA2C':'#e5e7eb', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', flex: isMobile ? 1 : 'none' }}>
+            {status==='bookmark' ? '🔖 Bookmarked' : '🔖 Save for later'}
           </button>
         </div>
 
         {/* Prev / Next */}
-        <div style={{ display:'flex', gap:10, justifyContent:'space-between' }}>
-          <div>{prevLesson && (
-            <a href={`/student/modules/${moduleId}/lessons/${prevLesson.id}`}
-              style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, textDecoration:'none', color:'#333' }}>
-              ← {prevLesson.title}
-            </a>
-          )}</div>
-          <div>{nextLesson && (
-            <a href={`/student/modules/${moduleId}/lessons/${nextLesson.id}`}
-              style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', background:'#185FA5', color:'#E6F1FB', border:'none', borderRadius:8, fontSize:13, textDecoration:'none' }}>
-              {nextLesson.title} →
-            </a>
-          )}</div>
+        <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:10, justifyContent:'space-between' }}>
+          <div style={{ width: isMobile ? '100%' : 'auto' }}>
+            {prevLesson && (
+              <a href={`/student/modules/${moduleId}/lessons/${prevLesson.id}`}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, textDecoration:'none', color:'#333', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-start', boxSizing:'border-box' }}>
+                ← {prevLesson.title}
+              </a>
+            )}
+          </div>
+          <div style={{ width: isMobile ? '100%' : 'auto' }}>
+            {nextLesson && (
+              <a href={`/student/modules/${moduleId}/lessons/${nextLesson.id}`}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:'#185FA5', color:'#E6F1FB', border:'none', borderRadius:8, fontSize:13, textDecoration:'none', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-end', boxSizing:'border-box' }}>
+                {nextLesson.title} →
+              </a>
+            )}
+          </div>
         </div>
       </div>
-
-
     </div>
   )
 }

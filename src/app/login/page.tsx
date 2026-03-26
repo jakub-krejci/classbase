@@ -1,4 +1,5 @@
 'use client'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -7,6 +8,7 @@ import { useRouter } from 'next/navigation'
 export default function LoginPage() {
   const supabase = createClient()
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [role, setRole] = useState<'student' | 'teacher'>('student')
   const [email, setEmail] = useState('')

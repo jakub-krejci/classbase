@@ -2,10 +2,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { Tag, BackLink, Pill } from '@/components/ui'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 export default function StudentModuleView({ module, lessons, assignments, completedIds, bookmarkedIds, submissions, studentId }: {
   module: any; lessons: any[]; assignments: any[]; completedIds: string[]; bookmarkedIds: string[]; submissions: any[]; studentId: string
 }) {
+  const isMobile = useIsMobile()
   const [tab, setTab] = useState<'lessons' | 'assignments'>('lessons')
   const [search, setSearch] = useState('')
   const done = new Set(completedIds)
@@ -35,16 +37,16 @@ export default function StudentModuleView({ module, lessons, assignments, comple
   return (
     <div>
       <BackLink href="/student/modules" label="My modules" />
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'flex-start', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', gap: isMobile ? 6 : 0, marginBottom: 6 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 3 }}>{module.title}</h1>
+          <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: 3 }}>{module.title}</h1>
           <p style={{ fontSize: 13, color: '#888' }}>{module.description}</p>
         </div>
         <Tag tag={module.tag} />
       </div>
 
       {/* Progress bar */}
-      <div style={{ background: '#f3f4f6', borderRadius: 10, padding: '11px 14px', display: 'inline-flex', alignItems: 'center', gap: 14, marginBottom: 18, minWidth: 200 }}>
+      <div style={{ background: '#f3f4f6', borderRadius: 10, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, width: isMobile ? '100%' : 'auto', boxSizing: 'border-box', minWidth: isMobile ? 0 : 200 }}>
         <div>
           <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>Your progress</div>
           <div style={{ fontSize: 20, fontWeight: 600 }}>{pct}%</div>

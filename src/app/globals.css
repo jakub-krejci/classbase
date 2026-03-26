@@ -189,3 +189,136 @@ body { font-family: var(--font-sans); background: #f9fafb; }
   display: none;
   border-top: 1px solid #2a2a4a;
 }
+
+/* ── Mobile responsive layout ───────────────────────────────────────────────── */
+
+/* Utility classes toggled by JS on the <html> element */
+/* We use CSS classes rather than media queries alone so JS can also respond */
+
+@media (max-width: 640px) {
+  /* Nav bar: hide text labels, show icons only */
+  .cb-nav-label { display: none !important; }
+  .cb-nav-bar { padding: 0 12px !important; gap: 4px !important; }
+  .cb-nav-link { padding: 4px 6px !important; font-size: 12px !important; }
+  .cb-nav-signout span { display: none; }
+
+  /* Page wrapper: remove side padding, full width */
+  .cb-page-wrap { padding: 16px 14px !important; }
+
+  /* Lesson viewer: stack layout vertically */
+  .cb-lesson-outer { flex-direction: column !important; gap: 0 !important; }
+  .cb-lesson-nav {
+    width: 100% !important;
+    position: static !important;
+    margin-bottom: 12px;
+    display: none; /* hidden by default on mobile, toggled by button */
+  }
+  .cb-lesson-nav.open { display: block !important; }
+  .cb-lesson-main { min-width: 0 !important; width: 100% !important; }
+
+  /* Code blocks: shrink font */
+  .cb-code-wrap pre, .cb-code-wrap textarea {
+    font-size: 12px !important;
+    padding: 10px 10px 10px 36px !important;
+  }
+  .cb-line-nums { width: 28px !important; font-size: 11px !important; }
+
+  /* Lesson content */
+  .lesson-content h1 { font-size: 18px !important; }
+  .lesson-content h2 { font-size: 16px !important; }
+
+  /* Progress grid in teacher view */
+  .cb-progress-grid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Cards full width */
+  .cb-card-grid { grid-template-columns: 1fr !important; }
+
+  /* Toolbar wraps nicely */
+  .cb-toolbar { gap: 1px !important; padding: 4px 6px !important; }
+
+  /* Title + export button stack */
+  .cb-title-row { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; }
+
+  /* Prev/next nav stacks */
+  .cb-prev-next { flex-direction: column !important; gap: 8px !important; }
+  .cb-prev-next > div { width: 100% !important; }
+  .cb-prev-next a { width: 100% !important; justify-content: center !important; box-sizing: border-box !important; }
+
+  /* Quiz options full width */
+  .cb-quiz-opt { flex-direction: column !important; }
+
+  /* Module list cards */
+  .cb-module-card { padding: 12px !important; }
+
+  /* Student home stats */
+  .cb-stat-grid { grid-template-columns: 1fr 1fr !important; }
+
+  /* Assignments table */
+  .cb-assign-row { flex-wrap: wrap !important; }
+
+  /* Hide lesson sidebar in editor too */
+  .cb-editor-sidebar { display: none !important; }
+}
+
+@media (max-width: 400px) {
+  .cb-page-wrap { padding: 12px 10px !important; }
+  .cb-lesson-content-card { padding: 14px 14px !important; }
+}
+
+/* Mobile nav toggle button - only shown on small screens */
+.cb-mobile-nav-toggle {
+  display: none;
+}
+@media (max-width: 640px) {
+  .cb-mobile-nav-toggle {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-bottom: 10px;
+    width: 100%;
+    justify-content: center;
+    font-family: inherit;
+    color: #555;
+  }
+}
+
+/* ── Mobile: code blocks and editor toolbar ──────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Toolbar scrolls horizontally on narrow screens */
+  .cb-toolbar {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .cb-tb-row {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Code editors: slightly smaller but still usable */
+  .cb-code-wrap textarea,
+  .cb-code-wrap pre {
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Try-it output stays readable */
+  .tryit-output { font-size: 12px !important; }
+
+  /* Login/signup form */
+  .cb-auth-card { padding: 24px 18px !important; margin: 20px 14px !important; }
+
+  /* Modals */
+  .cb-modal-inner { margin: 12px !important; max-height: 90vh !important; overflow-y: auto !important; }
+
+  /* Tables in lesson content */
+  .lesson-content table { font-size: 13px !important; }
+  .lesson-content td, .lesson-content th { padding: 6px 8px !important; }
+}

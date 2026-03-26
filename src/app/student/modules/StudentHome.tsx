@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
 import { Tag, PageHeader, EmptyState } from '@/components/ui'
+import { useIsMobile } from '@/lib/useIsMobile'
 
 export default function StudentHome({ profile, enrollments, progressMap, messages }: {
   profile: any
@@ -9,6 +10,7 @@ export default function StudentHome({ profile, enrollments, progressMap, message
   progressMap: Record<string, { done: number; total: number }>
   messages: any[]
 }) {
+  const isMobile = useIsMobile()
   const [showEnroll, setShowEnroll] = useState(false)
   const [step, setStep] = useState<'code' | 'password'>('code')
   const [code, setCode] = useState('')

@@ -1,6 +1,7 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
+import { useIsMobile } from '@/lib/useIsMobile'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Tag, Btn, BackLink, Pill } from '@/components/ui'
@@ -8,6 +9,7 @@ import { Tag, Btn, BackLink, Pill } from '@/components/ui'
 export default function ModuleDetail({ module, lessons, assignments, enrollments, allProgress }: {
   module: any; lessons: any[]; assignments: any[]; enrollments: any[]; allProgress?: any[]
 }) {
+  const isMobile = useIsMobile()
   const [tab, setTab] = useState<'lessons' | 'assignments' | 'students'>('lessons')
   const [lessonList, setLessonList] = useState(lessons)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -79,7 +81,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '0.5px solid #e5e7eb', marginBottom: 16 }}>
+      <div style={{ display: 'flex', borderBottom: '0.5px solid #e5e7eb', marginBottom: 16, overflowX: isMobile ? 'auto' : 'visible' }}>
         {(['lessons', 'assignments', 'students'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={tabStyle(t)}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -141,7 +143,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
         <div>
           {enrollments.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No students enrolled yet.</p>}
           {enrollments.length > 0 && (
-            <div style={{ overflowX: 'auto' }}>
+            <div className='cb-progress-grid' style={{ overflowX: 'auto' }}>
               {/* Header row */}
               <div style={{ display: 'grid', gridTemplateColumns: '200px repeat(' + lessons.length + ', 1fr)', gap: 0, marginBottom: 4, minWidth: 400 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', padding: '4px 8px' }}>Student</div>
