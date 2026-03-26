@@ -377,21 +377,110 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   const [saving, setSaving] = useState(false)
   const [blocks, setBlocks] = useState<ViewBlock[]>([])
 
+  // Scroll progress
+  const [scrollPct, setScrollPct] = useState(0)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // Notes
+  const [notes, setNotes] = useState('')
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [notesSaving, setNotesSaving] = useState(false)
+  const notesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const currentIndex = allLessons.findIndex(l => l.id === lesson.id)
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null
   const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
   const completedSet = new Set(completedIds)
 
+  // ── Estimated read time ────────────────────────────────────────────────────
+  function calcReadTime(html: string): string {
+    const tmp = document.createElement('div')
+    tmp.innerHTML = html
+    const text = tmp.textContent ?? ''
+    const words = text.trim().split(/\s+/).filter(Boolean).length
+    const codeBlocks = (html.match(/class="cb-code"|class="cb-tryit"/g) ?? []).length
+    // ~200 wpm reading + 30s per code block
+    const minutes = Math.ceil(words / 200 + codeBlocks * 0.5)
+    return minutes <= 1 ? '< 1 min read' : `~${minutes} min read`
+  }
+  const readTime = blocks.length > 0 ? calcReadTime(lesson.content_html ?? '') : ''
+
+  // ── Load blocks + existing progress ───────────────────────────────────────
   useEffect(() => {
     setBlocks(parseBlocks(lesson.content_html ?? ''))
+
+    // Load existing scroll progress and notes
+    supabase.from('lesson_progress')
+      .select('scroll_pct, notes')
+      .eq('student_id', studentId)
+      .eq('lesson_id', lesson.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setScrollPct((data as any).scroll_pct ?? 0)
+          setNotes((data as any).notes ?? '')
+        }
+      })
   }, [lesson.id])
 
+  // ── Scroll tracking ────────────────────────────────────────────────────────
+  useEffect(() => {
+    function onScroll() {
+      const el = contentRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const totalHeight = el.scrollHeight
+      const viewportBottom = window.innerHeight
+      // How far the bottom of the element has travelled past the viewport bottom
+      const scrolled = Math.max(0, viewportBottom - rect.top)
+      const pct = Math.min(100, Math.round((scrolled / totalHeight) * 100))
+      if (pct > scrollPct) {
+        setScrollPct(pct)
+        // Debounce save: only write after 2s of no new scroll
+        if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current)
+        notesSaveTimer.current = setTimeout(() => saveScrollPct(pct), 2000)
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [scrollPct, lesson.id])
+
+  async function saveScrollPct(pct: number) {
+    await supabase.from('lesson_progress').upsert({
+      student_id: studentId, lesson_id: lesson.id,
+      status: status === 'none' ? 'completed' : status,
+      scroll_pct: pct,
+      notes,
+    } as any)
+  }
+
+  // ── Notes auto-save (debounced 3s) ─────────────────────────────────────────
+  function handleNotesChange(val: string) {
+    setNotes(val)
+    setNotesSaving(true)
+    if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current)
+    notesSaveTimer.current = setTimeout(async () => {
+      await supabase.from('lesson_progress').upsert({
+        student_id: studentId, lesson_id: lesson.id,
+        status: status === 'none' ? 'completed' : status,
+        scroll_pct: scrollPct,
+        notes: val,
+      } as any)
+      setNotesSaving(false)
+    }, 3000)
+  }
+
+  // ── Status toggle ──────────────────────────────────────────────────────────
   async function setProgress(newStatus: 'completed'|'bookmark'|'none') {
     setSaving(true)
     if (newStatus === 'none') {
-      await supabase.from('lesson_progress').delete().eq('student_id', studentId).eq('lesson_id', lesson.id)
+      await supabase.from('lesson_progress').delete()
+        .eq('student_id', studentId).eq('lesson_id', lesson.id)
     } else {
-      await supabase.from('lesson_progress').upsert({ student_id: studentId, lesson_id: lesson.id, status: newStatus } as any)
+      await supabase.from('lesson_progress').upsert({
+        student_id: studentId, lesson_id: lesson.id,
+        status: newStatus, scroll_pct: scrollPct, notes,
+      } as any)
     }
     setStatus(newStatus); setSaving(false)
   }
@@ -422,7 +511,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .cb-quiz-details summary::-webkit-details-marker{display:none}
       `}</style>
 
-      {/* Left nav */}
+      {/* ── Scroll progress bar (fixed top) ─────────────────────────────── */}
+      <div style={{ position:'fixed', top:52, left:0, right:0, height:3, background:'#f0f0f0', zIndex:49 }}>
+        <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#27500A' : '#185FA5', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
+      </div>
+
+      {/* ── Left nav ─────────────────────────────────────────────────────── */}
       <div style={{ width:210, flexShrink:0, position:'sticky', top:80 }}>
         <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
           <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Lessons</div>
@@ -433,28 +527,55 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
               <a key={l.id} href={`/student/modules/${moduleId}/lessons/${l.id}`}
                 style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
                 <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  {isDone?'✓':i+1}
+                  {isDone ? '✓' : i+1}
                 </div>
                 <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
               </a>
             )
           })}
         </div>
+
+        {/* Notes toggle button */}
+        <button onClick={() => setNotesOpen(o => !o)}
+          style={{ marginTop:8, width:'100%', padding:'8px', background: notesOpen ? '#185FA5' : '#fff', color: notesOpen ? '#E6F1FB' : '#555', border:'1px solid #e5e7eb', borderRadius:8, fontSize:12, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+          📝 {notesOpen ? 'Close notes' : 'My notes'}
+          {notes.trim() && !notesOpen && <span style={{ width:7, height:7, borderRadius:'50%', background:'#185FA5', flexShrink:0 }} />}
+        </button>
       </div>
 
-      {/* Main content */}
+      {/* ── Main content ──────────────────────────────────────────────────── */}
       <div style={{ flex:1, minWidth:0 }}>
         <BackLink href={`/student/modules/${moduleId}`} label="Back to module" />
-        <h1 style={{ fontSize:22, fontWeight:700, marginBottom:4 }}>{lesson.title}</h1>
-        {authorName && <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Author: {authorName}</div>}
 
-        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'20px 24px', marginBottom:20 }}>
+        {/* Title + meta */}
+        <div style={{ display:'flex', alignItems:'baseline', gap:12, flexWrap:'wrap', marginBottom:4 }}>
+          <h1 style={{ fontSize:22, fontWeight:700, margin:0 }}>{lesson.title}</h1>
+          {readTime && (
+            <span style={{ fontSize:12, color:'#888', background:'#f3f4f6', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' }}>
+              🕐 {readTime}
+            </span>
+          )}
+        </div>
+        {authorName && <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>By {authorName}</div>}
+
+        {/* Scroll progress label */}
+        {scrollPct > 0 && scrollPct < 100 && (
+          <div style={{ fontSize:11, color:'#888', marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ flex:1, height:4, background:'#f0f0f0', borderRadius:2, overflow:'hidden', maxWidth:200 }}>
+              <div style={{ height:'100%', width: scrollPct + '%', background:'#185FA5', borderRadius:2 }} />
+            </div>
+            <span>{scrollPct}% read</span>
+          </div>
+        )}
+
+        {/* Lesson content */}
+        <div ref={contentRef} style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'20px 24px', marginBottom:20 }}>
           {blocks.map((b, i) => (
             <div key={i}>
-              {b.type === 'html' && <HtmlBlock html={b.content} />}
-              {b.type === 'code' && <CodeViewer code={b.content} />}
-              {b.type === 'tryit' && <TryItViewer initialCode={b.content} />}
-              {b.type === 'math' && <MathViewer latex={b.content} />}
+              {b.type === 'html'   && <HtmlBlock html={b.content} />}
+              {b.type === 'code'   && <CodeViewer code={b.content} />}
+              {b.type === 'tryit'  && <TryItViewer initialCode={b.content} />}
+              {b.type === 'math'   && <MathViewer latex={b.content} />}
             </div>
           ))}
         </div>
@@ -473,10 +594,45 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
         {/* Prev / Next */}
         <div style={{ display:'flex', gap:10, justifyContent:'space-between' }}>
-          <div>{prevLesson && <a href={`/student/modules/${moduleId}/lessons/${prevLesson.id}`} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, textDecoration:'none', color:'#333' }}>← {prevLesson.title}</a>}</div>
-          <div>{nextLesson && <a href={`/student/modules/${moduleId}/lessons/${nextLesson.id}`} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', background:'#185FA5', color:'#E6F1FB', border:'none', borderRadius:8, fontSize:13, textDecoration:'none' }}>{nextLesson.title} →</a>}</div>
+          <div>{prevLesson && (
+            <a href={`/student/modules/${moduleId}/lessons/${prevLesson.id}`}
+              style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, textDecoration:'none', color:'#333' }}>
+              ← {prevLesson.title}
+            </a>
+          )}</div>
+          <div>{nextLesson && (
+            <a href={`/student/modules/${moduleId}/lessons/${nextLesson.id}`}
+              style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', background:'#185FA5', color:'#E6F1FB', border:'none', borderRadius:8, fontSize:13, textDecoration:'none' }}>
+              {nextLesson.title} →
+            </a>
+          )}</div>
         </div>
       </div>
+
+      {/* ── Notes sidebar ─────────────────────────────────────────────────── */}
+      {notesOpen && (
+        <div style={{ width:260, flexShrink:0, position:'sticky', top:80 }}>
+          <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden', boxShadow:'0 4px 16px rgba(0,0,0,.06)' }}>
+            <div style={{ padding:'10px 14px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <span style={{ fontSize:13, fontWeight:600, color:'#111' }}>📝 My notes</span>
+              <div style={{ fontSize:10, color:'#aaa' }}>
+                {notesSaving ? 'Saving…' : notes.trim() ? 'Saved ✓' : ''}
+              </div>
+            </div>
+            <textarea
+              value={notes}
+              onChange={e => handleNotesChange(e.target.value)}
+              placeholder={"Take notes while reading...
+
+Your notes are private and auto-saved."}
+              style={{ width:'100%', minHeight:320, maxHeight:'calc(100vh - 200px)', padding:'12px 14px', border:'none', outline:'none', resize:'vertical', fontSize:13, lineHeight:1.6, fontFamily:'system-ui,sans-serif', color:'#111', background:'#fff', boxSizing:'border-box' }}
+            />
+            <div style={{ padding:'6px 14px', background:'#f9fafb', borderTop:'1px solid #e5e7eb', fontSize:10, color:'#bbb' }}>
+              {notes.trim().split(/\s+/).filter(Boolean).length} words · auto-saved
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
