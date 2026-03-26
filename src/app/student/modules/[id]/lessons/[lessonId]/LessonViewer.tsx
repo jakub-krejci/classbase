@@ -6,7 +6,7 @@ import { BackLink } from '@/components/ui'
 import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
 
 // Parse lesson HTML into renderable blocks
-type ViewBlock = { type: 'html' | 'code' | 'tryit'; content: string }
+type ViewBlock = { type: 'html' | 'code' | 'tryit' | 'math'; content: string }
 
 function parseBlocks(html: string): ViewBlock[] {
   if (!html) return []
@@ -38,6 +38,12 @@ function parseBlocks(html: string): ViewBlock[] {
       try { code = decodeURIComponent(el.getAttribute('data-code') ?? '') }
       catch { code = el.getAttribute('data-code') ?? '' }
       blocks.push({ type: 'tryit', content: code })
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-math')) {
+      flush()
+      let latex = ''
+      try { latex = decodeURIComponent(el.getAttribute('data-latex') ?? '') }
+      catch { latex = el.getAttribute('data-latex') ?? '' }
+      blocks.push({ type: 'math', content: latex })
     } else {
       htmlNodes.push(node)
     }
@@ -118,16 +124,19 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
     })
   }, [])
 
+  const [images, setImages] = useState<string[]>([])
+
   async function run() {
     if (running) return
-    setRunning(true); setOutput(null); setError(null)
+    setRunning(true); setOutput(null); setError(null); setImages([])
     try {
       const { runPython } = await import('@/lib/pyodide-runner')
-      const { output: out, error: err } = await runPython(code, () => {})
-      const result = out || '(no output)'
+      const { output: out, error: err, images: imgs } = await runPython(code, () => {})
+      const result = out || (imgs.length ? '' : '(no output)')
       setOutput(result)
       if (err) setError(err)
-      setOutputHistory(h => [result, ...h.slice(0, 4)])
+      if (imgs.length) setImages(imgs)
+      setOutputHistory(h => [result || `[${imgs.length} chart(s)]`, ...h.slice(0, 4)])
     } catch (e: any) { setError(e.message) }
     setRunning(false)
   }
@@ -204,8 +213,8 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
       </div>
 
       {/* Output */}
-      {(output !== null || error !== null) && (
-        <div style={{ background:'#0d1117', borderTop:'1px solid #2a2a4a', padding:'10px 14px' }}>
+      {(output !== null || error !== null || images.length > 0) && (
+        <div style={{ background:'#0d1117', borderTop:'1px solid #2a2a4a', padding:'10px 16px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
             <span style={{ fontSize:10, color:'#6c7086', fontFamily:'monospace', letterSpacing:'.05em' }}>OUTPUT</span>
             {checkResult==='correct' && <span style={{ fontSize:10, background:'#a6e3a1', color:'#1a1b26', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>✓ Correct!</span>}
@@ -214,6 +223,11 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
           </div>
           {output && <pre style={{ color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, margin:0, whiteSpace:'pre-wrap' }}>{output}</pre>}
           {error && <pre style={{ color:'#f38ba8', fontFamily:'ui-monospace,monospace', fontSize:12, margin: output?'6px 0 0':0, whiteSpace:'pre-wrap' }}>{error}</pre>}
+          {images.map((img, i) => (
+            <div key={i} style={{ marginTop: output || error ? 10 : 0 }}>
+              <img src={'data:image/png;base64,' + img} alt={'Chart ' + (i+1)} style={{ maxWidth:'100%', borderRadius:6, display:'block' }} />
+            </div>
+          ))}
         </div>
       )}
 
@@ -233,6 +247,51 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
   )
 }
 
+
+// ── Math / LaTeX viewer ──────────────────────────────────────────────────────
+let katexViewerLoaded = false
+let katexViewerLoading: Promise<void> | null = null
+
+function ensureKatexViewer(): Promise<void> {
+  if (katexViewerLoaded) return Promise.resolve()
+  if (katexViewerLoading) return katexViewerLoading
+  katexViewerLoading = new Promise<void>((resolve, reject) => {
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css'
+    document.head.appendChild(link)
+    const script = document.createElement('script')
+    script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js'
+    script.onload = () => { katexViewerLoaded = true; resolve() }
+    script.onerror = () => reject(new Error('KaTeX failed to load'))
+    document.head.appendChild(script)
+  })
+  return katexViewerLoading
+}
+
+function MathViewer({ latex, mode }: { latex: string; mode?: 'display' | 'inline' }) {
+  const [html, setHtml] = useState('')
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    ensureKatexViewer().then(() => {
+      try {
+        const rendered = (window as any).katex.renderToString(latex, {
+          displayMode: mode !== 'inline',
+          throwOnError: false,
+          trust: true
+        })
+        setHtml(rendered)
+      } catch (e: any) { setErr(e.message) }
+    }).catch(e => setErr(e.message))
+  }, [latex, mode])
+
+  if (err) return <span style={{ color: '#e53e3e', fontSize: 12, fontFamily: 'monospace' }}>{err}</span>
+  return (
+    <div style={{ margin: '14px 0', textAlign: mode === 'inline' ? 'left' : 'center', overflowX: 'auto' }}
+      dangerouslySetInnerHTML={{ __html: html }} />
+  )
+}
 
 // ── HTML content block with quiz activation ───────────────────────────────────
 function HtmlBlock({ html }: { html: string }) {
@@ -394,6 +453,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
               {b.type === 'html' && <HtmlBlock html={b.content} />}
               {b.type === 'code' && <CodeViewer code={b.content} />}
               {b.type === 'tryit' && <TryItViewer initialCode={b.content} />}
+              {b.type === 'math' && <MathViewer latex={b.content} />}
             </div>
           ))}
         </div>

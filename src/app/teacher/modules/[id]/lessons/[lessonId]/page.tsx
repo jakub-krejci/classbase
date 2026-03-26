@@ -7,7 +7,7 @@ import { BackLink } from '@/components/ui'
 import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
 
 // ─── Block types ──────────────────────────────────────────────────────────────
-type BlockType = 'html' | 'code' | 'tryit'
+type BlockType = 'html' | 'code' | 'tryit' | 'math'
 interface Block { id: string; type: BlockType; content: string }
 
 function uid() { return Math.random().toString(36).slice(2) }
@@ -23,6 +23,10 @@ function blocksToHtml(blocks: Block[]): string {
     if (b.type === 'tryit') {
       const enc = encodeURIComponent(b.content)
       return `<div class="cb-tryit" data-code="${enc}"></div>`
+    }
+    if (b.type === 'math') {
+      const enc = encodeURIComponent(b.content)
+      return `<div class="cb-math" data-latex="${enc}"></div>`
     }
     return ''
   }).join('\n')
@@ -55,6 +59,10 @@ function htmlToBlocks(html: string): Block[] {
       flushHtml()
       try { blocks.push({ id: uid(), type: 'tryit', content: decodeURIComponent(el.getAttribute('data-code') ?? '') }) }
       catch { blocks.push({ id: uid(), type: 'tryit', content: el.getAttribute('data-code') ?? '' }) }
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-math')) {
+      flushHtml()
+      try { blocks.push({ id: uid(), type: 'math', content: decodeURIComponent(el.getAttribute('data-latex') ?? '') }) }
+      catch { blocks.push({ id: uid(), type: 'math', content: el.getAttribute('data-latex') ?? '' }) }
     } else {
       htmlAcc.push(node)
     }
@@ -85,12 +93,13 @@ const EDITOR_CSS = `
 .cb-rich details > *:not(summary){padding:10px 14px}
 `
 
-function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz }: {
+function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz, onDuplicate }: {
   block: Block; onChange: (content: string) => void
   onAddAfter: (type: BlockType) => void; onDelete: () => void
   onMoveUp: () => void; onMoveDown: () => void; canDelete: boolean
   onOpenMedia: (type: 'image'|'video'|'file'|'link', insertFn: (html: string) => void) => void
   onInsertQuiz: (insertFn: (html: string) => void) => void
+  onDuplicate: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
@@ -387,6 +396,7 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
           </div>
           <div style={{flex:1}}/>
           <div className="cb-tb-group">
+            <button style={{...TB,fontSize:10,color:'#888'}} title="Duplicate block" onMouseDown={e=>{e.preventDefault();onDuplicate()}}>⎘</button>
             <button style={{...TB,fontSize:11,color:'#888'}} title="Move block up" onMouseDown={e=>{e.preventDefault();onMoveUp()}}>↑</button>
             <button style={{...TB,fontSize:11,color:'#888'}} title="Move block down" onMouseDown={e=>{e.preventDefault();onMoveDown()}}>↓</button>
             {canDelete && <button style={{...TB,fontSize:11,color:'#A32D2D'}} title="Delete block" onMouseDown={e=>{e.preventDefault();onDelete()}}>✕</button>}
@@ -511,8 +521,8 @@ function handleCodeKeyDown(
 }
 
 // ─── Code block (teacher editor) ──────────────────────────────────────────────
-function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
-  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
+function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
+  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
 }) {
   const [code, setCode] = useState(block.content)
   const [fontSize, setFontSize] = useState(14)
@@ -548,6 +558,7 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
         <button onClick={() => { navigator.clipboard?.writeText(code) }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Copy code">⎘</button>
         <button onClick={onMoveUp} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↑</button>
         <button onClick={onMoveDown} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↓</button>
+        <button onClick={onDuplicate} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px' }} title="Duplicate">⎘</button>
         <button onClick={onDelete} style={{ fontSize: 11, color: '#f38ba8', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>✕</button>
       </div>
 
@@ -581,8 +592,8 @@ function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
 }
 
 // ─── Try-it block (teacher editor) ────────────────────────────────────────────
-function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
-  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
+function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
+  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
 }) {
   const [code, setCode] = useState(block.content)
   const [output, setOutput] = useState<string | null>(null)
@@ -610,17 +621,19 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
     })
   }, [])
 
+  const [images, setImages] = useState<string[]>([])
+
   async function run() {
     if (running) return
-    setRunning(true); setOutput(null); setError(null)
+    setRunning(true); setOutput(null); setError(null); setImages([])
     try {
       const { runPython } = await import('@/lib/pyodide-runner')
-      const lines: string[] = []
-      const { output: out, error: err } = await runPython(code, line => { lines.push(line) })
-      const result = out || '(no output)'
+      const { output: out, error: err, images: imgs } = await runPython(code, () => {})
+      const result = out || (imgs.length ? '' : '(no output)')
       setOutput(result)
       if (err) setError(err)
-      setOutputHistory(h => [result, ...h.slice(0, 4)])
+      if (imgs.length) setImages(imgs)
+      setOutputHistory(h => [result || `[${imgs.length} chart(s)]`, ...h.slice(0, 4)])
     } catch (e: any) {
       setError(e.message)
     }
@@ -663,6 +676,7 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
         </button>
         <button onClick={onMoveUp} style={{ fontSize:11, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>↑</button>
         <button onClick={onMoveDown} style={{ fontSize:11, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>↓</button>
+        <button onClick={onDuplicate} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 5px' }} title="Duplicate block">⎘</button>
         <button onClick={onDelete} style={{ fontSize:11, color:'#f38ba8', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>✕</button>
       </div>
 
@@ -694,7 +708,7 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
       </div>
 
       {/* Output */}
-      {(output !== null || error !== null) && (
+      {(output !== null || error !== null || images.length > 0) && (
         <div style={{ background:'#0d1117', borderTop:'1px solid #2a2a4a', padding:'10px 14px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
             <span style={{ fontSize:10, color:'#6c7086', fontFamily:'monospace', letterSpacing:'.05em' }}>OUTPUT</span>
@@ -704,6 +718,12 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
           </div>
           {output && <pre style={{ color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, margin:0, whiteSpace:'pre-wrap' }}>{output}</pre>}
           {error && <pre style={{ color:'#f38ba8', fontFamily:'ui-monospace,monospace', fontSize:12, margin: output ? '6px 0 0' : 0, whiteSpace:'pre-wrap' }}>{error}</pre>}
+          {images.map((img, i) => (
+            <div key={i} style={{ marginTop: output || error ? 10 : 0 }}>
+              <img src={'data:image/png;base64,' + img} alt={'Chart ' + (i+1)}
+                style={{ maxWidth:'100%', borderRadius:6, display:'block' }} />
+            </div>
+          ))}
         </div>
       )}
 
@@ -723,6 +743,102 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
     </div>
   )
 }
+
+// ─── Math / LaTeX block ────────────────────────────────────────────────────────
+// KaTeX loaded from CDN on first render
+let katexLoaded = false
+let katexLoading: Promise<void> | null = null
+
+function ensureKatex(): Promise<void> {
+  if (katexLoaded) return Promise.resolve()
+  if (katexLoading) return katexLoading
+  katexLoading = new Promise<void>((resolve, reject) => {
+    // CSS
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css'
+    document.head.appendChild(link)
+    // JS
+    const script = document.createElement('script')
+    script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js'
+    script.onload = () => { katexLoaded = true; resolve() }
+    script.onerror = () => reject(new Error('KaTeX failed to load'))
+    document.head.appendChild(script)
+  })
+  return katexLoading
+}
+
+function MathBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
+  block: Block; onChange: (c: string) => void; onDelete: () => void
+  onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
+}) {
+  const [latex, setLatex] = useState(block.content || '\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}')
+  const [rendered, setRendered] = useState('')
+  const [error, setError] = useState('')
+  const [mode, setMode] = useState<'display' | 'inline'>('display')
+  const previewRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { renderLatex(latex) }, [latex, mode])
+
+  async function renderLatex(src: string) {
+    try {
+      await ensureKatex()
+      const katex = (window as any).katex
+      const html = katex.renderToString(src, { displayMode: mode === 'display', throwOnError: false, trust: true })
+      setRendered(html); setError('')
+    } catch (e: any) { setError(e.message) }
+  }
+
+  function update(val: string) { setLatex(val); onChange(val) }
+
+  return (
+    <div style={{ background: '#faf9ff', border: '2px solid #e9e4ff', borderRadius: 8, overflow: 'hidden', margin: '8px 0' }}>
+      {/* Header */}
+      <div style={{ background: '#f0ebff', padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 14 }}>∑</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#6b46c1', letterSpacing: '.04em', flex: 1 }}>MATH — LaTeX / KaTeX</span>
+        <select value={mode} onChange={e => setMode(e.target.value as any)}
+          style={{ fontSize: 11, border: '1px solid #d6bcfa', borderRadius: 4, padding: '2px 6px', background: '#fff', color: '#6b46c1', cursor: 'pointer' }}>
+          <option value="display">Display (centered)</option>
+          <option value="inline">Inline</option>
+        </select>
+        <button onClick={onDuplicate} style={{ fontSize: 10, color: '#6b46c1', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px' }} title="Duplicate block">⎘</button>
+        <button onClick={onMoveUp} style={{ fontSize: 11, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }}>↑</button>
+        <button onClick={onMoveDown} style={{ fontSize: 11, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }}>↓</button>
+        <button onClick={onDelete} style={{ fontSize: 11, color: '#f38ba8', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }}>✕</button>
+      </div>
+
+      {/* Preview */}
+      <div style={{ padding: '14px 20px', minHeight: 48, display: 'flex', alignItems: 'center', justifyContent: mode === 'display' ? 'center' : 'flex-start', background: '#fff', borderBottom: '1px solid #e9e4ff' }}>
+        {error
+          ? <span style={{ color: '#e53e3e', fontSize: 12, fontFamily: 'monospace' }}>{error}</span>
+          : <span dangerouslySetInnerHTML={{ __html: rendered || '<span style="color:#ccc">Preview will appear here…</span>' }} />
+        }
+      </div>
+
+      {/* Editor */}
+      <div style={{ padding: '10px 12px', background: '#faf9ff' }}>
+        <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>LaTeX source:</div>
+        <textarea
+          value={latex}
+          onChange={e => update(e.target.value)}
+          spellCheck={false}
+          style={{ width: '100%', minHeight: 72, fontFamily: 'ui-monospace,monospace', fontSize: 13, padding: '8px 10px', border: '1px solid #d6bcfa', borderRadius: 6, background: '#fff', color: '#1a1a2e', outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }}
+          placeholder="e.g. \frac{d}{dx}\left(x^n\right) = nx^{n-1}"
+        />
+        <div style={{ fontSize: 10, color: '#b794f4', marginTop: 4, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {['\frac{a}{b}', '\sqrt{x}', '\sum_{i=0}^{n}', '\int_a^b', '\lim_{x \to \infty}', 'x^{2}', '\alpha \beta \gamma', '\begin{matrix} a & b \\\\ c & d \end{matrix}'].map(s => (
+            <button key={s} onClick={() => update(latex + ' ' + s)}
+              style={{ fontSize: 10, color: '#6b46c1', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'monospace' }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // ─── Table modal ──────────────────────────────────────────────────────────────
 function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) => void; onClose: () => void }) {
@@ -1016,6 +1132,10 @@ export default function LessonEditorPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [lessonLinks, setLessonLinks] = useState<any[]>([])
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lessonIdRef = useRef<string | null>(isNew ? null : lessonId)
   const pendingInsertFn = useRef<((html: string) => void) | null>(null)
   const pendingQuizInsertFn = useRef<((html: string) => void) | null>(null)
   const [showQuiz, setShowQuiz] = useState(false)
@@ -1051,6 +1171,26 @@ export default function LessonEditorPage() {
     load()
   }, [])
 
+  // Auto-save: debounce 30s after any change, only for existing lessons
+  useEffect(() => {
+    if (isNew || loading || !title.trim()) return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(async () => {
+      if (!lessonIdRef.current) return
+      setAutoSaveStatus('saving')
+      try {
+        const html = blocksToHtml(blocks)
+        const { error } = await supabase.from('lessons').update({
+          title: title.trim(), content_html: html, updated_at: new Date().toISOString()
+        } as any).eq('id', lessonIdRef.current)
+        if (error) { setAutoSaveStatus('error') }
+        else { setAutoSaveStatus('saved'); setLastSaved(new Date()) }
+      } catch { setAutoSaveStatus('error') }
+      setTimeout(() => setAutoSaveStatus('idle'), 3000)
+    }, 30000) // 30 second debounce
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  }, [blocks, title])
+
   function updateBlock(id: string, content: string) {
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b))
   }
@@ -1064,7 +1204,16 @@ export default function LessonEditorPage() {
   function deleteBlock(id: string) {
     setBlocks(prev => prev.length <= 1 ? prev : prev.filter(b => b.id !== id))
   }
-  function moveBlock(id: string, dir: -1 | 1) {
+  function duplicateBlock(id: string) {
+    setBlocks(prev => {
+      const idx = prev.findIndex(b => b.id === id)
+      if (idx === -1) return prev
+      const copy: Block = { ...prev[idx], id: uid() }
+      const next = [...prev]; next.splice(idx + 1, 0, copy); return next
+    })
+  }
+
+    function moveBlock(id: string, dir: -1 | 1) {
     setBlocks(prev => {
       const idx = prev.findIndex(b => b.id === id)
       const ni = idx + dir
@@ -1089,8 +1238,9 @@ export default function LessonEditorPage() {
     if (isNew) {
       const { data: last } = await supabase.from('lessons').select('position').eq('module_id', moduleId).order('position', { ascending: false }).limit(1)
       const pos = last && last.length > 0 ? ((last[0] as any).position ?? 0) + 1 : 0
-      const { error: err } = await supabase.from('lessons').insert({ module_id: moduleId, title: title.trim(), content_html: html, position: pos, author_id: authorId } as any)
+      const { data: newLesson, error: err } = await supabase.from('lessons').insert({ module_id: moduleId, title: title.trim(), content_html: html, position: pos, author_id: authorId } as any).select('id').single()
       if (err) { setError(err.message); setSaving(false); return }
+      if (newLesson) lessonIdRef.current = (newLesson as any).id
     } else {
       const { error: err } = await supabase.from('lessons').update({ title: title.trim(), content_html: html, updated_at: new Date().toISOString() } as any).eq('id', lessonId)
       if (err) { setError(err.message); setSaving(false); return }
@@ -1131,37 +1281,55 @@ export default function LessonEditorPage() {
                 pendingQuizInsertFn.current = insertFn
                 setShowQuiz(true)
               }}
+              onDuplicate={() => duplicateBlock(block.id)}
             />
           )}
           {block.type === 'code' && (
             <CodeBlock block={block} onChange={c => updateBlock(block.id, c)}
+              onDuplicate={() => duplicateBlock(block.id)}
               onDelete={() => deleteBlock(block.id)}
               onMoveUp={() => moveBlock(block.id, -1)}
               onMoveDown={() => moveBlock(block.id, 1)} />
           )}
           {block.type === 'tryit' && (
             <TryItBlock block={block} onChange={c => updateBlock(block.id, c)}
+              onDuplicate={() => duplicateBlock(block.id)}
               onDelete={() => deleteBlock(block.id)}
               onMoveUp={() => moveBlock(block.id, -1)}
               onMoveDown={() => moveBlock(block.id, 1)} />
+          )}
+          {block.type === 'math' && (
+            <MathBlock block={block} onChange={c => updateBlock(block.id, c)}
+              onDuplicate={() => duplicateBlock(block.id)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)}
+            />
           )}
           {/* Add block buttons between blocks */}
           <div style={{ display:'flex', gap:4, margin:'4px 0 4px', justifyContent:'center', opacity:0.5 }}>
             <button onClick={() => addHtmlBlock(block.id)} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#f9fafb', cursor:'pointer', color:'#555' }}>+ Text</button>
             <button onClick={() => addBlockAfter(block.id,'code')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1e1e2e', cursor:'pointer', color:'#cdd6f4' }}>+ Code</button>
             <button onClick={() => addBlockAfter(block.id,'tryit')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1a1b26', cursor:'pointer', color:'#7aa2f7' }}>+ Try it</button>
+            <button onClick={() => addBlockAfter(block.id,'math')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #d6bcfa', borderRadius:4, background:'#faf9ff', cursor:'pointer', color:'#6b46c1' }}>+ Math</button>
             <button onClick={() => { setQuizTargetId(block.id); setShowQuiz(true) }} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #B5D4F4', borderRadius:4, background:'#E6F1FB', cursor:'pointer', color:'#0C447C' }}>+ Quiz</button>
           </div>
         </div>
       ))}
 
       {error && <div style={{ fontSize: 12, padding: '8px 11px', background: '#FCEBEB', color: '#791F1F', borderRadius: 8, margin: '12px 0' }}>{error}</div>}
-      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={save} disabled={saving}
           style={{ padding: '10px 22px', background: '#185FA5', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', opacity: saving ? .6 : 1 }}>
           {saving ? 'Saving…' : 'Save lesson'}
         </button>
-        <a href={'/teacher/modules/' + moduleId} style={{ padding: '10px 16px', border: `1px solid #e5e7eb`, borderRadius: 8, fontSize: 14, textDecoration: 'none', color: '#111', background: '#fff', display: 'inline-flex', alignItems: 'center' }}>Cancel</a>
+        <a href={'/teacher/modules/' + moduleId} style={{ padding: '10px 16px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, textDecoration: 'none', color: '#111', background: '#fff', display: 'inline-flex', alignItems: 'center' }}>Cancel</a>
+        <div style={{ marginLeft: 8, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {autoSaveStatus === 'saving' && <span style={{ color: '#888' }}>⟳ Auto-saving…</span>}
+          {autoSaveStatus === 'saved' && <span style={{ color: '#27500A' }}>✓ Auto-saved {lastSaved ? lastSaved.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''}</span>}
+          {autoSaveStatus === 'error' && <span style={{ color: '#791F1F' }}>⚠ Auto-save failed</span>}
+          {autoSaveStatus === 'idle' && !isNew && <span style={{ color: '#bbb' }}>Auto-saves every 30s</span>}
+        </div>
       </div>
 
       {showQuiz && <QuizModal onInsert={html => {
