@@ -105,16 +105,105 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   function exec(cmd: string, val?: string) { ref.current?.focus(); document.execCommand(cmd, false, val ?? '') }
 
   function updateActiveFormats() {
-    const formats = new Set<string>()
-    if (document.queryCommandState('bold')) formats.add('bold')
-    if (document.queryCommandState('italic')) formats.add('italic')
-    if (document.queryCommandState('underline')) formats.add('underline')
-    if (document.queryCommandState('insertUnorderedList')) formats.add('ul')
-    if (document.queryCommandState('insertOrderedList')) formats.add('ol')
-    const block = document.queryCommandValue('formatBlock').toLowerCase()
-    if (block) formats.add(block)
-    setActiveFormats(formats)
+    try {
+      const formats = new Set<string>()
+      // Use try/catch since queryCommandState may throw in some browsers
+      try { if (document.queryCommandState('bold')) formats.add('bold') } catch {}
+      try { if (document.queryCommandState('italic')) formats.add('italic') } catch {}
+      try { if (document.queryCommandState('underline')) formats.add('underline') } catch {}
+      try { if (document.queryCommandState('insertUnorderedList')) formats.add('ul') } catch {}
+      try { if (document.queryCommandState('insertOrderedList')) formats.add('ol') } catch {}
+      try {
+        const block = document.queryCommandValue('formatBlock').toLowerCase().replace(/[<>]/g, '')
+        if (block) formats.add(block)
+      } catch {}
+      // Also check by walking up the DOM tree for reliable results
+      const sel = window.getSelection()
+      if (sel && sel.rangeCount > 0) {
+        let node: Node | null = sel.getRangeAt(0).startContainer
+        while (node && node !== ref.current) {
+          const tag = (node as HTMLElement).tagName?.toLowerCase()
+          if (tag === 'b' || tag === 'strong') formats.add('bold')
+          if (tag === 'i' || tag === 'em') formats.add('italic')
+          if (tag === 'u') formats.add('underline')
+          if (tag === 'h1') formats.add('h1')
+          if (tag === 'h2') formats.add('h2')
+          if (tag === 'h3') formats.add('h3')
+          if (tag === 'ul') formats.add('ul')
+          if (tag === 'ol') formats.add('ol')
+          if (tag === 'blockquote') formats.add('blockquote')
+          node = node.parentNode
+        }
+      }
+      setActiveFormats(formats)
+    } catch {}
   }
+
+  // ── Image toolbar ────────────────────────────────────────────────────
+  function showImageToolbar(img: HTMLImageElement) {
+    // Remove any existing toolbar
+    document.getElementById('cb-img-toolbar')?.remove()
+    const toolbar = document.createElement('div')
+    toolbar.id = 'cb-img-toolbar'
+    toolbar.style.cssText = 'position:absolute;background:#1f2937;border-radius:8px;padding:4px 6px;display:flex;gap:4px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.3);align-items:center'
+    const rect = img.getBoundingClientRect()
+    const edRect = ref.current!.getBoundingClientRect()
+    toolbar.style.top = (rect.top - edRect.top + ref.current!.scrollTop - 40) + 'px'
+    toolbar.style.left = (rect.left - edRect.left) + 'px'
+    ref.current!.style.position = 'relative'
+
+    const btnStyle = 'padding:3px 7px;font-size:11px;background:transparent;color:#e5e7eb;border:1px solid #374151;border-radius:4px;cursor:pointer;font-family:inherit'
+
+    // Size buttons
+    const sizes = [['25%','25%'],['50%','50%'],['75%','75%'],['100%','100%'],['200px','200px'],['400px','400px']]
+    sizes.forEach(([label, val]) => {
+      const btn = document.createElement('button')
+      btn.textContent = label; btn.style.cssText = btnStyle
+      btn.onclick = () => { img.style.width = val; img.style.maxWidth = '100%'; onChange(ref.current?.innerHTML ?? '') }
+      toolbar.appendChild(btn)
+    })
+
+    // Divider
+    const div = document.createElement('div'); div.style.cssText = 'width:1px;background:#374151;height:18px;margin:0 2px'; toolbar.appendChild(div)
+
+    // Align buttons
+    const aligns: [string, string][] = [['⬅ L','left'],['— C','center'],['➡ R','right']]
+    aligns.forEach(([label, align]) => {
+      const btn = document.createElement('button')
+      btn.textContent = label; btn.style.cssText = btnStyle
+      btn.onclick = () => {
+        img.style.display = 'block'
+        img.style.marginLeft = align === 'left' ? '0' : align === 'center' ? 'auto' : 'auto'
+        img.style.marginRight = align === 'right' ? '0' : align === 'center' ? 'auto' : '0'
+        if (align === 'right') { img.style.float = 'right'; img.style.marginLeft = '12px' }
+        else if (align === 'left') { img.style.float = 'left'; img.style.marginRight = '12px' }
+        else { img.style.float = 'none'; img.style.margin = '8px auto' }
+        onChange(ref.current?.innerHTML ?? '')
+      }
+      toolbar.appendChild(btn)
+    })
+
+    ref.current!.appendChild(toolbar)
+    // Hide when clicking elsewhere
+    setTimeout(() => {
+      const hide = (ev: MouseEvent) => {
+        if (!(ev.target as HTMLElement).closest('#cb-img-toolbar') && ev.target !== img) {
+          toolbar.remove(); document.removeEventListener('mousedown', hide)
+        }
+      }
+      document.addEventListener('mousedown', hide)
+    }, 50)
+  }
+
+  function hideImageToolbar() { document.getElementById('cb-img-toolbar')?.remove() }
+
+  // ── selectionchange ───────────────────────────────────────────────────────
+    // Listen to selectionchange for reliable format detection
+  useEffect(() => {
+    const handler = () => updateActiveFormats()
+    document.addEventListener('selectionchange', handler)
+    return () => document.removeEventListener('selectionchange', handler)
+  }, [])
   function heading(t: string) { ref.current?.focus(); document.execCommand('formatBlock', false, t) }
   function hl(color: string) {
     ref.current?.focus()
@@ -178,6 +267,7 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
         <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('video', insertHtml)}}>▶ Video</button>
         <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('file', insertHtml)}}>📎 File</button>
         <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('link', insertHtml)}}>🔗 Link</button>
+        <button style={TB} onMouseDown={e=>{e.preventDefault(); insertHtml('<hr style="border:none;border-top:2px solid #e5e7eb;margin:12px 0">')}} title="Horizontal divider">— HR</button>
         {SEP}
         <button style={{...TB,background:'#1e1e2e',color:'#cdd6f4',fontSize:11}} onMouseDown={e=>{e.preventDefault();onAddAfter('code')}}>+ Code</button>
         <button style={{...TB,background:'#1a1b26',color:'#7aa2f7',fontSize:11}} onMouseDown={e=>{e.preventDefault();onAddAfter('tryit')}}>+ Try it</button>
@@ -194,7 +284,16 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
         className="cb-rich"
         onInput={() => onChange(ref.current?.innerHTML ?? '')}
         onKeyUp={updateActiveFormats}
-        onMouseUp={updateActiveFormats}
+        onMouseUp={e => {
+          updateActiveFormats()
+          // Image click — show resize toolbar
+          const target = e.target as HTMLElement
+          if (target.tagName === 'IMG') {
+            showImageToolbar(target as HTMLImageElement)
+          } else {
+            hideImageToolbar()
+          }
+        }}
         onClick={updateActiveFormats}
         onKeyDown={e => {
           if (e.key === 'Enter' && e.shiftKey) {
@@ -397,8 +496,10 @@ function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:(
 }
 
 // ─── Media / Link modal ────────────────────────────────────────────────────────
-function MediaModal({ type, onInsert, onClose }: {
+function MediaModal({ type, lessons, moduleId: modId, onInsert, onClose }: {
   type: 'image' | 'video' | 'file' | 'link'
+  lessons?: any[]
+  moduleId?: string
   onInsert: (html: string) => void
   onClose: () => void
 }) {
@@ -499,6 +600,20 @@ function MediaModal({ type, onInsert, onClose }: {
             <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder={type === 'link' ? 'Click here' : 'Filename or description'} />
           </>
         )}
+        {type === 'link' && lessons && lessons.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 6 }}>Or link to a lesson in this module:</div>
+            <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+              {lessons.map((l: any) => (
+                <button key={l.id}
+                  onClick={() => { setUrl(\`/student/modules/\${modId}/lessons/\${l.id}\`); setLabel(l.title) }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: url.includes(l.id) ? '#E6F1FB' : 'transparent', border: 'none', borderBottom: '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', color: '#333' }}>
+                  📄 {l.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{ display:'flex', gap:8, marginTop:4 }}>
           <button onClick={() => { if (url) { onInsert(build()); onClose() } }}
@@ -529,6 +644,7 @@ export default function LessonEditorPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [lessonLinks, setLessonLinks] = useState<any[]>([])
   const pendingInsertFn = useRef<((html: string) => void) | null>(null)
   const [showQuiz, setShowQuiz] = useState(false)
   const [quizTargetId, setQuizTargetId] = useState<string | null>(null)
@@ -545,6 +661,9 @@ export default function LessonEditorPage() {
         const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
         setAuthorName((prof as any)?.full_name ?? user.email ?? '')
       }
+      // Load lessons list for link-to-lesson in MediaModal
+      const { data: lessonList } = await supabase.from('lessons').select('id,title,position').eq('module_id', moduleId).order('position')
+      setLessonLinks((lessonList ?? []) as any[])
       if (!isNew && lessonId) {
         const { data, error: le } = await supabase.from('lessons').select('*').eq('id', lessonId).single()
         if (le) { setError('Failed to load: ' + le.message); setLoading(false); return }
@@ -677,6 +796,8 @@ export default function LessonEditorPage() {
       {mediaModal && (
         <MediaModal
           type={mediaModal}
+          lessons={lessonLinks}
+          moduleId={moduleId}
           onInsert={html => {
             if (pendingInsertFn.current) pendingInsertFn.current(html)
             pendingInsertFn.current = null

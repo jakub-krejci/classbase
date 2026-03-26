@@ -100,7 +100,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
               <span style={{ color: '#bbb', fontSize: 14, cursor: 'grab' }}>⠿</span>
               <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#E6F1FB', color: '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
               <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{l.title}</span>
-              <Btn href={"/student/modules/" + module.id + "/lessons/" + l.id} style={{ padding: '3px 9px', fontSize: 11 }}>View</Btn>
+              <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id + "/preview"} style={{ padding: '3px 9px', fontSize: 11 }}>View</Btn>
               <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id} style={{ padding: '3px 9px', fontSize: 11 }}>Edit</Btn>
               <Btn variant="danger" onClick={() => deleteLesson(l.id)} style={{ padding: '3px 9px', fontSize: 11 }}>Del</Btn>
             </div>
