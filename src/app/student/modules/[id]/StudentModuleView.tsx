@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import { Tag, BackLink, Pill } from '@/components/ui'
 
-export default function StudentModuleView({ module, lessons, assignments, completedIds, submissions, studentId }: {
-  module: any; lessons: any[]; assignments: any[]; completedIds: string[]; submissions: any[]; studentId: string
+export default function StudentModuleView({ module, lessons, assignments, completedIds, bookmarkedIds, submissions, studentId }: {
+  module: any; lessons: any[]; assignments: any[]; completedIds: string[]; bookmarkedIds: string[]; submissions: any[]; studentId: string
 }) {
   const [tab, setTab] = useState<'lessons' | 'assignments'>('lessons')
   const done = new Set(completedIds)
+  const bookmarked = new Set(bookmarkedIds)
   const pct = lessons.length > 0 ? Math.round(done.size / lessons.length * 100) : 0
 
   const tabStyle = (t: string): React.CSSProperties => ({
@@ -67,12 +68,14 @@ export default function StudentModuleView({ module, lessons, assignments, comple
               <div key={l.id}>
                 {unlocked ? (
                   <a href={'/student/modules/' + module.id + '/lessons/' + l.id}
-                    className='dm-card' style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, textDecoration: 'none', color: 'inherit' }}>
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: completed ? '#EAF3DE' : '#E6F1FB', color: completed ? '#27500A' : '#0C447C', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {completed ? '✓' : (i + 1)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, textDecoration: 'none', color: 'inherit' }}>
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: completed ? '#EAF3DE' : bookmarked.has(l.id) ? '#FFF3CD' : '#E6F1FB', color: completed ? '#27500A' : bookmarked.has(l.id) ? '#856404' : '#0C447C', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {completed ? '✓' : bookmarked.has(l.id) ? '🔖' : (i + 1)}
                     </div>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{l.title}</span>
-                    <Pill label={completed ? 'Done' : 'Read'} color={completed ? 'green' : 'blue'} />
+                    {completed && <Pill label="Done" color="green" />}
+                    {!completed && bookmarked.has(l.id) && <Pill label="Not completed" color="amber" />}
+                    {!completed && !bookmarked.has(l.id) && <Pill label="Read" color="blue" />}
                   </a>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f9fafb', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, opacity: 0.6 }}>
@@ -97,7 +100,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
             const isSubmitted = !!sub
             const dueStr = a.deadline ? ' · Due ' + new Date(a.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''
             return (
-              <div key={a.id} className='dm-card' style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
+              <div key={a.id} style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
                   <div>
                     <div style={{ fontWeight: 500, fontSize: 14 }}>{a.title}</div>

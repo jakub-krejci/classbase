@@ -29,9 +29,10 @@ export default async function StudentModuleDetailPage({ params }: { params: any 
   // progress
   const lessonIds = (lessons ?? []).map((l: any) => l.id)
   const { data: progressRows } = lessonIds.length
-    ? await admin.from('lesson_progress').select('lesson_id').eq('student_id', (user as any).id).in('lesson_id', lessonIds)
+    ? await admin.from('lesson_progress').select('lesson_id,status').eq('student_id', (user as any).id).in('lesson_id', lessonIds)
     : { data: [] }
-  const completedIds = new Set((progressRows ?? []).map((r: any) => r.lesson_id))
+  const completedIds = new Set((progressRows ?? []).filter((r: any) => r.status === 'completed').map((r: any) => r.lesson_id))
+  const bookmarkedIds = new Set((progressRows ?? []).filter((r: any) => r.status === 'bookmark').map((r: any) => r.lesson_id))
 
   // submissions for this student
   const assignmentIds = (assignments ?? []).map((a: any) => a.id)
@@ -46,6 +47,7 @@ export default async function StudentModuleDetailPage({ params }: { params: any 
         lessons={(lessons ?? []) as any[]}
         assignments={(assignments ?? []) as any[]}
         completedIds={Array.from(completedIds) as string[]}
+        bookmarkedIds={Array.from(bookmarkedIds) as string[]}
         submissions={(submissions ?? []) as any[]}
         studentId={(user as any).id}
       />

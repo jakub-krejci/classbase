@@ -171,7 +171,7 @@ export default function StudentHome({ profile, enrollments, progressMap, message
             const pct = p.total > 0 ? Math.round(p.done / p.total * 100) : 0
             return (
               <a key={e.module_id} href={'/student/modules/' + e.module_id}
-                className='dm-card' style={{ display: 'block', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
+                style={{ display: 'block', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 3 }}>{m.title}</div>

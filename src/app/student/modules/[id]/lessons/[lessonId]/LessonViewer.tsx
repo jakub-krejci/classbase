@@ -309,7 +309,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
       {/* Left nav */}
       <div style={{ width:210, flexShrink:0, position:'sticky', top:80 }}>
-        <div className='dm-nav' style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
           <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Lessons</div>
           {allLessons.map((l:any, i:number) => {
             const isCurrent = l.id === lesson.id
@@ -333,7 +333,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         <h1 style={{ fontSize:22, fontWeight:700, marginBottom:4 }}>{lesson.title}</h1>
         {authorName && <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Author: {authorName}</div>}
 
-        <div className='dm-lesson-card' style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'20px 24px', marginBottom:20 }}>
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'20px 24px', marginBottom:20 }}>
           {blocks.map((b, i) => (
             <div key={i}>
               {b.type === 'html' && <HtmlBlock html={b.content} />}

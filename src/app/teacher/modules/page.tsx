@@ -44,7 +44,7 @@ export default async function TeacherModulesPage() {
         <div style={{ display: 'grid', gap: 10 }}>
           {modules.map((m: any) => (
             <a key={m.id} href={"/teacher/modules/" + m.id}
-              className='dm-card' style={{ display: 'block', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
+              style={{ display: 'block', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 3 }}>{m.title}</div>

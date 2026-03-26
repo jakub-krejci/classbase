@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useParams } from 'next/navigation'
 import { BackLink } from '@/components/ui'
 import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
-import { useDark } from '@/lib/darkMode'
 
 // ─── Block types ──────────────────────────────────────────────────────────────
 type BlockType = 'html' | 'code' | 'tryit'
@@ -103,6 +102,18 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   }, [])
 
   function exec(cmd: string, val?: string) { ref.current?.focus(); document.execCommand(cmd, false, val ?? '') }
+
+  function updateActiveFormats() {
+    const formats = new Set<string>()
+    if (document.queryCommandState('bold')) formats.add('bold')
+    if (document.queryCommandState('italic')) formats.add('italic')
+    if (document.queryCommandState('underline')) formats.add('underline')
+    if (document.queryCommandState('insertUnorderedList')) formats.add('ul')
+    if (document.queryCommandState('insertOrderedList')) formats.add('ol')
+    const block = document.queryCommandValue('formatBlock').toLowerCase()
+    if (block) formats.add(block)
+    setActiveFormats(formats)
+  }
   function heading(t: string) { ref.current?.focus(); document.execCommand('formatBlock', false, t) }
   function hl(color: string) {
     ref.current?.focus()
@@ -133,17 +144,14 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   }
 
   const TB: React.CSSProperties = { padding:'3px 7px', fontSize:12, border:'1px solid transparent', borderRadius:5, background:'none', cursor:'pointer', fontFamily:'inherit', lineHeight:1 }
+  const tbActive = (key: string): React.CSSProperties => activeFormats.has(key) ? { ...TB, background:'#E6F1FB', border:'1px solid #B5D4F4', color:'#0C447C' } : TB
   const SEP = <span style={{ display:'inline-block', width:1, background:'#e5e7eb', margin:'0 3px', height:16, verticalAlign:'middle' }} />
 
-  const surfaceBg = dark ? '#1f2937' : '#fff'
-  const borderColor = dark ? '#374151' : '#e5e7eb'
-  const textColor = dark ? '#f3f4f6' : '#111'
-  const toolbarBg = dark ? '#111827' : '#f9fafb'
 
   return (
     <div style={{ marginBottom: 6 }}>
       {/* Toolbar */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:1, padding:'4px 8px', background:toolbarBg, border:`1px solid ${borderColor}`, borderBottom:'none', borderRadius:'8px 8px 0 0', alignItems:'center' }}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:1, padding:'4px 8px', background:'#f9fafb', border:`1px solid #e5e7eb`, borderBottom:'none', borderRadius:'8px 8px 0 0', alignItems:'center' }}>
         <button style={TB} onMouseDown={e=>{e.preventDefault();exec('bold')}}><b>B</b></button>
         <button style={TB} onMouseDown={e=>{e.preventDefault();exec('italic')}}><i>I</i></button>
         <button style={TB} onMouseDown={e=>{e.preventDefault();exec('underline')}}><u>U</u></button>
@@ -163,7 +171,7 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
         {SEP}
         <button style={{...TB,background:'#FAEEDA',color:'#633806',fontSize:11}} onMouseDown={e=>{e.preventDefault();insertHtml('<div contenteditable="false" style="background:#FAEEDA;border-left:3px solid #BA7517;border-radius:0 8px 8px 0;padding:10px 14px;margin:8px 0"><div style="font-size:10px;font-weight:700;color:#633806;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">⚠ Important</div><div contenteditable="true" style="color:#412402">Write here.</div></div>')}} >! Imp</button>
         <button style={{...TB,background:'#E1F5EE',color:'#085041',fontSize:11}} onMouseDown={e=>{e.preventDefault();insertHtml('<details><summary>▶ Click to reveal</summary><div contenteditable="true">Hidden content.</div></details>')}}>▾ Fold</button>
-        <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); const r=prompt('Rows:','3'); const c=prompt('Columns:','3'); if(r&&c) insertTable(parseInt(r),parseInt(c))}}>⊞ Table</button>
+        <button style={tbActive('table')} onMouseDown={e=>{e.preventDefault(); setShowTableModal(true)}}>⊞ Table</button>
         {SEP}
         <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('image', insertHtml)}}>🖼 Image</button>
         <button style={{...TB,fontSize:11}} onMouseDown={e=>{e.preventDefault(); onOpenMedia('video', insertHtml)}}>▶ Video</button>
@@ -184,6 +192,9 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
         suppressContentEditableWarning
         className="cb-rich"
         onInput={() => onChange(ref.current?.innerHTML ?? '')}
+        onKeyUp={updateActiveFormats}
+        onMouseUp={updateActiveFormats}
+        onClick={updateActiveFormats}
         onKeyDown={e => {
           if (e.key === 'Enter' && e.shiftKey) {
             let node: Node | null = window.getSelection()?.getRangeAt(0).startContainer ?? null
@@ -197,8 +208,14 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
             }
           }
         }}
-        style={{ minHeight: 80, padding: '10px 14px', border: `1px solid ${borderColor}`, borderRadius: '0 0 8px 8px', background: surfaceBg, fontSize: 14, lineHeight: 1.75, outline: 'none', color: textColor, fontFamily: 'system-ui,sans-serif' }}
+        style={{ minHeight: 80, padding: '10px 14px', border: `1px solid #e5e7eb`, borderRadius: '0 0 8px 8px', background: '#fff', fontSize: 14, lineHeight: 1.75, outline: 'none', color: '#111', fontFamily: 'system-ui,sans-serif' }}
       />
+      {showTableModal && (
+        <TableModal
+          onInsert={(r, c) => { insertTable(r, c); setShowTableModal(false) }}
+          onClose={() => setShowTableModal(false)}
+        />
+      )}
     </div>
   )
 }
@@ -337,9 +354,9 @@ function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:(
       <h2 style={{fontSize:16,fontWeight:600,marginBottom:14}}>Insert quiz question</h2>
       <input value={q} onChange={e=>setQ(e.target.value)} style={i} placeholder="Question text" />
       {opts.map((o,idx)=>(<div key={idx} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
-        <div onClick={()=>setCorrect(idx)} style={{width:16,height:16,borderRadius:'50%',border:'2px solid',borderColor:correct===idx?'#185FA5':'#ccc',background:correct===idx?'#185FA5':'#fff',cursor:'pointer',flexShrink:0}}/>
+        <div onClick={()=>setCorrect(idx)} style={{width:16,height:16,borderRadius:'50%',border:'2px solid','#e5e7eb':correct===idx?'#185FA5':'#ccc',background:correct===idx?'#185FA5':'#fff',cursor:'pointer',flexShrink:0}}/>
         <input value={o} onChange={e=>setOpts(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0}} placeholder={`Option ${idx+1}`}/>
-        <input value={expl[idx]} onChange={e=>setExpl(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0,background:'#fff8f9',borderColor:'#fce4ec'}} placeholder="Explanation if wrong"/>
+        <input value={expl[idx]} onChange={e=>setExpl(p=>p.map((x,j)=>j===idx?e.target.value:x))} style={{...i,flex:1,marginBottom:0,background:'#fff8f9','#e5e7eb':'#fce4ec'}} placeholder="Explanation if wrong"/>
       </div>))}
       <button onClick={()=>setOpts(p=>[...p,''])} style={{fontSize:12,color:'#185FA5',background:'none',border:'none',cursor:'pointer',marginBottom:14}}>+ Add option</button>
       <div style={{display:'flex',gap:8}}>
@@ -358,6 +375,7 @@ function MediaModal({ type, onInsert, onClose }: {
 }) {
   const [url, setUrl] = useState('')
   const [label, setLabel] = useState('')
+  const [imgWidth, setImgWidth] = useState('100%')
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
   const [tab, setTab] = useState<'url' | 'upload'>('url')
@@ -373,7 +391,11 @@ function MediaModal({ type, onInsert, onClose }: {
   }
 
   function build(): string {
-    if (type === 'image') return `<img src="${url}" alt="${label || 'image'}" style="max-width:100%;border-radius:8px;margin:8px 0;display:block">`
+    if (type === 'image') {
+      const w = imgWidth.trim() || '100%'
+      const widthAttr = w.endsWith('%') || w.endsWith('px') ? w : w + 'px'
+      return `<img src="${url}" alt="${label || 'image'}" style="width:${widthAttr};max-width:100%;border-radius:8px;margin:8px 0;display:block">`
+    }
     if (type === 'video') {
       const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/)
       const vm = url.match(/vimeo\.com\/(\d+)/)
@@ -385,50 +407,68 @@ function MediaModal({ type, onInsert, onClose }: {
     return ''
   }
 
-  const titles: Record<string,string> = { image: 'Insert image / animation', video: 'Embed video', file: 'Attach downloadable file', link: 'Insert hyperlink' }
+  const titles: Record<string,string> = { image: 'Insert image / animation', video: 'Embed or upload video', file: 'Attach downloadable file', link: 'Insert hyperlink' }
   const inp: React.CSSProperties = { width:'100%', padding:'8px 10px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:10 }
+  const lbl: React.CSSProperties = { fontSize:11, fontWeight:600, color:'#555', display:'block', marginBottom:3 }
+
+  // Show upload tab for image, file, and video
+  const showUploadTab = type === 'image' || type === 'file' || type === 'video'
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:'#fff', borderRadius:14, padding:24, width:'100%', maxWidth:440 }}>
+      <div style={{ background:'#fff', borderRadius:14, padding:24, width:'100%', maxWidth:460, maxHeight:'90vh', overflowY:'auto' }}>
         <h2 style={{ fontSize:16, fontWeight:600, marginBottom:14 }}>{titles[type]}</h2>
 
-        {/* Upload tab for image and file */}
-        {(type === 'image' || type === 'file') && (
+        {showUploadTab && (
           <div style={{ display:'flex', borderBottom:'1px solid #e5e7eb', marginBottom:14 }}>
             {(['url','upload'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ padding:'6px 14px', fontSize:12, fontWeight:500, background:'none', border:'none', borderBottom:tab===t?'2px solid #185FA5':'2px solid transparent', color:tab===t?'#185FA5':'#888', cursor:'pointer' }}>
-                {t === 'url' ? 'External URL' : 'Upload file'}
+                {t === 'url' ? 'External URL' : 'Upload from computer / Supabase'}
               </button>
             ))}
           </div>
         )}
 
-        {tab === 'upload' && (type === 'image' || type === 'file') ? (
+        {tab === 'upload' && showUploadTab ? (
           <div>
             <div onClick={() => fileRef.current?.click()}
               style={{ border:'2px dashed #e5e7eb', borderRadius:10, padding:24, textAlign:'center', cursor:'pointer', color:url?'#27500A':'#888', fontSize:13, background:url?'#f0fff4':'#fafafa', marginBottom:10 }}>
-              {uploading ? 'Uploading…' : url ? '✓ ' + (label || 'File uploaded — ready to insert') : 'Click to choose a file from your computer'}
+              {uploading ? 'Uploading to Supabase Storage…' : url ? '✓ ' + (label || 'File uploaded — ready to insert') : 'Click to choose a file from your computer
+(saves to Supabase Storage)'}
             </div>
-            <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e => e.target.files?.[0] && upload(e.target.files[0])} />
+            <input ref={fileRef} type="file"
+              accept={type === 'image' ? 'image/*,image/gif' : type === 'video' ? 'video/*' : undefined}
+              style={{ display:'none' }}
+              onChange={e => e.target.files?.[0] && upload(e.target.files[0])} />
             {uploadErr && <div style={{ fontSize:12, color:'#791F1F', marginBottom:8 }}>{uploadErr}</div>}
           </div>
         ) : (
           <>
-            <label style={{ fontSize:11, fontWeight:600, color:'#555', display:'block', marginBottom:3 }}>
-              {type === 'video' ? 'YouTube or Vimeo URL' : type === 'link' ? 'URL (https:// or /student/...)' : 'Image URL'}
+            <label style={lbl}>
+              {type === 'video' ? 'YouTube / Vimeo URL' : type === 'link' ? 'URL (https:// or /student/...)' : 'Image URL'}
             </label>
             <input value={url} onChange={e => setUrl(e.target.value)} style={inp}
               placeholder={type === 'video' ? 'https://youtube.com/watch?v=...' : 'https://'} />
           </>
         )}
 
-        {(type === 'image' || type === 'file' || type === 'link') && (
+        {type === 'image' && (
           <>
-            <label style={{ fontSize:11, fontWeight:600, color:'#555', display:'block', marginBottom:3 }}>
-              {type === 'link' ? 'Link text' : 'Alt text / label'}
-            </label>
-            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder={type === 'link' ? 'Click here' : 'Description'} />
+            <label style={lbl}>Alt text / label</label>
+            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder="Describe the image" />
+            <label style={lbl}>Display width (e.g. 100%, 400px, 50%)</label>
+            <input value={imgWidth} onChange={e => setImgWidth(e.target.value)} style={inp} placeholder="100%" />
+            {url && (
+              <div style={{ marginBottom:10 }}>
+                <img src={url} alt="preview" style={{ maxWidth:'100%', maxHeight:120, borderRadius:8, border:'1px solid #e5e7eb', objectFit:'contain' }} />
+              </div>
+            )}
+          </>
+        )}
+        {(type === 'file' || type === 'link') && (
+          <>
+            <label style={lbl}>{type === 'link' ? 'Link text' : 'Label'}</label>
+            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder={type === 'link' ? 'Click here' : 'Filename or description'} />
           </>
         )}
 
@@ -444,7 +484,6 @@ function MediaModal({ type, onInsert, onClose }: {
     </div>
   )
 }
-
 
 
 // ─── Main editor page ─────────────────────────────────────────────────────────
@@ -467,10 +506,8 @@ export default function LessonEditorPage() {
   const [quizTargetId, setQuizTargetId] = useState<string | null>(null)
   const [mediaModal, setMediaModal] = useState<null | 'image' | 'video' | 'file' | 'link'>(null)
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null)
-  const dark = useDark()
-  const surfaceBg = dark ? '#1f2937' : '#fff'
-  const borderColor = dark ? '#374151' : '#e5e7eb'
-  const textColor = dark ? '#f3f4f6' : '#111'
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
+  const [showTableModal, setShowTableModal] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -544,15 +581,15 @@ export default function LessonEditorPage() {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#888', fontFamily: 'system-ui,sans-serif' }}>Loading lesson…</div>
 
   return (
-    <div style={{ maxWidth: 860, margin: '24px auto', padding: '0 20px', fontFamily: 'system-ui, sans-serif', color: textColor }}>
+    <div style={{ maxWidth: 860, margin: '24px auto', padding: '0 20px', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
       <style>{EDITOR_CSS}{PYTHON_CSS}</style>
       <BackLink href={'/teacher/modules/' + moduleId} label="Back to module" />
-      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4, color: textColor }}>{isNew ? 'New lesson' : 'Edit lesson'}</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4, color: '#111' }}>{isNew ? 'New lesson' : 'Edit lesson'}</h1>
       {authorName && <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Author: {authorName}</div>}
 
       <label style={{ fontSize: 11, fontWeight: 600, color: '#666', display: 'block', marginBottom: 3 }}>Lesson title</label>
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Newton's Laws of Motion"
-        style={{ width: '100%', maxWidth: 520, padding: '8px 11px', border: `1px solid ${borderColor}`, borderRadius: 8, fontSize: 14, fontFamily: 'inherit', marginBottom: 20, outline: 'none', background: surfaceBg, color: textColor }} />
+        style={{ width: '100%', maxWidth: 520, padding: '8px 11px', border: `1px solid #e5e7eb`, borderRadius: 8, fontSize: 14, fontFamily: 'inherit', marginBottom: 20, outline: 'none', background: '#fff', color: '#111' }} />
 
       {/* Blocks */}
       {blocks.map((block, i) => (
@@ -600,7 +637,7 @@ export default function LessonEditorPage() {
           style={{ padding: '10px 22px', background: '#185FA5', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', opacity: saving ? .6 : 1 }}>
           {saving ? 'Saving…' : 'Save lesson'}
         </button>
-        <a href={'/teacher/modules/' + moduleId} style={{ padding: '10px 16px', border: `1px solid ${borderColor}`, borderRadius: 8, fontSize: 14, textDecoration: 'none', color: textColor, background: surfaceBg, display: 'inline-flex', alignItems: 'center' }}>Cancel</a>
+        <a href={'/teacher/modules/' + moduleId} style={{ padding: '10px 16px', border: `1px solid #e5e7eb`, borderRadius: 8, fontSize: 14, textDecoration: 'none', color: '#111', background: '#fff', display: 'inline-flex', alignItems: 'center' }}>Cancel</a>
       </div>
 
       {showQuiz && <QuizModal onInsert={html => {
