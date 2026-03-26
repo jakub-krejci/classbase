@@ -94,90 +94,145 @@ function CodeViewer({ code }: { code: string }) {
   )
 }
 
-// ── Try-it viewer — highlighted overlay technique ────────────────────────────
-// A <pre> with colored HTML sits behind a transparent <textarea>.
-// The textarea captures input; the pre shows colors. They stay in sync.
-function TryItViewer({ initialCode }: { initialCode: string }) {
+// ── Try-it viewer (Pyodide-powered Jupyter-style cell) ───────────────────────
+function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; expectedOutput?: string }) {
   const [code, setCode] = useState(initialCode)
   const [output, setOutput] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
+  const [pyReady, setPyReady] = useState(false)
+  const [pyLoading, setPyLoading] = useState(false)
+  const [fontSize, setFontSize] = useState(14)
+  const [outputHistory, setOutputHistory] = useState<string[]>([])
   const taRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
 
-  function syncHighlight(val: string) {
-    if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n'
-  }
-  function syncHeight() {
-    if (!taRef.current) return
-    taRef.current.style.height = 'auto'
-    taRef.current.style.height = taRef.current.scrollHeight + 'px'
-  }
+  function syncHighlight(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
+  function syncHeight() { if (!taRef.current) return; taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' }
   useEffect(() => { syncHighlight(code); syncHeight() }, [])
 
-  function run() {
-    setRunning(true)
-    setTimeout(() => { setOutput(runPy(code)); setRunning(false) }, 10)
+  useEffect(() => {
+    import('@/lib/pyodide-runner').then(m => {
+      setPyLoading(true)
+      m.loadPyodide().then(() => { setPyReady(true); setPyLoading(false) }).catch(() => setPyLoading(false))
+    })
+  }, [])
+
+  async function run() {
+    if (running) return
+    setRunning(true); setOutput(null); setError(null)
+    try {
+      const { runPython } = await import('@/lib/pyodide-runner')
+      const { output: out, error: err } = await runPython(code, () => {})
+      const result = out || '(no output)'
+      setOutput(result)
+      if (err) setError(err)
+      setOutputHistory(h => [result, ...h.slice(0, 4)])
+    } catch (e: any) { setError(e.message) }
+    setRunning(false)
   }
 
-  const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",monospace'
-  const codeStyle: React.CSSProperties = {
-    fontFamily: monoFont, fontSize: 14, lineHeight: 1.7,
-    padding: '14px 16px', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-    display: 'block', boxSizing: 'border-box', width: '100%',
-  }
+  const checkResult = output && expectedOutput?.trim()
+    ? output.trim() === expectedOutput.trim() ? 'correct' : 'wrong'
+    : null
+
+  const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace'
+  const monoStyle: React.CSSProperties = { fontFamily: monoFont, fontSize, lineHeight: 1.7, padding: '14px 16px 14px 52px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', boxSizing: 'border-box', width: '100%' }
+  const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
 
   return (
     <div style={{ background:'#1a1b26', borderRadius:8, overflow:'hidden', margin:'12px 0', border:'1px solid #2a2a4a' }}>
-      <div style={{ background:'#16213e', padding:'7px 14px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <span style={{ fontFamily:'monospace', fontSize:10, color:'#7aa2f7', letterSpacing:'.06em' }}>▶ TRY IT YOURSELF — Python</span>
+      {/* Header */}
+      <div style={{ background:'#16213e', padding:'6px 14px', display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ width:9,height:9,borderRadius:'50%',background:'#f38ba8',flexShrink:0 }} />
+        <div style={{ width:9,height:9,borderRadius:'50%',background:'#f9e2af',flexShrink:0 }} />
+        <div style={{ width:9,height:9,borderRadius:'50%',background:'#a6e3a1',flexShrink:0 }} />
+        <span style={{ fontFamily:'monospace', fontSize:10, color:'#7aa2f7', letterSpacing:'.06em', flex:1, marginLeft:4 }}>
+          ▶ TRY IT YOURSELF — Python
+          {pyLoading && <span style={{ color:'#45475a', marginLeft:8 }}>loading Python runtime…</span>}
+          {pyReady && <span style={{ color:'#a6e3a1', marginLeft:8 }}>● ready</span>}
+        </span>
+        <button onClick={() => setFontSize(f => Math.max(10, f-1))} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A−</button>
+        <button onClick={() => setFontSize(f => Math.min(20, f+1))} style={{ fontSize:12, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A+</button>
+        <button onClick={() => { setCode(initialCode); syncHighlight(initialCode); syncHeight(); setOutput(null); setError(null) }}
+          style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Reset to starter code">↺ Reset</button>
         <button onClick={run} disabled={running}
-          style={{ padding:'4px 12px', fontSize:12, background:'#7aa2f7', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>
-          {running ? 'Running…' : '▶ Run'}
+          style={{ padding:'3px 12px', fontSize:12, background: pyReady?'#a6e3a1':'#7aa2f7', color:'#1a1b26', border:'none', borderRadius:5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+          {running ? '⏳ Running…' : '▶ Run'}
         </button>
       </div>
 
-      {/* Stacked: highlighted pre behind transparent textarea */}
-      <div style={{ position:'relative', background:'#1e1e2e' }}>
-        {/* Highlighted layer */}
-        <pre ref={preRef}
-          aria-hidden="true"
-          style={{ ...codeStyle, color:'#cdd6f4', background:'transparent', pointerEvents:'none', position:'absolute', inset:0, overflow:'hidden', minHeight:60 }} />
-        {/* Editable layer */}
-        <textarea
-          ref={taRef}
-          value={code}
-          spellCheck={false}
-          onChange={e => {
-            setCode(e.target.value)
-            syncHighlight(e.target.value)
-            syncHeight()
-          }}
+      {/* Editor with line numbers */}
+      <div style={{ position:'relative', background:'#1e1e2e', display:'flex' }}>
+        <div style={{ width:40, flexShrink:0, background:'#181825', padding:'14px 8px 14px 0', textAlign:'right', fontFamily:'ui-monospace,monospace', fontSize, lineHeight:1.7, color:'#45475a', userSelect:'none', pointerEvents:'none', boxSizing:'border-box' }}>
+          {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i+1}</div>)}
+        </div>
+        <pre ref={preRef} aria-hidden="true"
+          style={{ ...monoStyle, color:'#cdd6f4', background:'transparent', pointerEvents:'none', position:'absolute', left:40, top:0, right:0, bottom:0, margin:0, overflow:'hidden' }} />
+        <textarea ref={taRef} value={code} spellCheck={false}
+          onChange={e => { setCode(e.target.value); syncHighlight(e.target.value); syncHeight() }}
           onKeyDown={e => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
-            if (e.key === 'Tab') {
+            const ta = e.currentTarget; const s=ta.selectionStart, en=ta.selectionEnd, v=ta.value
+            if (e.key==='Enter' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); run(); return }
+            if (e.key==='Tab') {
               e.preventDefault()
-              const s = e.currentTarget.selectionStart, en = e.currentTarget.selectionEnd, v = e.currentTarget.value
-              const nv = v.slice(0,s)+'    '+v.slice(en)
-              setCode(nv); syncHighlight(nv)
-              requestAnimationFrame(() => {
-                if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s+4 }
-              })
+              if (e.shiftKey) {
+                const ls=v.lastIndexOf('\n',s-1)+1; const sp=v.slice(ls).match(/^ {1,4}/)?.[0]??''
+                if (sp) { const nv=v.slice(0,ls)+v.slice(ls+sp.length); setCode(nv); syncHighlight(nv); requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s-sp.length}) }
+              } else {
+                const nv=v.slice(0,s)+'    '+v.slice(en); setCode(nv); syncHighlight(nv); requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s+4})
+              }
+              return
+            }
+            if (e.key==='Enter' && !e.shiftKey) {
+              e.preventDefault()
+              const ls=v.lastIndexOf('\n',s-1)+1; const cur=v.slice(ls,s)
+              const indent=cur.match(/^(\s*)/)?.[1]??''; const extra=cur.trimEnd().endsWith(':')?'    ':''
+              const nv=v.slice(0,s)+'\n'+indent+extra+v.slice(en); setCode(nv); syncHighlight(nv)
+              requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s+1+indent.length+extra.length})
+            }
+            // Auto-close brackets
+            const pairs: Record<string,string> = {'(':')','{':'}','[':']','"':'"',"'":"'"}
+            if (pairs[e.key] && s===en) {
+              e.preventDefault()
+              const nv=v.slice(0,s)+e.key+pairs[e.key]+v.slice(en); setCode(nv); syncHighlight(nv)
+              requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s+1})
             }
           }}
-          style={{ ...codeStyle, color:'transparent', caretColor:'#cdd6f4', background:'transparent', border:'none', outline:'none', resize:'none', overflow:'hidden', position:'relative', zIndex:1, minHeight:60 }}
+          style={{ ...monoStyle, flex:1, color:'transparent', caretColor:'#cdd6f4', background:'transparent', border:'none', outline:'none', resize:'none', overflow:'hidden', position:'relative', zIndex:1, minHeight:60, paddingLeft:52 }}
         />
       </div>
 
-      {output !== null && (
-        <div style={{ background:'#0d1117', borderTop:'1px solid #2a2a4a', padding:'10px 16px' }}>
-          <div style={{ fontSize:10, color:'#6c7086', marginBottom:4, fontFamily:'monospace', letterSpacing:'.05em' }}>OUTPUT</div>
-          <pre style={{ color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, margin:0, whiteSpace:'pre-wrap' }}>{output}</pre>
+      {/* Output */}
+      {(output !== null || error !== null) && (
+        <div style={{ background:'#0d1117', borderTop:'1px solid #2a2a4a', padding:'10px 14px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+            <span style={{ fontSize:10, color:'#6c7086', fontFamily:'monospace', letterSpacing:'.05em' }}>OUTPUT</span>
+            {checkResult==='correct' && <span style={{ fontSize:10, background:'#a6e3a1', color:'#1a1b26', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>✓ Correct!</span>}
+            {checkResult==='wrong' && <span style={{ fontSize:10, background:'#f38ba8', color:'#1a1b26', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>✗ Expected: {expectedOutput}</span>}
+            {output && <button onClick={()=>navigator.clipboard?.writeText(output!)} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', marginLeft:'auto' }}>⎘ Copy</button>}
+          </div>
+          {output && <pre style={{ color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, margin:0, whiteSpace:'pre-wrap' }}>{output}</pre>}
+          {error && <pre style={{ color:'#f38ba8', fontFamily:'ui-monospace,monospace', fontSize:12, margin: output?'6px 0 0':0, whiteSpace:'pre-wrap' }}>{error}</pre>}
         </div>
       )}
-      <div style={{ padding:'4px 14px 6px', fontSize:10, color:'#4a4a6a' }}>Ctrl+Enter to run · Tab for indent</div>
+
+      {/* Output history */}
+      {outputHistory.length > 1 && (
+        <details style={{ background:'#0a0a0f', borderTop:'1px solid #2a2a4a' }}>
+          <summary style={{ fontSize:10, color:'#45475a', padding:'4px 14px', cursor:'pointer', userSelect:'none', listStyle:'none' }}>▸ {outputHistory.length-1} previous run{outputHistory.length>2?'s':''}</summary>
+          {outputHistory.slice(1).map((h,i) => (
+            <pre key={i} style={{ color:'#585b70', fontFamily:'ui-monospace,monospace', fontSize:12, margin:0, padding:'4px 14px', borderTop:'1px solid #1a1a2e', whiteSpace:'pre-wrap' }}>{h}</pre>
+          ))}
+        </details>
+      )}
+      <div style={{ padding:'4px 14px 5px', fontSize:10, color:'#313244', display:'flex', gap:12 }}>
+        <span>Ctrl+Enter run</span><span>Tab indent</span><span>Shift+Tab unindent</span><span>Auto-closes brackets</span>
+      </div>
     </div>
   )
 }
+
 
 // ── HTML content block with quiz activation ───────────────────────────────────
 function HtmlBlock({ html }: { html: string }) {

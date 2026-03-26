@@ -451,131 +451,6 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   )
 }
 
-function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
-  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
-}) {
-  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
-  const [showTableModal, setShowTableModal] = useState(false)
-  const savedColorRange = useRef<Range | null>(null)
-  const [code, setCode] = useState(block.content)
-  const taRef = useRef<HTMLTextAreaElement>(null)
-  function autoResize() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
-  useEffect(() => { autoResize() }, [])
-  return (
-    <div style={{ background: '#1e1e2e', borderRadius: 8, overflow: 'hidden', margin: '8px 0', border: '2px solid #313244' }}>
-      <div style={{ background: '#16213e', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em' }}>PYTHON — code block</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button onClick={onMoveUp} style={{ fontSize:11,color:'#6c7086',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>↑</button>
-          <button onClick={onMoveDown} style={{ fontSize:11,color:'#6c7086',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>↓</button>
-          <button onClick={onDelete} style={{ fontSize:11,color:'#f38ba8',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>✕</button>
-        </div>
-      </div>
-      <textarea
-        ref={taRef}
-        value={code}
-        spellCheck={false}
-        onChange={e => { setCode(e.target.value); onChange(e.target.value); autoResize() }}
-        onKeyDown={e => {
-          if (e.key === 'Tab') { e.preventDefault(); const s=e.currentTarget.selectionStart,en=e.currentTarget.selectionEnd,v=e.currentTarget.value; e.currentTarget.value=v.slice(0,s)+'    '+v.slice(en); e.currentTarget.selectionStart=e.currentTarget.selectionEnd=s+4; setCode(e.currentTarget.value); onChange(e.currentTarget.value) }
-        }}
-        style={{ width: '100%', background: '#1e1e2e', color: '#cdd6f4', fontFamily: 'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize: 14, padding: '14px 16px', border: 'none', outline: 'none', resize: 'none', lineHeight: 1.7, display: 'block', boxSizing: 'border-box', minHeight: 60, overflow: 'hidden' }}
-        placeholder="# Write Python here&#10;print('Hello, world!')"
-      />
-    </div>
-  )
-}
-
-// ─── Try-it block ─────────────────────────────────────────────────────────────
-function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
-  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
-}) {
-  const [code, setCode] = useState(block.content)
-  const [output, setOutput] = useState<string | null>(null)
-  const [running, setRunning] = useState(false)
-  const taRef = useRef<HTMLTextAreaElement>(null)
-  const preRef = useRef<HTMLPreElement>(null)
-  function syncHL(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
-  function syncH() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
-  useEffect(() => { syncHL(code); syncH() }, [])
-
-  function run() {
-    setRunning(true)
-    let out = ''
-    try {
-      const vars: Record<string,any> = {}
-      code.split('\n').forEach(line => {
-        const t = line.trim()
-        const pm = t.match(/^print\((.+)\)$/)
-        if (pm) {
-          try {
-            const r = pm[1]; const fstr = r.match(/^f["'](.*)["']$/)
-            if (fstr) {
-              out += fstr[1].replace(/\{([^}]+)\}/g, (_:any, v:string) => {
-                try { return String(eval(v.replace(/\b(\w+)\b/g,(m:string)=>vars[m]!==undefined?JSON.stringify(vars[m]):m))) } catch { return v }
-              }) + '\n'
-            } else {
-              out += String(eval(r.replace(/\b(\w+)\b/g,(m:string)=>vars[m]!==undefined?JSON.stringify(vars[m]):m))) + '\n'
-            }
-          } catch(e:any) { out += 'Error: '+e.message+'\n' }
-        }
-        const asgn = t.match(/^(\w+)\s*=\s*(.+)$/)
-        if (asgn && !t.startsWith('print')) {
-          try { vars[asgn[1]] = eval(asgn[2].replace(/\b(\w+)\b/g,(m:string)=>vars[m]!==undefined?JSON.stringify(vars[m]):m)) } catch {}
-        }
-      })
-    } catch(e:any) { out = 'Error: '+e.message }
-    setOutput(out.trim() || '(no output)')
-    setRunning(false)
-  }
-
-  return (
-    <div style={{ background: '#1a1b26', borderRadius: 8, overflow: 'hidden', margin: '8px 0', border: '2px solid #2a2a4a' }}>
-      <div style={{ background: '#16213e', padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em' }}>▶ TRY IT — Interactive Python</span>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button onClick={run} disabled={running} style={{ padding:'3px 10px', fontSize:11, background:'#7aa2f7', color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontFamily:'inherit' }}>
-            {running ? '…' : 'Run ▶'}
-          </button>
-          <button onClick={onMoveUp} style={{ fontSize:11,color:'#6c7086',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>↑</button>
-          <button onClick={onMoveDown} style={{ fontSize:11,color:'#6c7086',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>↓</button>
-          <button onClick={onDelete} style={{ fontSize:11,color:'#f38ba8',background:'none',border:'none',cursor:'pointer',padding:'2px 5px' }}>✕</button>
-        </div>
-      </div>
-      {/* Overlay: highlighted pre behind transparent textarea */}
-      <div style={{ position:'relative', background:'#1e1e2e' }}>
-        <pre ref={preRef} aria-hidden="true"
-          style={{ fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, lineHeight:1.7, padding:'14px 16px', margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all', position:'absolute', inset:0, overflow:'hidden', color:'#cdd6f4', background:'transparent', pointerEvents:'none', minHeight:60, boxSizing:'border-box' }} />
-        <textarea
-          ref={taRef}
-          value={code}
-          spellCheck={false}
-          onChange={e => { setCode(e.target.value); onChange(e.target.value); syncHL(e.target.value); syncH() }}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run() }
-            if (e.key === 'Tab') {
-              e.preventDefault()
-              const s=e.currentTarget.selectionStart, en=e.currentTarget.selectionEnd, v=e.currentTarget.value
-              const nv = v.slice(0,s)+'    '+v.slice(en)
-              setCode(nv); onChange(nv); syncHL(nv)
-              requestAnimationFrame(() => { if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s+4 } })
-            }
-          }}
-          style={{ width:'100%', background:'transparent', color:'transparent', caretColor:'#cdd6f4', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, padding:'14px 16px', border:'none', outline:'none', resize:'none', lineHeight:1.7, display:'block', boxSizing:'border-box', minHeight:60, overflow:'hidden', position:'relative', zIndex:1 }}
-          placeholder="# Ctrl+Enter to run&#10;print('Hello!')"
-        />
-      </div>
-      {output !== null && (
-        <div style={{ background:'#0d1117', color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, padding:'10px 16px', borderTop:'1px solid #2a2a4a', whiteSpace:'pre-wrap' }}>
-          <span style={{ color:'#6c7086', fontSize:10, display:'block', marginBottom:3 }}>OUTPUT</span>
-          {output}
-        </div>
-      )}
-      <div style={{ padding:'4px 12px', fontSize:10, color:'#4a4a6a' }}>Ctrl+Enter to run · Tab for indent</div>
-    </div>
-  )
-}
-
 // ─── Table modal ──────────────────────────────────────────────────────────────
 function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) => void; onClose: () => void }) {
   const [rows, setRows] = useState(3)
@@ -598,6 +473,718 @@ function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) =>
           <button onClick={onClose}
             style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Quiz modal ───────────────────────────────────────────────────────────────
+function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:()=>void }) {
+  const [q, setQ] = useState('')
+  const [opts, setOpts] = useState(['', '', '', ''])
+  const [correct, setCorrect] = useState(0)
+  const [expl, setExpl] = useState(['', '', '', ''])
+  const [err, setErr] = useState('')
+  const inp: React.CSSProperties = { width:'100%', padding:'7px 9px', border:'1px solid #e5e7eb', borderRadius:7, fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:8, boxSizing:'border-box' as const }
+
+  function handleInsert() {
+    const filledOpts = opts.filter(x => x.trim())
+    if (!q.trim()) { setErr('Please enter a question.'); return }
+    if (filledOpts.length < 2) { setErr('Please add at least 2 options.'); return }
+    setErr('')
+    const oE = JSON.stringify(filledOpts).replace(/"/g, '&quot;')
+    const eE = JSON.stringify(expl.filter((_, i) => opts[i]?.trim()).slice(0, filledOpts.length)).replace(/"/g, '&quot;')
+    const qE = q.replace(/"/g, '&quot;')
+    const html = '<div class="cb-quiz" data-q="' + qE + '" data-opts="' + oE + '" data-correct="' + correct + '" data-expl="' + eE + '" contenteditable="false" style="background:#f0f7ff;border:1px solid #B5D4F4;border-radius:10px;margin:10px 0;padding:0;overflow:hidden"><div style="padding:9px 14px;background:#E6F1FB;font-size:10px;font-weight:700;color:#0C447C;text-transform:uppercase;letter-spacing:.06em">✓ Quiz — ' + q + '</div></div>'
+    onInsert(html)
+    onClose()
+  }
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{background:'#fff',borderRadius:14,padding:24,width:'100%',maxWidth:560,maxHeight:'90vh',overflowY:'auto'}}>
+        <h2 style={{fontSize:16,fontWeight:600,marginBottom:14}}>Insert quiz question</h2>
+        <label style={{fontSize:11,fontWeight:600,color:'#555',display:'block',marginBottom:3}}>Question</label>
+        <input value={q} onChange={e=>{setQ(e.target.value);setErr('')}} style={inp} placeholder="e.g. What is Newton's first law?" />
+        <label style={{fontSize:11,fontWeight:600,color:'#555',display:'block',margin:'10px 0 4px'}}>
+          Options <span style={{fontWeight:400,color:'#888'}}>(click circle to mark correct answer)</span>
+        </label>
+        {opts.map((o, ii) => (
+          <div key={ii} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            <div onClick={()=>setCorrect(ii)}
+              style={{width:18,height:18,borderRadius:'50%',border:'2px solid',flexShrink:0,cursor:'pointer',
+                borderColor:correct===ii?'#185FA5':'#ccc',background:correct===ii?'#185FA5':'#fff'}} />
+            <input value={o} onChange={e=>setOpts(p=>p.map((x,j)=>j===ii?e.target.value:x))}
+              style={{...inp,flex:2,marginBottom:0,borderColor:correct===ii?'#185FA5':'#e5e7eb'}}
+              placeholder={'Option ' + (ii+1)} />
+            <input value={expl[ii]} onChange={e=>setExpl(p=>p.map((x,j)=>j===ii?e.target.value:x))}
+              style={{...inp,flex:2,marginBottom:0,background:'#fffbf0',borderColor:'#ffe4a0',fontSize:12}}
+              placeholder="Explanation if wrong (optional)" />
+          </div>
+        ))}
+        <button onClick={()=>{setOpts(p=>[...p,'']);setExpl(p=>[...p,''])}}
+          style={{fontSize:12,color:'#185FA5',background:'none',border:'none',cursor:'pointer',marginBottom:8,padding:'2px 0'}}>
+          + Add option
+        </button>
+        {err && <div style={{fontSize:12,color:'#791F1F',background:'#FCEBEB',borderRadius:7,padding:'7px 10px',marginBottom:10}}>{err}</div>}
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <button onClick={handleInsert}
+            style={{flex:1,padding:'10px',background:'#185FA5',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+            Insert quiz
+          </button>
+          <button onClick={onClose}
+            style={{padding:'10px 18px',border:'1px solid #e5e7eb',borderRadius:8,fontSize:13,cursor:'pointer',background:'#fff'}}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+function MediaModal({ type, lessons, moduleId: modId, onInsert, onClose }: {
+  type: 'image' | 'video' | 'file' | 'link'
+  lessons?: any[]
+  moduleId?: string
+  onInsert: (html: string) => void
+  onClose: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const [label, setLabel] = useState('')
+  const [imgWidth, setImgWidth] = useState('100%')
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+  const [tab, setTab] = useState<'url' | 'upload' | 'storage'>('url')
+  const [storageFiles, setStorageFiles] = useState<{name:string,url:string}[]>([])
+  const [storageLoading, setStorageLoading] = useState(false)
+  const [storageErr, setStorageErr] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const supabaseClient = createClient()
+
+  async function loadStorageFiles() {
+    setStorageLoading(true); setStorageErr('')
+    try {
+      const { data, error } = await supabaseClient.storage.from('lesson-assets').list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } })
+      if (error) { setStorageErr(error.message); setStorageLoading(false); return }
+      const files = (data ?? []).filter(f => f.name !== '.emptyFolderPlaceholder').map(f => {
+        const { data: urlData } = supabaseClient.storage.from('lesson-assets').getPublicUrl(f.name)
+        return { name: f.name, url: urlData.publicUrl }
+      })
+      setStorageFiles(files)
+    } catch(e: any) { setStorageErr(e.message) }
+    setStorageLoading(false)
+  }
+
+  async function upload(f: File) {
+    setUploading(true); setUploadErr('')
+    const fd = new FormData(); fd.append('file', f)
+    const res = await fetch('/api/upload', { method: 'POST', body: fd })
+    const data = await res.json()
+    if (!res.ok) { setUploadErr(data.error ?? 'Upload failed'); setUploading(false); return }
+    setUrl(data.url); setLabel(f.name); setUploading(false)
+  }
+
+  function build(): string {
+    if (type === 'image') {
+      const w = imgWidth.trim() || '100%'
+      const widthAttr = w.endsWith('%') || w.endsWith('px') ? w : w + 'px'
+      return `<img src="${url}" alt="${label || 'image'}" style="width:${widthAttr};max-width:100%;border-radius:8px;margin:8px 0;display:block">`
+    }
+    if (type === 'video') {
+      const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]+)/)
+      const vm = url.match(/vimeo\.com\/(\d+)/)
+      const src = yt ? `https://www.youtube.com/embed/${yt[1]}` : vm ? `https://player.vimeo.com/video/${vm[1]}` : url
+      return `<iframe src="${src}" allowfullscreen style="width:100%;aspect-ratio:16/9;border:none;border-radius:8px;margin:8px 0;display:block"></iframe>`
+    }
+    if (type === 'file') return `<a href="${url}" target="_blank" download style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;color:#185FA5;text-decoration:none;margin:6px 0">📎 ${label || url.split('/').pop()}</a>`
+    if (type === 'link') return `<a href="${url}" target="${url.startsWith('/') ? '_self' : '_blank'}" style="color:#185FA5;text-decoration:underline">${label || url}</a>`
+    return ''
+  }
+
+  const titles: Record<string,string> = { image: 'Insert image / animation', video: 'Embed or upload video', file: 'Attach downloadable file', link: 'Insert hyperlink' }
+  const inp: React.CSSProperties = { width:'100%', padding:'8px 10px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:10 }
+  const lbl: React.CSSProperties = { fontSize:11, fontWeight:600, color:'#555', display:'block', marginBottom:3 }
+
+  const showUploadTab = type === 'image' || type === 'file' || type === 'video'
+  const showStorageTab = type === 'image' || type === 'video' || type === 'file'
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background:'#fff', borderRadius:14, padding:24, width:'100%', maxWidth:500, maxHeight:'90vh', overflowY:'auto' }}>
+        <h2 style={{ fontSize:16, fontWeight:600, marginBottom:14 }}>{titles[type]}</h2>
+
+        {showUploadTab && (
+          <div style={{ display:'flex', borderBottom:'1px solid #e5e7eb', marginBottom:14, gap:0 }}>
+            {[
+              ['url', 'External URL'],
+              ['upload', 'Upload file'],
+              ...(showStorageTab ? [['storage', '☁ Supabase']] : []),
+            ].map(([t, label]) => (
+              <button key={t} onClick={() => { setTab(t as any); if (t === 'storage' && !storageFiles.length) loadStorageFiles() }}
+                style={{ padding:'6px 12px', fontSize:12, fontWeight:500, background:'none', border:'none', borderBottom:tab===t?'2px solid #185FA5':'2px solid transparent', color:tab===t?'#185FA5':'#888', cursor:'pointer', whiteSpace:'nowrap' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {tab === 'storage' ? (
+          <div>
+            {storageLoading && <div style={{ textAlign:'center', padding:20, color:'#888', fontSize:13 }}>Loading files…</div>}
+            {storageErr && <div style={{ fontSize:12, color:'#791F1F', marginBottom:8, padding:'8px 10px', background:'#FCEBEB', borderRadius:8 }}>
+              {storageErr}<br/><span style={{ fontSize:11 }}>Make sure the lesson-assets bucket exists in Supabase Storage.</span>
+            </div>}
+            {!storageLoading && !storageErr && storageFiles.length === 0 && (
+              <div style={{ textAlign:'center', padding:20, color:'#aaa', fontSize:13 }}>No files in storage yet. Upload files first.</div>
+            )}
+            {!storageLoading && storageFiles.length > 0 && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, maxHeight:280, overflowY:'auto', marginBottom:12 }}>
+                {storageFiles.map(f => {
+                  const isImg = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(f.name)
+                  const isVid = /\.(mp4|webm|mov)$/i.test(f.name)
+                  const selected = url === f.url
+                  return (
+                    <div key={f.name} onClick={() => { setUrl(f.url); setLabel(f.name.replace(/\.[^.]+$/, '')) }}
+                      style={{ border: selected ? '2px solid #185FA5' : '1px solid #e5e7eb', borderRadius:8, overflow:'hidden', cursor:'pointer', background: selected ? '#E6F1FB' : '#fafafa', position:'relative' }}>
+                      {isImg && <img src={f.url} alt={f.name} style={{ width:'100%', height:70, objectFit:'cover', display:'block' }} />}
+                      {isVid && <div style={{ height:70, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>🎬</div>}
+                      {!isImg && !isVid && <div style={{ height:70, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>📎</div>}
+                      <div style={{ padding:'4px 6px', fontSize:10, color:'#555', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</div>
+                      {selected && <div style={{ position:'absolute', top:4, right:4, background:'#185FA5', color:'#fff', borderRadius:'50%', width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10 }}>✓</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <button onClick={loadStorageFiles} style={{ fontSize:11, color:'#185FA5', background:'none', border:'none', cursor:'pointer', marginBottom:8 }}>↺ Refresh</button>
+          </div>
+        ) : tab === 'upload' && showUploadTab ? (
+          <div>
+            <div onClick={() => fileRef.current?.click()}
+              style={{ border:'2px dashed #e5e7eb', borderRadius:10, padding:24, textAlign:'center', cursor:'pointer', color:url?'#27500A':'#888', fontSize:13, background:url?'#f0fff4':'#fafafa', marginBottom:10 }}>
+              {uploading ? 'Uploading to Supabase Storage…' : url ? '✓ ' + (label || 'File uploaded — ready to insert') : 'Click to choose a file from your computer (saves to Supabase Storage)'}
+            </div>
+            <input ref={fileRef} type="file"
+              accept={type === 'image' ? 'image/*,image/gif' : type === 'video' ? 'video/*' : undefined}
+              style={{ display:'none' }}
+              onChange={e => e.target.files?.[0] && upload(e.target.files[0])} />
+            {uploadErr && <div style={{ fontSize:12, color:'#791F1F', marginBottom:8 }}>{uploadErr}</div>}
+          </div>
+        ) : (
+          <>
+            <label style={lbl}>
+              {type === 'video' ? 'YouTube / Vimeo URL' : type === 'link' ? 'URL (https:// or /student/...)' : 'Image URL'}
+            </label>
+            <input value={url} onChange={e => setUrl(e.target.value)} style={inp}
+              placeholder={type === 'video' ? 'https://youtube.com/watch?v=...' : 'https://'} />
+          </>
+        )}
+
+        {type === 'image' && (
+          <>
+            <label style={lbl}>Alt text / label</label>
+            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder="Describe the image" />
+            <label style={lbl}>Display width (e.g. 100%, 400px, 50%)</label>
+            <input value={imgWidth} onChange={e => setImgWidth(e.target.value)} style={inp} placeholder="100%" />
+            {url && (
+              <div style={{ marginBottom:10 }}>
+                <img src={url} alt="preview" style={{ maxWidth:'100%', maxHeight:120, borderRadius:8, border:'1px solid #e5e7eb', objectFit:'contain' }} />
+              </div>
+            )}
+          </>
+        )}
+        {(type === 'file' || type === 'link') && (
+          <>
+            <label style={lbl}>{type === 'link' ? 'Link text' : 'Label'}</label>
+            <input value={label} onChange={e => setLabel(e.target.value)} style={inp} placeholder={type === 'link' ? 'Click here' : 'Filename or description'} />
+          </>
+        )}
+        {type === 'link' && lessons && lessons.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 6 }}>Or link to a lesson in this module:</div>
+            <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+              {lessons.map((l: any) => (
+                <button key={l.id}
+                  onClick={() => { setUrl(`/student/modules/${modId}/lessons/${l.id}`); setLabel(l.title) }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: url.includes(l.id) ? '#E6F1FB' : 'transparent', border: 'none', borderBottom: '1px solid #f3f4f6', fontSize: 13, cursor: 'pointer', color: '#333' }}>
+                  📄 {l.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={() => { if (url) { onInsert(build()); onClose() } }}
+            disabled={!url || uploading}
+            style={{ flex:1, padding:'9px', background:'#185FA5', color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', opacity:(!url||uploading)?.5:1 }}>
+            Insert
+          </button>
+          <button onClick={onClose} style={{ padding:'9px 16px', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, cursor:'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ─── Main editor page ─────────────────────────────────────────────────────────
+export default function LessonEditorPage() {
+  const supabase = createClient()
+  const params = useParams() as any
+  const moduleId = params?.id as string
+  const lessonId = params?.lessonId as string
+  const isNew = !lessonId || lessonId === 'new'
+
+  const [title, setTitle] = useState('')
+  const [authorName, setAuthorName] = useState('')
+  const [authorId, setAuthorId] = useState('')
+  const [blocks, setBlocks] = useState<Block[]>([{ id: uid(), type: 'html', content: '' }])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [lessonLinks, setLessonLinks] = useState<any[]>([])
+  const pendingInsertFn = useRef<((html: string) => void) | null>(null)
+  const pendingQuizInsertFn = useRef<((html: string) => void) | null>(null)
+  const [showQuiz, setShowQuiz] = useState(false)
+  const [quizTargetId, setQuizTargetId] = useState<string | null>(null)
+  const [mediaModal, setMediaModal] = useState<null | 'image' | 'video' | 'file' | 'link'>(null)
+  const [mediaTargetId, setMediaTargetId] = useState<string | null>(null)
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
+  const [showTableModal, setShowTableModal] = useState(false)
+  const savedColorRange = useRef<Range | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setAuthorId(user.id)
+        const { data: prof } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+        setAuthorName((prof as any)?.full_name ?? user.email ?? '')
+      }
+      // Load lessons list for link-to-lesson in MediaModal
+      const { data: lessonList } = await supabase.from('lessons').select('id,title,position').eq('module_id', moduleId).order('position')
+      setLessonLinks((lessonList ?? []) as any[])
+      if (!isNew && lessonId) {
+        const { data, error: le } = await supabase.from('lessons').select('*').eq('id', lessonId).single()
+        if (le) { setError('Failed to load: ' + le.message); setLoading(false); return }
+        if (data) {
+          setTitle((data as any).title ?? '')
+          const parsed = htmlToBlocks((data as any).content_html ?? '')
+          setBlocks(parsed)
+        }
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  function updateBlock(id: string, content: string) {
+    setBlocks(prev => prev.map(b => b.id === id ? { ...b, content } : b))
+  }
+  function addBlockAfter(afterId: string, type: BlockType) {
+    setBlocks(prev => {
+      const idx = prev.findIndex(b => b.id === afterId)
+      const nb: Block = { id: uid(), type, content: type === 'tryit' ? 'print("Hello!")\n' : '# Python code\nprint("Hello, world!")\n' }
+      const next = [...prev]; next.splice(idx + 1, 0, nb); return next
+    })
+  }
+  function deleteBlock(id: string) {
+    setBlocks(prev => prev.length <= 1 ? prev : prev.filter(b => b.id !== id))
+  }
+  function moveBlock(id: string, dir: -1 | 1) {
+    setBlocks(prev => {
+      const idx = prev.findIndex(b => b.id === id)
+      const ni = idx + dir
+      if (ni < 0 || ni >= prev.length) return prev
+      const next = [...prev]; [next[idx], next[ni]] = [next[ni], next[idx]]; return next
+    })
+  }
+  function addHtmlBlock(afterId: string) {
+    setBlocks(prev => {
+      const idx = prev.findIndex(b => b.id === afterId)
+      const nb: Block = { id: uid(), type: 'html', content: '' }
+      const next = [...prev]; next.splice(idx + 1, 0, nb); return next
+    })
+  }
+
+  async function save() {
+    if (!title.trim()) { setError('Title is required.'); return }
+    setSaving(true); setError('')
+    const html = blocksToHtml(blocks)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { window.location.href = '/login'; return }
+    if (isNew) {
+      const { data: last } = await supabase.from('lessons').select('position').eq('module_id', moduleId).order('position', { ascending: false }).limit(1)
+      const pos = last && last.length > 0 ? ((last[0] as any).position ?? 0) + 1 : 0
+      const { error: err } = await supabase.from('lessons').insert({ module_id: moduleId, title: title.trim(), content_html: html, position: pos, author_id: authorId } as any)
+      if (err) { setError(err.message); setSaving(false); return }
+    } else {
+      const { error: err } = await supabase.from('lessons').update({ title: title.trim(), content_html: html, updated_at: new Date().toISOString() } as any).eq('id', lessonId)
+      if (err) { setError(err.message); setSaving(false); return }
+    }
+    window.location.href = '/teacher/modules/' + moduleId
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#888', fontFamily: 'system-ui,sans-serif' }}>Loading lesson…</div>
+
+  return (
+    <div style={{ maxWidth: 860, margin: '24px auto', padding: '0 20px', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
+      <style>{EDITOR_CSS}{PYTHON_CSS}</style>
+      <BackLink href={'/teacher/modules/' + moduleId} label="Back to module" />
+      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4, color: '#111' }}>{isNew ? 'New lesson' : 'Edit lesson'}</h1>
+      {authorName && <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Author: {authorName}</div>}
+
+      <label style={{ fontSize: 11, fontWeight: 600, color: '#666', display: 'block', marginBottom: 3 }}>Lesson title</label>
+      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Newton's Laws of Motion"
+        style={{ width: '100%', maxWidth: 520, padding: '8px 11px', border: `1px solid #e5e7eb`, borderRadius: 8, fontSize: 14, fontFamily: 'inherit', marginBottom: 20, outline: 'none', background: '#fff', color: '#111' }} />
+
+      {/* Blocks */}
+      {blocks.map((block, i) => (
+        <div key={block.id}>
+          {block.type === 'html' && (
+            <RichBlock
+              block={block}
+              onChange={c => updateBlock(block.id, c)}
+              onAddAfter={type => addBlockAfter(block.id, type)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)}
+              canDelete={blocks.length > 1}
+              onOpenMedia={(type, insertFn) => {
+                pendingInsertFn.current = insertFn
+                setMediaModal(type)
+              }}
+              onInsertQuiz={(insertFn) => {
+                pendingQuizInsertFn.current = insertFn
+                setShowQuiz(true)
+              }}
+            />
+          )}
+          {block.type === 'code' && (
+            <CodeBlock block={block} onChange={c => updateBlock(block.id, c)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)} />
+          )}
+          {block.type === 'tryit' && (
+            <TryItBlock block={block} onChange={c => updateBlock(block.id, c)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)} />
+          )}
+          {/* Add block buttons between blocks */}
+          <div style={{ display:'flex', gap:4, margin:'4px 0 4px', justifyContent:'center', opacity:0.5 }}>
+            <button onClick={() => addHtmlBlock(block.id)} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#f9fafb', cursor:'pointer', color:'#555' }}>+ Text</button>
+            <button onClick={() => addBlockAfter(block.id,'code')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1e1e2e', cursor:'pointer', color:'#cdd6f4' }}>+ Code</button>
+            <button onClick={() => addBlockAfter(block.id,'tryit')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1a1b26', cursor:'pointer', color:'#7aa2f7' }}>+ Try it</button>
+            <button onClick={() => { setQuizTargetId(block.id); setShowQuiz(true) }} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #B5D4F4', borderRadius:4, background:'#E6F1FB', cursor:'pointer', color:'#0C447C' }}>+ Quiz</button>
+          </div>
+        </div>
+      ))}
+
+      {error && <div style={{ fontSize: 12, padding: '8px 11px', background: '#FCEBEB', color: '#791F1F', borderRadius: 8, margin: '12px 0' }}>{error}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <button onClick={save} disabled={saving}
+          style={{ padding: '10px 22px', background: '#185FA5', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', opacity: saving ? .6 : 1 }}>
+          {saving ? 'Saving…' : 'Save lesson'}
+        </button>
+        <a href={'/teacher/modules/' + moduleId} style={{ padding: '10px 16px', border: `1px solid #e5e7eb`, borderRadius: 8, fontSize: 14, textDecoration: 'none', color: '#111', background: '#fff', display: 'inline-flex', alignItems: 'center' }}>Cancel</a>
+      </div>
+
+      {showQuiz && <QuizModal onInsert={html => {
+        if (pendingQuizInsertFn.current) {
+          pendingQuizInsertFn.current(html)
+          pendingQuizInsertFn.current = null
+        }
+        setShowQuiz(false)
+      }} onClose={() => { setShowQuiz(false); pendingQuizInsertFn.current = null }} />}
+      {mediaModal && (
+        <MediaModal
+          type={mediaModal}
+          lessons={lessonLinks}
+          moduleId={moduleId}
+          onInsert={html => {
+            if (pendingInsertFn.current) pendingInsertFn.current(html)
+            pendingInsertFn.current = null
+            setMediaModal(null)
+          }}
+          onClose={() => { setMediaModal(null); pendingInsertFn.current = null }}
+        />
+      )}
+    </div>
+  )
+}
+// ─── Shared: auto-indent on Enter ─────────────────────────────────────────────
+function handleCodeKeyDown(
+  e: React.KeyboardEvent<HTMLTextAreaElement>,
+  onRun?: () => void,
+  extraHandler?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+) {
+  const ta = e.currentTarget
+  const s = ta.selectionStart, en = ta.selectionEnd, v = ta.value
+
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    if (e.shiftKey) {
+      // Shift+Tab: remove up to 4 spaces from line start
+      const lineStart = v.lastIndexOf('
+', s - 1) + 1
+      const spaces = v.slice(lineStart).match(/^ {1,4}/)?.[0] ?? ''
+      if (spaces) {
+        const nv = v.slice(0, lineStart) + v.slice(lineStart + spaces.length)
+        ta.value = nv; ta.selectionStart = ta.selectionEnd = s - spaces.length
+        return nv
+      }
+    } else {
+      const nv = v.slice(0, s) + '    ' + v.slice(en)
+      ta.value = nv; ta.selectionStart = ta.selectionEnd = s + 4
+      return nv
+    }
+  }
+
+  if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault()
+    // Auto-indent: match current line indent + add extra indent after : 
+    const lineStart = v.lastIndexOf('
+', s - 1) + 1
+    const currentLine = v.slice(lineStart, s)
+    const indent = currentLine.match(/^(\s*)/)?.[1] ?? ''
+    const extraIndent = currentLine.trimEnd().endsWith(':') ? '    ' : ''
+    const nv = v.slice(0, s) + '
+' + indent + extraIndent + v.slice(en)
+    ta.value = nv
+    ta.selectionStart = ta.selectionEnd = s + 1 + indent.length + extraIndent.length
+    return nv
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && onRun) {
+    e.preventDefault(); onRun()
+  }
+
+  if (e.key === '(' || e.key === '[' || e.key === '{' || e.key === '"' || e.key === "'") {
+    const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" }
+    const close = pairs[e.key]
+    if (s === en) { // no selection
+      e.preventDefault()
+      const nv = v.slice(0, s) + e.key + close + v.slice(en)
+      ta.value = nv; ta.selectionStart = ta.selectionEnd = s + 1
+      return nv
+    }
+  }
+
+  extraHandler?.(e)
+  return null
+}
+
+// ─── Code block (teacher editor) ──────────────────────────────────────────────
+function CodeBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
+  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
+}) {
+  const [code, setCode] = useState(block.content)
+  const [fontSize, setFontSize] = useState(14)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const preRef = useRef<HTMLPreElement>(null)
+
+  function syncHL(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
+  function syncH() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
+  useEffect(() => { syncHL(code); syncH() }, [])
+
+  function update(val: string) { setCode(val); onChange(val); syncHL(val); syncH() }
+
+  const monoStyle: React.CSSProperties = {
+    fontFamily: 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace',
+    fontSize, lineHeight: 1.7, padding: '14px 16px 14px 52px',
+    whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    display: 'block', boxSizing: 'border-box', width: '100%',
+  }
+
+  // Generate line numbers
+  const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
+
+  return (
+    <div style={{ background: '#1e1e2e', borderRadius: 8, overflow: 'hidden', margin: '8px 0', border: '2px solid #313244' }}>
+      {/* Header */}
+      <div style={{ background: '#16213e', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f38ba8', flexShrink: 0 }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f9e2af', flexShrink: 0 }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#a6e3a1', flexShrink: 0 }} />
+        <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em', flex: 1, marginLeft: 4 }}>PYTHON</span>
+        <button onClick={() => setFontSize(f => Math.max(10, f - 1))} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }} title="Decrease font size">A−</button>
+        <button onClick={() => setFontSize(f => Math.min(20, f + 1))} style={{ fontSize: 12, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }} title="Increase font size">A+</button>
+        <button onClick={() => { navigator.clipboard?.writeText(code) }} style={{ fontSize: 10, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 6px' }} title="Copy code">⎘</button>
+        <button onClick={onMoveUp} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↑</button>
+        <button onClick={onMoveDown} style={{ fontSize: 11, color: '#6c7086', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>↓</button>
+        <button onClick={onDelete} style={{ fontSize: 11, color: '#f38ba8', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>✕</button>
+      </div>
+
+      {/* Editor with line numbers */}
+      <div style={{ position: 'relative', background: '#1e1e2e', display: 'flex' }}>
+        {/* Line numbers */}
+        <div style={{ width: 40, flexShrink: 0, background: '#181825', padding: '14px 8px 14px 0', textAlign: 'right', fontFamily: 'ui-monospace,monospace', fontSize, lineHeight: 1.7, color: '#45475a', userSelect: 'none', pointerEvents: 'none', boxSizing: 'border-box' }}>
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div key={i}>{i + 1}</div>
+          ))}
+        </div>
+        {/* Highlighted pre */}
+        <pre ref={preRef} aria-hidden="true"
+          style={{ ...monoStyle, color: '#cdd6f4', background: 'transparent', pointerEvents: 'none', position: 'absolute', left: 40, top: 0, right: 0, bottom: 0, margin: 0, overflow: 'hidden' }} />
+        {/* Textarea */}
+        <textarea
+          ref={taRef}
+          value={code}
+          spellCheck={false}
+          onChange={e => update(e.target.value)}
+          onKeyDown={e => {
+            const nv = handleCodeKeyDown(e)
+            if (nv !== null) { update(nv); requestAnimationFrame(() => { if (taRef.current) { const pos = (taRef.current as any)._nextPos; if (pos !== undefined) { taRef.current.selectionStart = taRef.current.selectionEnd = pos } } }) }
+          }}
+          style={{ ...monoStyle, flex: 1, color: 'transparent', caretColor: '#cdd6f4', background: 'transparent', border: 'none', outline: 'none', resize: 'none', overflow: 'hidden', position: 'relative', zIndex: 1, minHeight: 60, paddingLeft: 52 }}
+          placeholder="# Write Python here"
+        />
+      </div>
+    </div>
+  )
+}
+
+// ─── Try-it block (teacher editor) ────────────────────────────────────────────
+function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown }: {
+  block: Block; onChange: (c: string) => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
+}) {
+  const [code, setCode] = useState(block.content)
+  const [output, setOutput] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [pyReady, setPyReady] = useState(false)
+  const [pyLoading, setPyLoading] = useState(false)
+  const [fontSize, setFontSize] = useState(14)
+  const [expectedOutput, setExpectedOutput] = useState('')
+  const [showExpected, setShowExpected] = useState(false)
+  const [outputHistory, setOutputHistory] = useState<string[]>([])
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const preRef = useRef<HTMLPreElement>(null)
+  const originalCode = useRef(block.content)
+
+  function syncHL(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
+  function syncH() { if (taRef.current) { taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' } }
+  useEffect(() => { syncHL(code); syncH() }, [])
+
+  // Eagerly start loading Pyodide
+  useEffect(() => {
+    import('@/lib/pyodide-runner').then(m => {
+      setPyLoading(true)
+      m.loadPyodide().then(() => { setPyReady(true); setPyLoading(false) }).catch(() => setPyLoading(false))
+    })
+  }, [])
+
+  async function run() {
+    if (running) return
+    setRunning(true); setOutput(null); setError(null)
+    try {
+      const { runPython } = await import('@/lib/pyodide-runner')
+      const lines: string[] = []
+      const { output: out, error: err } = await runPython(code, line => { lines.push(line) })
+      const result = out || '(no output)'
+      setOutput(result)
+      if (err) setError(err)
+      setOutputHistory(h => [result, ...h.slice(0, 4)])
+    } catch (e: any) {
+      setError(e.message)
+    }
+    setRunning(false)
+  }
+
+  function update(val: string) { setCode(val); onChange(val); syncHL(val); syncH() }
+
+  const checkResult = output && expectedOutput.trim()
+    ? output.trim() === expectedOutput.trim() ? 'correct' : 'wrong'
+    : null
+
+  const monoStyle: React.CSSProperties = {
+    fontFamily: 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace',
+    fontSize, lineHeight: 1.7, padding: '14px 16px 14px 52px',
+    whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    display: 'block', boxSizing: 'border-box', width: '100%',
+  }
+  const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
+
+  return (
+    <div style={{ background: '#1a1b26', borderRadius: 8, overflow: 'hidden', margin: '8px 0', border: '2px solid #2a2a4a' }}>
+      {/* Header */}
+      <div style={{ background: '#16213e', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f38ba8', flexShrink: 0 }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f9e2af', flexShrink: 0 }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#a6e3a1', flexShrink: 0 }} />
+        <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em', flex: 1, marginLeft: 4 }}>
+          ▶ TRY IT — Interactive Python
+          {pyLoading && <span style={{ color: '#45475a', marginLeft: 8 }}>loading Pyodide…</span>}
+          {pyReady && <span style={{ color: '#a6e3a1', marginLeft: 8 }}>● ready</span>}
+        </span>
+        <button onClick={() => setFontSize(f => Math.max(10, f-1))} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A−</button>
+        <button onClick={() => setFontSize(f => Math.min(20, f+1))} style={{ fontSize:12, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A+</button>
+        <button onClick={() => setShowExpected(s => !s)} style={{ fontSize:10, color: showExpected?'#f9e2af':'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Set expected output">✓ Expected</button>
+        <button onClick={() => { update(originalCode.current); syncHL(originalCode.current) }} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Reset to original code">↺ Reset</button>
+        <button onClick={run} disabled={running}
+          style={{ padding:'2px 10px', fontSize:11, background: pyReady?'#a6e3a1':'#7aa2f7', color:'#1a1b26', border:'none', borderRadius:4, cursor:'pointer', fontWeight:600 }}>
+          {running ? '⏳' : '▶ Run'}
+        </button>
+        <button onClick={onMoveUp} style={{ fontSize:11, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>↑</button>
+        <button onClick={onMoveDown} style={{ fontSize:11, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>↓</button>
+        <button onClick={onDelete} style={{ fontSize:11, color:'#f38ba8', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>✕</button>
+      </div>
+
+      {/* Expected output input */}
+      {showExpected && (
+        <div style={{ background:'#181825', padding:'8px 12px', borderBottom:'1px solid #2a2a4a', display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11, color:'#f9e2af', fontFamily:'monospace', flexShrink:0 }}>Expected output:</span>
+          <input value={expectedOutput} onChange={e=>setExpectedOutput(e.target.value)}
+            style={{ flex:1, background:'#1e1e2e', border:'1px solid #45475a', borderRadius:5, padding:'3px 8px', color:'#cdd6f4', fontFamily:'monospace', fontSize:12, outline:'none' }}
+            placeholder="e.g. Hello, world!" />
+        </div>
+      )}
+
+      {/* Editor */}
+      <div style={{ position: 'relative', background: '#1e1e2e', display: 'flex' }}>
+        <div style={{ width:40, flexShrink:0, background:'#181825', padding:'14px 8px 14px 0', textAlign:'right', fontFamily:'ui-monospace,monospace', fontSize, lineHeight:1.7, color:'#45475a', userSelect:'none', pointerEvents:'none', boxSizing:'border-box' }}>
+          {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i+1}</div>)}
+        </div>
+        <pre ref={preRef} aria-hidden="true"
+          style={{ ...monoStyle, color:'#cdd6f4', background:'transparent', pointerEvents:'none', position:'absolute', left:40, top:0, right:0, bottom:0, margin:0, overflow:'hidden' }} />
+        <textarea ref={taRef} value={code} spellCheck={false}
+          onChange={e => update(e.target.value)}
+          onKeyDown={e => {
+            const nv = handleCodeKeyDown(e, run)
+            if (nv !== null) { update(nv) }
+          }}
+          style={{ ...monoStyle, flex:1, color:'transparent', caretColor:'#cdd6f4', background:'transparent', border:'none', outline:'none', resize:'none', overflow:'hidden', position:'relative', zIndex:1, minHeight:60, paddingLeft:52 }}
+          placeholder="# Ctrl+Enter to run" />
+      </div>
+
+      {/* Output */}
+      {(output !== null || error !== null) && (
+        <div style={{ background:'#0d1117', borderTop:'1px solid #2a2a4a', padding:'10px 14px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+            <span style={{ fontSize:10, color:'#6c7086', fontFamily:'monospace', letterSpacing:'.05em' }}>OUTPUT</span>
+            {checkResult === 'correct' && <span style={{ fontSize:10, background:'#a6e3a1', color:'#1a1b26', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>✓ Correct!</span>}
+            {checkResult === 'wrong' && <span style={{ fontSize:10, background:'#f38ba8', color:'#1a1b26', padding:'1px 7px', borderRadius:10, fontWeight:700 }}>✗ Not matching</span>}
+            {output && <button onClick={() => navigator.clipboard?.writeText(output!)} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', marginLeft:'auto' }}>⎘ Copy</button>}
+          </div>
+          {output && <pre style={{ color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, margin:0, whiteSpace:'pre-wrap' }}>{output}</pre>}
+          {error && <pre style={{ color:'#f38ba8', fontFamily:'ui-monospace,monospace', fontSize:12, margin: output ? '6px 0 0' : 0, whiteSpace:'pre-wrap' }}>{error}</pre>}
+        </div>
+      )}
+
+      {/* History */}
+      {outputHistory.length > 1 && (
+        <details style={{ background:'#0a0a0f', borderTop:'1px solid #2a2a4a' }}>
+          <summary style={{ fontSize:10, color:'#45475a', padding:'4px 14px', cursor:'pointer', userSelect:'none', listStyle:'none' }}>▸ {outputHistory.length-1} previous run{outputHistory.length > 2 ? 's' : ''}</summary>
+          {outputHistory.slice(1).map((h, i) => (
+            <pre key={i} style={{ color:'#585b70', fontFamily:'ui-monospace,monospace', fontSize:12, margin:0, padding:'4px 14px', borderTop:'1px solid #1a1a2e', whiteSpace:'pre-wrap' }}>{h}</pre>
+          ))}
+        </details>
+      )}
+
+      <div style={{ padding:'4px 14px 5px', fontSize:10, color:'#313244', display:'flex', gap:12 }}>
+        <span>Ctrl+Enter run</span><span>Tab indent</span><span>Shift+Tab unindent</span>
       </div>
     </div>
   )
