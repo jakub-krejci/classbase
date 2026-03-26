@@ -125,13 +125,14 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
   }, [])
 
   const [images, setImages] = useState<string[]>([])
+  const [pkgStatus, setPkgStatus] = useState('')
 
   async function run() {
     if (running) return
     setRunning(true); setOutput(null); setError(null); setImages([])
     try {
       const { runPython } = await import('@/lib/pyodide-runner')
-      const { output: out, error: err, images: imgs } = await runPython(code, () => {})
+      const { output: out, error: err, images: imgs } = await runPython(code, () => {}, msg => setPkgStatus(msg))
       const result = out || (imgs.length ? '' : '(no output)')
       setOutput(result)
       if (err) setError(err)
@@ -167,7 +168,7 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
           style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Reset to starter code">↺ Reset</button>
         <button onClick={run} disabled={running}
           style={{ padding:'3px 12px', fontSize:12, background: pyReady?'#a6e3a1':'#7aa2f7', color:'#1a1b26', border:'none', borderRadius:5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
-          {running ? '⏳ Running…' : '▶ Run'}
+          {running ? (pkgStatus || '⏳ Running…') : '▶ Run'}
         </button>
       </div>
 

@@ -34,10 +34,14 @@ export async function loadPyodide(): Promise<any> {
 export type RunResult = {
   output: string
   error: string | null
-  images: string[]  // base64 PNG data URIs from matplotlib
+  images: string[]
 }
 
-export async function runPython(code: string, onOutput: (line: string) => void): Promise<RunResult> {
+export async function runPython(
+  code: string,
+  onOutput: (line: string) => void,
+  onStatus?: (msg: string) => void
+): Promise<RunResult> {
   const lines: string[] = []
   const images: string[] = []
 
@@ -47,48 +51,54 @@ export async function runPython(code: string, onOutput: (line: string) => void):
     py.setStdout({ batched: (s: string) => { lines.push(s); onOutput(s) } })
     py.setStderr({ batched: (s: string) => { lines.push('⚠ ' + s); onOutput('⚠ ' + s) } })
 
-    // Matplotlib shim — intercept plt.show() and capture figures as base64 PNG
-    const matplotlibShim = `
-import sys, base64, io
+    // loadPackagesFromImports scans the code for import statements and
+    // downloads any Pyodide-bundled packages that aren't loaded yet.
+    // This is the official API — handles matplotlib, numpy, pandas, scipy etc.
+    try {
+      onStatus?.('Loading packages…')
+      await py.loadPackagesFromImports(code)
+      onStatus?.('')
+    } catch {
+      // Non-fatal: package may already be loaded or not available
+    }
 
-# Only patch if matplotlib is actually imported in user code
+    // Matplotlib backend + plt.show() capture shim
+    const matplotlibShim = `
 _cb_figures = []
 
-def _cb_capture_show():
-    import matplotlib.pyplot as plt
+def _cb_capture_show(*args, **kwargs):
+    import io, base64
     import matplotlib
     matplotlib.use('Agg')
+    import matplotlib.pyplot as _plt
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+    _plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
     buf.seek(0)
-    data = base64.b64encode(buf.read()).decode('utf-8')
-    _cb_figures.append(data)
-    plt.clf()
-    plt.close('all')
+    _cb_figures.append(base64.b64encode(buf.read()).decode('utf-8'))
+    _plt.clf()
+    _plt.close('all')
 
-# Patch plt.show globally if matplotlib is available
 try:
-    import matplotlib.pyplot as plt
     import matplotlib
     matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
     plt.show = _cb_capture_show
 except ImportError:
     pass
 `
-    // Run shim first (silently)
     try { await py.runPythonAsync(matplotlibShim) } catch {}
 
     // Run user code
     await py.runPythonAsync(code)
 
-    // Also call show() at end in case user forgot
+    // Capture any figures the user forgot to show()
     try {
       await py.runPythonAsync(`
 try:
     import matplotlib.pyplot as plt
     if plt.get_fignums():
         _cb_capture_show()
-except:
+except Exception:
     pass
 `)
     } catch {}
@@ -97,7 +107,7 @@ except:
     try {
       const figs = py.globals.get('_cb_figures')
       if (figs) {
-        const arr = figs.toJs ? figs.toJs() : Array.from(figs)
+        const arr: string[] = figs.toJs ? figs.toJs() : Array.from(figs)
         images.push(...arr)
       }
     } catch {}
@@ -105,12 +115,24 @@ except:
     return {
       output: lines.join('\n') || (images.length ? '' : '(no output)'),
       error: null,
-      images
+      images,
     }
   } catch (e: any) {
     const msg = e?.message ?? String(e)
+    // Clean up Pyodide traceback noise
     const clean = msg.includes('PythonError')
-      ? msg.split('\n').filter((l: string) => !l.includes('File "<exec>')).join('\n').trim()
+      ? msg
+          .split('\n')
+          .filter((l: string) =>
+            !l.includes('File "/lib/python') &&
+            !l.includes('_pyodide') &&
+            !l.includes('eval_code_async') &&
+            !l.includes('run_async') &&
+            !l.includes('coroutine =') &&
+            l.trim() !== ''
+          )
+          .join('\n')
+          .trim()
       : msg
     return { output: lines.join('\n'), error: clean, images }
   }

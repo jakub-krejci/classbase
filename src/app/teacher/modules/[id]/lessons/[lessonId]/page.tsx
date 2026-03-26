@@ -622,13 +622,14 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplica
   }, [])
 
   const [images, setImages] = useState<string[]>([])
+  const [pkgStatus, setPkgStatus] = useState('')
 
   async function run() {
     if (running) return
     setRunning(true); setOutput(null); setError(null); setImages([])
     try {
       const { runPython } = await import('@/lib/pyodide-runner')
-      const { output: out, error: err, images: imgs } = await runPython(code, () => {})
+      const { output: out, error: err, images: imgs } = await runPython(code, () => {}, msg => setPkgStatus(msg))
       const result = out || (imgs.length ? '' : '(no output)')
       setOutput(result)
       if (err) setError(err)
@@ -672,7 +673,7 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplica
         <button onClick={() => { update(originalCode.current); syncHL(originalCode.current) }} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Reset to original code">↺ Reset</button>
         <button onClick={run} disabled={running}
           style={{ padding:'2px 10px', fontSize:11, background: pyReady?'#a6e3a1':'#7aa2f7', color:'#1a1b26', border:'none', borderRadius:4, cursor:'pointer', fontWeight:600 }}>
-          {running ? '⏳' : '▶ Run'}
+          {running ? (pkgStatus || '⏳') : '▶ Run'}
         </button>
         <button onClick={onMoveUp} style={{ fontSize:11, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>↑</button>
         <button onClick={onMoveDown} style={{ fontSize:11, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'2px 4px' }}>↓</button>
