@@ -234,7 +234,10 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
   }
 
   const TB: React.CSSProperties = { padding:'3px 7px', fontSize:12, border:'1px solid transparent', borderRadius:5, background:'none', cursor:'pointer', fontFamily:'inherit', lineHeight:1 }
-  const tbActive = (key: string): React.CSSProperties => activeFormats.has(key) ? { ...TB, background:'#E6F1FB', border:'1px solid #B5D4F4', color:'#0C447C' } : TB
+  const tbActive = (key: string, extra?: React.CSSProperties): React.CSSProperties =>
+    activeFormats.has(key)
+      ? { ...TB, ...extra, background:'#E6F1FB', border:'1px solid #B5D4F4', color:'#0C447C' }
+      : { ...TB, ...extra }
   const SEP = <span style={{ display:'inline-block', width:1, background:'#e5e7eb', margin:'0 3px', height:16, verticalAlign:'middle' }} />
 
 
@@ -242,17 +245,17 @@ function RichBlock({ block, onChange, onAddAfter, onDelete, onMoveUp, onMoveDown
     <div style={{ marginBottom: 6 }}>
       {/* Toolbar */}
       <div style={{ display:'flex', flexWrap:'wrap', gap:1, padding:'4px 8px', background:'#f9fafb', border:`1px solid #e5e7eb`, borderBottom:'none', borderRadius:'8px 8px 0 0', alignItems:'center' }}>
-        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('bold')}}><b>B</b></button>
-        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('italic')}}><i>I</i></button>
-        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('underline')}}><u>U</u></button>
+        <button style={tbActive('bold')} onMouseDown={e=>{e.preventDefault();exec('bold')}}><b>B</b></button>
+        <button style={tbActive('italic')} onMouseDown={e=>{e.preventDefault();exec('italic')}}><i>I</i></button>
+        <button style={tbActive('underline')} onMouseDown={e=>{e.preventDefault();exec('underline')}}><u>U</u></button>
         {SEP}
-        <button style={{...TB,fontWeight:700,fontSize:13}} onMouseDown={e=>{e.preventDefault();heading('h1')}}>H1</button>
-        <button style={{...TB,fontWeight:700,fontSize:12}} onMouseDown={e=>{e.preventDefault();heading('h2')}}>H2</button>
-        <button style={{...TB,fontWeight:700,fontSize:11}} onMouseDown={e=>{e.preventDefault();heading('h3')}}>H3</button>
+        <button style={tbActive('h1', {fontWeight:700,fontSize:13})} onMouseDown={e=>{e.preventDefault();heading('h1')}}>H1</button>
+        <button style={tbActive('h2', {fontWeight:700,fontSize:12})} onMouseDown={e=>{e.preventDefault();heading('h2')}}>H2</button>
+        <button style={tbActive('h3', {fontWeight:700,fontSize:11})} onMouseDown={e=>{e.preventDefault();heading('h3')}}>H3</button>
         {SEP}
-        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('insertUnorderedList')}}>• list</button>
-        <button style={TB} onMouseDown={e=>{e.preventDefault();exec('insertOrderedList')}}>1. list</button>
-        <button style={TB} onMouseDown={e=>{e.preventDefault();heading('blockquote')}} title="Shift+Enter to exit">" quote</button>
+        <button style={tbActive('ul')} onMouseDown={e=>{e.preventDefault();exec('insertUnorderedList')}}>• list</button>
+        <button style={tbActive('ol')} onMouseDown={e=>{e.preventDefault();exec('insertOrderedList')}}>1. list</button>
+        <button style={tbActive('blockquote')} onMouseDown={e=>{e.preventDefault();heading('blockquote')}} title="Shift+Enter to exit">" quote</button>
         {SEP}
         <button style={{...TB,background:'#fff59d',color:'#333',fontWeight:700}} onMouseDown={e=>{e.preventDefault();hl('#fff59d')}}>A</button>
         <button style={{...TB,background:'#bbdefb',color:'#0d47a1',fontWeight:700}} onMouseDown={e=>{e.preventDefault();hl('#bbdefb')}}>A</button>
