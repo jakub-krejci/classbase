@@ -54,34 +54,37 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
 
   // Load notifications + subscribe realtime
   useEffect(() => {
-    let userId = ''
+    let resolvedUserId = ''
+
     async function load() {
       const { data: { user: u } } = await supabase.auth.getUser()
       if (!u) return
-      userId = u.id
+      resolvedUserId = u.id
       const { data: n } = await supabase.from('notifications')
         .select('*').eq('user_id', u.id).eq('read', false)
         .eq('type', 'announcement')
         .order('created_at', { ascending: false }).limit(20)
       setNotifs(n ?? [])
       setUnread((n ?? []).length)
+
+      // Subscribe AFTER we know the userId so the filter is correct
+      supabase.channel('notif-ann-' + u.id)
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'notifications',
+          filter: `user_id=eq.${u.id}`,
+        }, (payload: any) => {
+          const n = payload.new
+          if (n.type !== 'announcement') return
+          setNotifs(prev => [n, ...prev].slice(0, 20))
+          setUnread(c => c + 1)
+        })
+        .subscribe()
     }
     load()
 
-    // Realtime: new notification arrives
-    const channel = supabase.channel('notif-' + Math.random())
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'notifications',
-      }, (payload: any) => {
-        const n = payload.new
-        if (n.user_id !== userId) return
-        if (n.type !== 'announcement') return  // chat DMs handled by ChatWidget
-        setNotifs(prev => [n, ...prev].slice(0, 20))
-        setUnread(c => c + 1)
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      if (resolvedUserId) supabase.removeChannel(supabase.channel('notif-ann-' + resolvedUserId))
+    }
   }, [])
 
   async function markAllRead() {
