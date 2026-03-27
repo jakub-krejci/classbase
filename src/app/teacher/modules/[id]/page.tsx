@@ -20,7 +20,7 @@ export default async function ModuleDetailPage({ params }: { params: any }) {
   const { data: mod } = await admin.from('modules').select('*').eq('id', moduleId).eq('teacher_id', (user as any).id).single()
   if (!mod) redirect('/teacher/modules')
 
-  const { data: lessons } = await admin.from('lessons').select('*').eq('module_id', moduleId).order('position')
+  const { data: lessons } = await admin.from('lessons').select('*').eq('module_id', moduleId).order('position').order('sub_position')
   const { data: assignments } = await admin.from('assignments').select('*').eq('module_id', moduleId).order('created_at')
   const { data: enrollments } = await admin.from('enrollments').select('student_id, profiles(full_name, email)').eq('module_id', moduleId)
 

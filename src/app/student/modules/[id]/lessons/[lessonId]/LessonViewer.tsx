@@ -175,9 +175,10 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#f9e2af',flexShrink:0 }} />
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#a6e3a1',flexShrink:0 }} />
         <span style={{ fontFamily:'monospace', fontSize:10, color:'#7aa2f7', letterSpacing:'.06em', flex:1, marginLeft:4 }}>
-          ▶ TRY IT YOURSELF — Python
-          {pyLoading && <span style={{ color:'#45475a', marginLeft:8 }}>loading Python runtime…</span>}
-          {pyReady && <span style={{ color:'#a6e3a1', marginLeft:8 }}>● ready</span>}
+          <span className="cb-tryit-title">▶ Try It</span>
+          <span className="cb-tryit-subtitle"> — Python</span>
+          {pyLoading && <span style={{ color:'#45475a', marginLeft:6, fontSize:9 }}>loading…</span>}
+          {pyReady && <span style={{ color:'#a6e3a1', marginLeft:6 }}>●</span>}
         </span>
         <button onClick={() => setFontSize(f => Math.max(10, f-1))} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A−</button>
         <button onClick={() => setFontSize(f => Math.min(20, f+1))} style={{ fontSize:12, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A+</button>
@@ -384,13 +385,15 @@ const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
 })
 
 // ── Main viewer ───────────────────────────────────────────────────────────────
-export default function LessonViewer({ lesson, moduleId, studentId, completionStatus, allLessons, completedIds, authorName }: {
+export default function LessonViewer({ lesson, moduleId, studentId, completionStatus, allLessons, completedIds, authorName, subLessons = [] }: {
   lesson: any; moduleId: string; studentId: string
   completionStatus: 'completed' | 'bookmark' | 'none'
   allLessons: any[]; completedIds: string[]; authorName: string
+  subLessons?: any[]
 }) {
   const supabase = createClient()
   const isMobile = useIsMobile()
+  const [activeTab, setActiveTab] = useState<string>('main')
   const [status, setStatus] = useState<'completed'|'bookmark'|'none'>(completionStatus)
   const [saving, setSaving] = useState(false)
   const [blocks, setBlocks] = useState<ViewBlock[]>([])
@@ -416,9 +419,16 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     const minutes = Math.ceil(words / 200 + codeBlocks * 0.5)
     return minutes <= 1 ? '< 1 min read' : `~${minutes} min read`
   }
-  const readTime = blocks.length > 0 ? calcReadTime(lesson.content_html ?? '') : ''
+  const readTime = blocks.length > 0 ? calcReadTime(activeLesson.content_html ?? '') : ''
 
   // ── Load blocks + existing progress ───────────────────────────────────────
+  // The content currently shown: main lesson or a selected sub-lesson tab
+  const activeLesson = activeTab === 'main' ? lesson : subLessons.find(s => s.id === activeTab) ?? lesson
+
+  useEffect(() => {
+    setBlocks(parseBlocks(activeLesson.content_html ?? ''))
+  }, [activeTab])
+
   useEffect(() => {
     setBlocks(parseBlocks(lesson.content_html ?? ''))
 
@@ -497,7 +507,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   function exportPDF() {
     // Build a clean printable HTML document
     const katexCss = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css'
-    const contentHtml = lesson.content_html ?? ''
+    const contentHtml = activeLesson.content_html ?? ''
 
     // Parse the cb-code and cb-tryit blocks for display in PDF
     const tmp = document.createElement('div')
@@ -532,7 +542,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${lesson.title}</title>
+  <title>${activeLesson.title}</title>
   <link rel="stylesheet" href="${katexCss}">
   <style>
     body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; color: #111; line-height: 1.7; font-size: 15px; }
@@ -555,7 +565,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   </style>
 </head>
 <body>
-  <h1>${lesson.title}</h1>
+  <h1>${activeLesson.title}</h1>
   <div class="meta">${authorName ? 'By ' + authorName + ' · ' : ''}${readTime}</div>
   ${tmp.innerHTML}
 </body>
@@ -609,7 +619,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         <div style={{ width:210, flexShrink:0, position:'sticky', top:80 }}>
           <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
             <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Lessons</div>
-            {allLessons.map((l:any, i:number) => {
+            {allLessons.filter((l:any) => !l.parent_lesson_id).map((l:any, i:number) => {
               const isCurrent = l.id === lesson.id
               const isDone = completedSet.has(l.id)
               return (
@@ -640,12 +650,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
             </button>
             {navOpen && (
               <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'6px 0', maxHeight:260, overflowY:'auto' }}>
-                {allLessons.map((l:any, i:number) => {
+                {allLessons.filter((l:any) => !l.parent_lesson_id).map((l:any, i:number) => {
                   const isCurrent = l.id === lesson.id
                   const isDone = completedSet.has(l.id)
                   return (
                     <a key={l.id} href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                      onClick={() => setNavOpen(false)}
+                      onClick={() => { setNavOpen(false); setActiveTab('main') }}
                       style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent' }}>
                       <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                         {isDone ? '✓' : i+1}
@@ -662,7 +672,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         {/* Title + read time + export */}
         <div style={{ display:'flex', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap:10, flexWrap:'wrap', marginBottom:4, justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap' }}>
-            <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight:700, margin:0 }}>{lesson.title}</h1>
+            <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight:700, margin:0 }}>{activeLesson.title}</h1>
             {readTime && (
               <span style={{ fontSize:12, color:'#888', background:'#f3f4f6', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' }}>
                 🕐 {readTime}
@@ -675,7 +685,23 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
             ⬇ Export PDF
           </button>
         </div>
-        {authorName && <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>By {authorName}</div>}
+        {authorName && <div style={{ fontSize:12, color:'#888', marginBottom: subLessons.length > 0 ? 8 : 14 }}>By {authorName}</div>}
+
+        {/* Sub-lesson tabs */}
+        {subLessons.length > 0 && (
+          <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e5e7eb', overflowX:'auto' }}>
+            <button onClick={() => setActiveTab('main')}
+              style={{ padding:'8px 16px', fontSize:13, fontWeight: activeTab==='main' ? 600 : 400, color: activeTab==='main' ? '#185FA5' : '#888', background:'none', border:'none', borderBottom: activeTab==='main' ? '2px solid #185FA5' : '2px solid transparent', marginBottom:'-2px', cursor:'pointer', whiteSpace:'nowrap', fontFamily:'inherit' }}>
+              {lesson.title}
+            </button>
+            {subLessons.map((s: any) => (
+              <button key={s.id} onClick={() => setActiveTab(s.id)}
+                style={{ padding:'8px 16px', fontSize:13, fontWeight: activeTab===s.id ? 600 : 400, color: activeTab===s.id ? '#185FA5' : '#888', background:'none', border:'none', borderBottom: activeTab===s.id ? '2px solid #185FA5' : '2px solid transparent', marginBottom:'-2px', cursor:'pointer', whiteSpace:'nowrap', fontFamily:'inherit' }}>
+                {s.title}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Scroll progress label */}
         {scrollPct > 0 && scrollPct < 100 && (

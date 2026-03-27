@@ -15,9 +15,11 @@ export default async function StudentLessonPage({ params }: { params: any }) {
 
   const { data: lesson } = await admin.from('lessons').select('*').eq('id', params.lessonId).single()
   if (!lesson) redirect('/student/modules/' + params.id)
+  // Block access to locked lessons
+  if ((lesson as any).locked) redirect('/student/modules/' + params.id)
 
-  // All lessons in this module for nav panel (#9)
-  const { data: allLessons } = await admin.from('lessons').select('id,title,position').eq('module_id', params.id).order('position')
+  // All lessons in this module for nav panel — exclude locked ones
+  const { data: allLessons } = await admin.from('lessons').select('id,title,position,locked').eq('module_id', params.id).eq('locked', false).order('position')
 
   // Completion status for all lessons (#9 — show checkmarks in nav)
   const lessonIds = (allLessons ?? []).map((l: any) => l.id)
@@ -37,6 +39,10 @@ export default async function StudentLessonPage({ params }: { params: any }) {
     authorName = (author as any)?.full_name ?? ''
   }
 
+  // Fetch sub-lessons (parts/tabs) for this lesson
+  const { data: subLessons } = await admin.from('lessons')
+    .select('*').eq('parent_lesson_id', params.lessonId).eq('locked', false).order('sub_position')
+
   return (
     <AppShell user={profile} role="student">
       <LessonViewer
@@ -47,6 +53,7 @@ export default async function StudentLessonPage({ params }: { params: any }) {
         allLessons={(allLessons ?? []) as any[]}
         completedIds={Array.from(completedIds) as string[]}
         authorName={authorName}
+        subLessons={(subLessons ?? []) as any[]}
       />
     </AppShell>
   )

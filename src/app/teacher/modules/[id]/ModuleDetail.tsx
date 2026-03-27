@@ -31,6 +31,31 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
     setLessonList(prev => prev.filter(l => l.id !== id))
   }
 
+  async function toggleLock(id: string, currentlyLocked: boolean) {
+    await supabase.from('lessons').update({ locked: !currentlyLocked } as any).eq('id', id)
+    setLessonList(prev => prev.map(l => l.id === id ? { ...l, locked: !currentlyLocked } : l))
+  }
+
+  async function addSubLesson(parentId: string, parentTitle: string) {
+    const siblings = lessonList.filter(l => l.parent_lesson_id === parentId)
+    const subPos = siblings.length
+    const defaultTitle = subPos === 0 ? 'Theoretical part' : subPos === 1 ? 'Practical part' : 'Part ' + (subPos + 1)
+    const title = prompt('Sub-lesson title:', defaultTitle)
+    if (!title) return
+    const { data, error } = await supabase.from('lessons').insert({
+      module_id: module.id, title, content_html: '', position: 0,
+      parent_lesson_id: parentId, sub_position: subPos
+    } as any).select('*').single()
+    if (error) { alert('Error: ' + error.message); return }
+    setLessonList(prev => [...prev, data as any])
+  }
+
+  async function removeSubLesson(id: string) {
+    if (!confirm('Remove this sub-lesson?')) return
+    await supabase.from('lessons').delete().eq('id', id)
+    setLessonList(prev => prev.filter(l => l.id !== id))
+  }
+
   async function deleteAssignment(id: string) {
     if (!confirm('Delete this assignment?')) return
     await supabase.from('assignments').delete().eq('id', id)
@@ -93,20 +118,47 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
       {tab === 'lessons' && (
         <div>
           {lessonList.length === 0 && <p style={{ color: '#aaa', fontSize: 13, marginBottom: 12 }}>No lessons yet.</p>}
-          {lessonList.map((l: any, i: number) => (
-            <div key={l.id} draggable
+          {lessonList.filter((l: any) => !l.parent_lesson_id).map((l: any, i: number) => {
+            const subLessons = lessonList.filter((s: any) => s.parent_lesson_id === l.id)
+            return (
+            <div key={l.id}>
+            <div draggable
               onDragStart={() => setDragIdx(i)}
               onDragOver={e => e.preventDefault()}
               onDrop={() => onDrop(i)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#f9fafb', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, cursor: 'grab' }}>
               <span style={{ color: '#bbb', fontSize: 14, cursor: 'grab' }}>⠿</span>
               <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#E6F1FB', color: '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{l.title}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: l.locked ? '#aaa' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {l.locked && <span title="Locked — hidden from students" style={{ fontSize: 12 }}>🔒</span>}
+                {l.title}
+              </span>
+              <button
+                onClick={() => toggleLock(l.id, l.locked)}
+                title={l.locked ? 'Unlock lesson' : 'Lock lesson (hide from students)'}
+                style={{ padding: '3px 8px', fontSize: 11, background: l.locked ? '#FFF3CD' : '#f3f4f6', color: l.locked ? '#856404' : '#555', border: '1px solid', borderColor: l.locked ? '#FFCA2C' : '#e5e7eb', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                {l.locked ? '🔒 Locked' : '🔓 Lock'}
+              </button>
               <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id + "/preview"} style={{ padding: '3px 9px', fontSize: 11 }}>View</Btn>
               <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id} style={{ padding: '3px 9px', fontSize: 11 }}>Edit</Btn>
               <Btn variant="danger" onClick={() => deleteLesson(l.id)} style={{ padding: '3px 9px', fontSize: 11 }}>Del</Btn>
             </div>
-          ))}
+              {/* Sub-lessons */}
+              {subLessons.map((s: any) => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px 7px 36px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 8, marginBottom: 4, marginLeft: 24, borderLeft: '2px solid #185FA5' }}>
+                  <span style={{ fontSize: 11, color: '#888', marginRight: 2 }}>↳</span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#333' }}>{s.title}</span>
+                  <Btn href={"/teacher/modules/" + module.id + "/lessons/" + s.id + "/preview"} style={{ padding: '2px 7px', fontSize: 10 }}>View</Btn>
+                  <Btn href={"/teacher/modules/" + module.id + "/lessons/" + s.id} style={{ padding: '2px 7px', fontSize: 10 }}>Edit</Btn>
+                  <Btn variant="danger" onClick={() => removeSubLesson(s.id)} style={{ padding: '2px 7px', fontSize: 10 }}>Del</Btn>
+                </div>
+              ))}
+              <button onClick={() => addSubLesson(l.id, l.title)}
+                style={{ marginLeft: 24, marginBottom: 8, fontSize: 11, color: '#185FA5', background: 'none', border: '1px dashed #B5D4F4', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                + Add sub-lesson
+              </button>
+            </div>
+          )})}
           <Btn href={"/teacher/modules/" + module.id + "/lessons/new"} variant="primary" style={{ marginTop: 6 }}>+ Add lesson</Btn>
         </div>
       )}

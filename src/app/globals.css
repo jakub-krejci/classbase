@@ -322,3 +322,8 @@ body { font-family: var(--font-sans); background: #f9fafb; }
   .lesson-content table { font-size: 13px !important; }
   .lesson-content td, .lesson-content th { padding: 6px 8px !important; }
 }
+
+/* ── TryIt block header responsive text ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  .cb-tryit-subtitle { display: none !important; }
+}

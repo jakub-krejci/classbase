@@ -696,9 +696,10 @@ function TryItBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplica
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f9e2af', flexShrink: 0 }} />
         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#a6e3a1', flexShrink: 0 }} />
         <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em', flex: 1, marginLeft: 4 }}>
-          ▶ TRY IT — Interactive Python
-          {pyLoading && <span style={{ color: '#45475a', marginLeft: 8 }}>loading Pyodide…</span>}
-          {pyReady && <span style={{ color: '#a6e3a1', marginLeft: 8 }}>● ready</span>}
+          <span className="cb-tryit-title">▶ Try It</span>
+          <span className="cb-tryit-subtitle"> — Interactive Python</span>
+          {pyLoading && <span style={{ color: '#45475a', marginLeft: 6, fontSize: 9 }}>loading…</span>}
+          {pyReady && <span style={{ color: '#a6e3a1', marginLeft: 6 }}>●</span>}
         </span>
         <button onClick={() => setFontSize(f => Math.max(10, f-1))} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A−</button>
         <button onClick={() => setFontSize(f => Math.min(20, f+1))} style={{ fontSize:12, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A+</button>

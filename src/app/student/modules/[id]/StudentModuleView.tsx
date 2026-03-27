@@ -12,10 +12,13 @@ export default function StudentModuleView({ module, lessons, assignments, comple
   const [search, setSearch] = useState('')
   const done = new Set(completedIds)
   const bookmarked = new Set(bookmarkedIds)
-  const pct = lessons.length > 0 ? Math.round(done.size / lessons.length * 100) : 0
+  const pct = visibleLessons.length > 0 ? Math.round(done.size / visibleLessons.length * 100) : 0
+  // Locked lessons are hidden from students entirely
+  // Hide locked lessons and sub-lessons (they appear as tabs inside their parent)
+  const visibleLessons = lessons.filter((l: any) => !l.locked && !l.parent_lesson_id)
   const filteredLessons = search.trim()
-    ? lessons.filter((l: any) => l.title.toLowerCase().includes(search.toLowerCase()))
-    : lessons
+    ? visibleLessons.filter((l: any) => l.title.toLowerCase().includes(search.toLowerCase()))
+    : visibleLessons
 
   const tabStyle = (t: string): React.CSSProperties => ({
     padding: '8px 14px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'inherit',
@@ -25,7 +28,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
   function isUnlocked(i: number): boolean {
     if (module.unlock_mode !== 'sequential') return true
     if (i === 0) return true
-    return done.has(lessons[i - 1]?.id)
+    return done.has(visibleLessons[i - 1]?.id)
   }
 
   const subMap: Record<string, any> = {}
@@ -81,7 +84,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
           {filteredLessons.length === 0 && search && <p style={{ color: '#aaa', fontSize: 13 }}>No lessons match "{search}"</p>}
           {lessons.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No lessons yet.</p>}
           {filteredLessons.map((l: any, i: number) => {
-            const realIndex = lessons.findIndex((x: any) => x.id === l.id)
+            const realIndex = visibleLessons.findIndex((x: any) => x.id === l.id)
             const completed = done.has(l.id)
             const unlocked = isUnlocked(realIndex)
             return (
