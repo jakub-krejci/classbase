@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       'X-Title': 'ClassBase AI Tutor',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.3-8b-instruct:free',
+      model: 'openrouter/free',
       messages: [
         { role: 'system', content: system },
         ...messages,
