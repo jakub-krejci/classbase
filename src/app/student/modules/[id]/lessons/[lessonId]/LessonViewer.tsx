@@ -638,7 +638,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                     <div key={s.id}
                       style={{ paddingLeft:28, paddingRight:8, paddingTop:2, paddingBottom:2 }}>
                       <button onClick={() => setActiveTab(s.id === activeTab ? 'main' : s.id)}
-                        style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e5e7eb', color: activeTab===s.id?'#185FA5':'#888', fontSize:11, cursor:'pointer', border:'none', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e0e7ef', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
+                        style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e0e7ef', color: activeTab===s.id?'#185FA5':'#888', fontSize:11, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
                         <span style={{ fontSize:10, color: activeTab===s.id?'#185FA5':'#bbb' }}>↳</span>
                         <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
                       </button>
