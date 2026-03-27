@@ -92,13 +92,11 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
     { label: 'Modules', href: '/teacher/modules' },
     { label: 'Grade', href: '/teacher/grade' },
     { label: 'Groups', href: '/teacher/groups' },
-    { label: 'Messages', href: '/teacher/messages' },
   ]
   const studentNav = [
     { label: 'Modules', href: '/student/modules' },
     { label: 'Progress', href: '/student/progress' },
     { label: 'Bookmarks', href: '/student/bookmarks' },
-    { label: 'Inbox', href: '/student/inbox' },
   ]
   const nav = role === 'teacher' ? teacherNav : studentNav
   const profileHref = role === 'teacher' ? '/teacher/profile' : '/student/profile'
@@ -207,10 +205,8 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
         </div>
       )}
 
-      {/* Floating chat widget — hidden on Messages/Inbox pages which have their own UI */}
-      {user && !path.startsWith('/teacher/messages') && !path.startsWith('/student/inbox') && (
-        <ChatWidget userId={user.id} userRole={role} contacts={contacts} />
-      )}
+      {/* Floating chat widget */}
+      {user && <ChatWidget userId={user.id} userRole={role} contacts={contacts} />}
 
       {/* Page content */}
       <div className="cb-page-wrap" style={{ maxWidth: wide ? 1140 : 860, margin: '0 auto', padding: '28px 20px' }}>

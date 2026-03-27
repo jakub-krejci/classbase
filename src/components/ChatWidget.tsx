@@ -58,6 +58,7 @@ export default function ChatWidget({ userId, userRole, contacts }: {
     })
   }
   const [allMsgs, setAllMsgs] = useState<Msg[]>([])
+  const [online, setOnline] = useState<Record<string, boolean>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const activeContactRef = useRef<Contact | null>(null)
@@ -137,6 +138,27 @@ export default function ChatWidget({ userId, userRole, contacts }: {
       Object.values(broadcastChannels.current).forEach(ch => supabase.removeChannel(ch))
     }
   }, [])
+
+  // Presence: broadcast our ping every 60s, listen to contacts
+  useEffect(() => {
+    if (!contacts.length) return
+    const myCh = supabase.channel('pres:' + userId)
+    const sendPing = () => myCh.send({ type: 'broadcast', event: 'ping', payload: { ts: Date.now() } }).catch(() => {})
+    myCh.subscribe(s => { if (s === 'SUBSCRIBED') sendPing() })
+    const timer = setInterval(sendPing, 60_000)
+    const contactChs = contacts.map(c =>
+      supabase.channel('pres:' + c.id)
+        .on('broadcast', { event: 'ping' }, ({ payload }: any) => {
+          setOnline(prev => ({ ...prev, [c.id]: Date.now() - (payload.ts ?? 0) < 3 * 60_000 }))
+        })
+        .subscribe()
+    )
+    return () => {
+      clearInterval(timer)
+      supabase.removeChannel(myCh)
+      contactChs.forEach(ch => supabase.removeChannel(ch))
+    }
+  }, [contacts.map(c => c.id).join(',')])
 
   function openThread(contact: Contact) {
     setActiveContact(contact)
@@ -246,6 +268,11 @@ export default function ChatWidget({ userId, userRole, contacts }: {
   const BOTTOM = isMobile ? 0 : 70
   const RIGHT = isMobile ? 0 : 20
 
+  function OnlineDot({ uid, size = 9 }: { uid: string; size?: number }) {
+    const isOn = !!online[uid]
+    return <div style={{ width: size, height: size, borderRadius: '50%', background: isOn ? '#22c55e' : '#d1d5db', border: '2px solid #fff', flexShrink: 0 }} title={isOn ? 'Online' : 'Offline'} />
+  }
+
   return (
     <>
       {/* Bubble */}
@@ -270,10 +297,13 @@ export default function ChatWidget({ userId, userRole, contacts }: {
             {activeContact ? (
               <>
                 <button onClick={() => setActiveContact(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, padding: 0, lineHeight: 1, opacity: .85 }}>←</button>
-                <Avatar name={activeContact.full_name} size={28} bg="rgba(255,255,255,.2)" color="#fff" />
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <Avatar name={activeContact.full_name} size={28} bg="rgba(255,255,255,.2)" color="#fff" />
+                  <div style={{ position: 'absolute', bottom: -1, right: -1 }}><OnlineDot uid={activeContact.id} size={8} /></div>
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeContact.full_name}</div>
-                  <div style={{ fontSize: 10, opacity: .75 }}>{activeContact.role === 'teacher' ? 'Teacher' : 'Student'}</div>
+                  <div style={{ fontSize: 10, opacity: .75 }}>{online[activeContact.id] ? '● Online' : activeContact.role === 'teacher' ? 'Teacher' : 'Student'}</div>
                 </div>
               </>
             ) : (
@@ -307,7 +337,10 @@ export default function ChatWidget({ userId, userRole, contacts }: {
                           style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f9fafb', background: 'transparent' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#f5f9ff')}
                           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                          <Avatar name={c.full_name} size={36} bg={bg} color={col} />
+                          <div style={{ position: 'relative' }}>
+                            <Avatar name={c.full_name} size={36} bg={bg} color={col} />
+                            <div style={{ position: 'absolute', bottom: 0, right: 0 }}><OnlineDot uid={c.id} /></div>
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: uc > 0 ? 700 : 500, fontSize: 13, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.full_name}</div>
                             <div style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lastMsg?.body?.slice(0, 45)}</div>
@@ -329,7 +362,10 @@ export default function ChatWidget({ userId, userRole, contacts }: {
                         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f9fafb', background: 'transparent' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f5f9ff')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                        <Avatar name={c.full_name} size={32} bg={bg} color={col} />
+                        <div style={{ position: 'relative' }}>
+                          <Avatar name={c.full_name} size={32} bg={bg} color={col} />
+                          <div style={{ position: 'absolute', bottom: 0, right: 0 }}><OnlineDot uid={c.id} size={8} /></div>
+                        </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 500, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.full_name}</div>
                           <div style={{ fontSize: 11, color: '#aaa' }}>{c.role === 'teacher' ? '👨‍🏫 Teacher' : '🎓 Student'}</div>
