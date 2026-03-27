@@ -17,11 +17,13 @@ function Avatar({ name, size = 32, bg = '#E6F1FB', color = '#0C447C' }: { name: 
     </div>
   )
 }
-function threadChannel(a: string, b: string) { return 'chat:' + [a, b].sort().join(':') }
 function recipientType(senderRole: 'teacher' | 'student', targetRole: 'teacher' | 'student') {
   if (senderRole === 'teacher') return targetRole === 'teacher' ? 'teacher' : 'student'
   return targetRole === 'teacher' ? 'teacher' : 'student_direct'
 }
+// Personal inbox channel — sender broadcasts to recipient's personal channel
+// This is always known (just the recipient's userId), no timing issue
+function inboxChannel(uid: string) { return 'inbox:' + uid }
 
 export default function ChatWidget({ userId, userRole, contacts }: {
   userId: string; userRole: 'teacher' | 'student'; contacts: Contact[]
@@ -35,7 +37,6 @@ export default function ChatWidget({ userId, userRole, contacts }: {
   const [sending, setSending] = useState(false)
   const [online, setOnline] = useState<Record<string, boolean>>({})
 
-  // readUpTo[contactId] = ISO timestamp of last message we've seen from them
   const [readUpTo, setReadUpToRaw] = useState<Record<string, string>>(() => {
     try { const s = localStorage.getItem('cb_rut_' + userId); return s ? JSON.parse(s) : {} } catch { return {} }
   })
@@ -51,15 +52,13 @@ export default function ChatWidget({ userId, userRole, contacts }: {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const activeContactRef = useRef<Contact | null>(null)
   const openRef = useRef(false)
-  // broadcast channels for optimistic delivery (best-effort, not relied upon for unread)
-  const bcastChannels = useRef<Record<string, any>>({})
-
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+
   function scrollBottom() { setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30) }
   useEffect(() => { activeContactRef.current = activeContact }, [activeContact])
   useEffect(() => { openRef.current = open }, [open])
 
-  // ── Load historical messages once ──────────────────────────────────────
+  // ── Load historical messages ──────────────────────────────────────────
   useEffect(() => {
     supabase.from('messages')
       .select('*')
@@ -69,37 +68,28 @@ export default function ChatWidget({ userId, userRole, contacts }: {
       .then(({ data }) => setAllMsgs(data ?? []))
   }, [userId])
 
-  // ── postgres_changes: reliable delivery for incoming messages ──────────
-  // This fires regardless of when we subscribe — messages are stored in DB first.
+  // ── Subscribe to MY personal inbox channel immediately on mount ───────
+  // The sender will broadcast to inboxChannel(recipientId), so we listen here.
+  // This is set up immediately — no dependency on contacts loading.
   useEffect(() => {
-    const ch = supabase.channel('widget-inbox-' + userId)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'messages',
-      }, (payload: any) => {
-        const m = payload.new as Msg
-        // Only DMs addressed to me
-        if (m.recipient_id !== userId) return
-        if (!['student', 'teacher', 'student_direct'].includes(m.recipient_type)) return
-        // Don't add my own sent messages (already in state via optimistic)
+    const ch = supabase.channel(inboxChannel(userId))
+      .on('broadcast', { event: 'msg' }, ({ payload }: any) => {
+        const m: Msg = payload
         if (m.sender_id === userId) return
         setAllMsgs(prev => prev.some(x => x.id === m.id) ? prev : [...prev, m])
-        // Mark read if thread is open
         if (activeContactRef.current?.id === m.sender_id && openRef.current) {
           setReadUpTo(prev => ({ ...prev, [m.sender_id]: m.created_at }))
           scrollBottom()
         }
       })
-      .on('postgres_changes', {
-        event: 'DELETE', schema: 'public', table: 'messages',
-      }, (payload: any) => {
-        const id = payload.old?.id
-        if (id) setAllMsgs(prev => prev.filter(m => m.id !== id))
+      .on('broadcast', { event: 'del' }, ({ payload }: any) => {
+        setAllMsgs(prev => prev.filter(m => m.id !== payload.id))
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [userId])
 
-  // ── Bus: sync with Messages/Inbox page ────────────────────────────────
+  // ── Bus: sync with Messages/Inbox full page ───────────────────────────
   useEffect(() => {
     return onChatBus(({ event, payload }) => {
       if (event === 'new_message') {
@@ -117,54 +107,39 @@ export default function ChatWidget({ userId, userRole, contacts }: {
     })
   }, [userId])
 
-  // ── Presence: broadcast ping every 60s, listen to contacts ────────────
+  // ── Presence ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!contacts.length) return
-    // Announce ourselves
     const myCh = supabase.channel('presence:' + userId)
-    const ping = () => myCh.send({ type: 'broadcast', event: 'ping', payload: { ts: Date.now() } })
-    myCh.subscribe(s => { if (s === 'SUBSCRIBED') { ping(); } })
+    const ping = () => myCh.send({ type: 'broadcast', event: 'ping', payload: { ts: Date.now() } }).catch(() => {})
+    myCh.subscribe(s => { if (s === 'SUBSCRIBED') ping() })
     const t = setInterval(ping, 60_000)
-
-    // Listen to each contact's presence channel
-    const chs: any[] = []
-    contacts.forEach(c => {
-      const ch = supabase.channel('presence:' + c.id)
+    const chs = contacts.map(c =>
+      supabase.channel('presence:' + c.id)
         .on('broadcast', { event: 'ping' }, ({ payload }: any) => {
           setOnline(prev => ({ ...prev, [c.id]: Date.now() - (payload.ts ?? 0) < 3 * 60_000 }))
         })
         .subscribe()
-      chs.push(ch)
-    })
-
-    return () => {
-      clearInterval(t)
-      supabase.removeChannel(myCh)
-      chs.forEach(ch => supabase.removeChannel(ch))
-    }
+    )
+    return () => { clearInterval(t); supabase.removeChannel(myCh); chs.forEach(ch => supabase.removeChannel(ch)) }
   }, [contacts.map(c => c.id).join(',')])
 
-  // ── Thread messages for active contact ─────────────────────────────────
+  // ── Thread messages ───────────────────────────────────────────────────
   const threadMsgs = activeContact
     ? allMsgs
-        .filter(m =>
-          (m.sender_id === userId && m.recipient_id === activeContact.id) ||
-          (m.sender_id === activeContact.id && m.recipient_id === userId)
-        )
+        .filter(m => (m.sender_id === userId && m.recipient_id === activeContact.id) || (m.sender_id === activeContact.id && m.recipient_id === userId))
         .sort((a, b) => a.created_at.localeCompare(b.created_at))
     : []
 
   function openThread(contact: Contact) {
     setActiveContact(contact)
-    const latest = allMsgs
-      .filter(m => m.sender_id === contact.id && m.recipient_id === userId)
-      .pop()?.created_at
+    const latest = allMsgs.filter(m => m.sender_id === contact.id && m.recipient_id === userId).pop()?.created_at
     if (latest) setReadUpTo(prev => ({ ...prev, [contact.id]: latest }))
     scrollBottom()
     setTimeout(() => inputRef.current?.focus(), 60)
   }
 
-  // ── Send ───────────────────────────────────────────────────────────────
+  // ── Send ──────────────────────────────────────────────────────────────
   async function sendMsg() {
     if (!draft.trim() || !activeContact || sending) return
     setSending(true)
@@ -188,14 +163,13 @@ export default function ChatWidget({ userId, userRole, contacts }: {
       const { id: realId } = await res.json()
       const realMsg: Msg = { ...optimistic, id: realId }
       setAllMsgs(prev => prev.map(m => m.id === optimistic.id ? realMsg : m))
-
-      // Best-effort broadcast for faster delivery (recipient may or may not be subscribed)
-      const chName = threadChannel(userId, activeContact.id)
-      if (!bcastChannels.current[chName]) {
-        bcastChannels.current[chName] = supabase.channel(chName)
-        bcastChannels.current[chName].subscribe()
-      }
-      bcastChannels.current[chName].send({ type: 'broadcast', event: 'msg', payload: realMsg })
+      // Broadcast to recipient's personal inbox channel — always subscribed on their end
+      const ch = supabase.channel(inboxChannel(activeContact.id))
+      ch.subscribe(s => {
+        if (s === 'SUBSCRIBED') {
+          ch.send({ type: 'broadcast', event: 'msg', payload: realMsg })
+        }
+      })
       emitChatBus({ event: 'new_message', payload: realMsg })
     } else {
       setAllMsgs(prev => prev.filter(m => m.id !== optimistic.id))
@@ -206,45 +180,37 @@ export default function ChatWidget({ userId, userRole, contacts }: {
 
   async function deleteMsg(id: string) {
     await supabase.from('messages').delete().eq('id', id)
-    // postgres_changes DELETE will handle removal for both sides
     setAllMsgs(prev => prev.filter(m => m.id !== id))
+    if (activeContact) {
+      const ch = supabase.channel(inboxChannel(activeContact.id))
+      ch.subscribe(s => { if (s === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'del', payload: { id } }) })
+    }
     emitChatBus({ event: 'delete_message', payload: { id } })
   }
 
-  // ── Unread count ───────────────────────────────────────────────────────
+  // ── Unread ────────────────────────────────────────────────────────────
   function unreadCount(contactId: string) {
-    // Thread open in widget → 0
     if (activeContactRef.current?.id === contactId && openRef.current) return 0
-    // Thread open on full page → 0
     try { if (sessionStorage.getItem('cb_page_active_thread') === contactId) return 0 } catch {}
     const readTs = readUpTo[contactId] ?? ''
-    return allMsgs.filter(m =>
-      m.sender_id === contactId &&
-      m.recipient_id === userId &&
-      m.created_at > readTs
-    ).length
+    return allMsgs.filter(m => m.sender_id === contactId && m.recipient_id === userId && m.created_at > readTs).length
   }
 
   const totalUnread = (() => {
     if (open) return 0
     try { if (sessionStorage.getItem('cb_page_active_thread')) return 0 } catch {}
-    const senders = new Set(
-      allMsgs.filter(m => m.sender_id !== userId && m.recipient_id === userId).map(m => m.sender_id)
-    )
+    const senders = new Set(allMsgs.filter(m => m.sender_id !== userId && m.recipient_id === userId).map(m => m.sender_id))
     return [...senders].reduce((sum, sid) => sum + unreadCount(sid), 0)
   })()
 
-  // ── Conversation list ──────────────────────────────────────────────────
+  // ── Conversation list ─────────────────────────────────────────────────
   const contactMap: Record<string, any> = {}
   allMsgs.forEach(m => {
     const other = m.sender_id === userId ? m.recipient_id : m.sender_id
     if (!other || other === userId) return
-    const contact = contacts.find(c => c.id === other)
-    if (!contactMap[other]) {
-      contactMap[other] = { id: other, full_name: contact?.full_name ?? 'User', role: contact?.role ?? 'student', lastMsg: m, lastTs: m.created_at }
-    } else if (m.created_at > contactMap[other].lastTs) {
-      contactMap[other].lastMsg = m; contactMap[other].lastTs = m.created_at
-    }
+    const c = contacts.find(x => x.id === other)
+    if (!contactMap[other]) contactMap[other] = { id: other, full_name: c?.full_name ?? 'User', role: c?.role ?? 'student', lastMsg: m, lastTs: m.created_at }
+    else if (m.created_at > contactMap[other].lastTs) { contactMap[other].lastMsg = m; contactMap[other].lastTs = m.created_at }
   })
   const recentContacts = Object.values(contactMap).sort((a: any, b: any) => b.lastTs.localeCompare(a.lastTs))
   const filtered = contacts.filter(c => c.id !== userId && c.full_name.toLowerCase().includes(search.toLowerCase()))
@@ -272,7 +238,6 @@ export default function ChatWidget({ userId, userRole, contacts }: {
 
       {open && (
         <div style={{ position: 'fixed', bottom: BOTTOM, right: RIGHT, width: W, height: H, zIndex: 1000, background: '#fff', border: isMobile ? 'none' : '1px solid #e5e7eb', borderRadius: isMobile ? 0 : 16, boxShadow: '0 12px 40px rgba(0,0,0,.15)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Header */}
           <div style={{ background: '#185FA5', color: '#fff', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {activeContact ? (
               <>
@@ -293,7 +258,6 @@ export default function ChatWidget({ userId, userRole, contacts }: {
               style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 20, lineHeight: 1, opacity: .8, padding: '0 2px' }}>✕</button>
           </div>
 
-          {/* Contact list */}
           {!activeContact && (
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
               <div style={{ padding: '10px 12px', borderBottom: '0.5px solid #f3f4f6' }}>
@@ -332,9 +296,9 @@ export default function ChatWidget({ userId, userRole, contacts }: {
                   <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em' }}>{search ? 'Results' : 'All contacts'}</div>
                   {filtered.length === 0 && <div style={{ padding: '16px 12px', fontSize: 13, color: '#aaa', textAlign: 'center' }}>No contacts found</div>}
                   {filtered.map(c => {
+                    const uc = unreadCount(c.id)
                     const bg = c.role === 'teacher' ? '#E6F1FB' : '#EAF3DE'
                     const col = c.role === 'teacher' ? '#0C447C' : '#27500A'
-                    const uc = unreadCount(c.id)
                     return (
                       <div key={c.id} onClick={() => openThread(c)}
                         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f9fafb', background: 'transparent' }}
@@ -357,14 +321,11 @@ export default function ChatWidget({ userId, userRole, contacts }: {
             </div>
           )}
 
-          {/* Thread view */}
           {activeContact && (
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
               <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {threadMsgs.length === 0 && (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 13, paddingTop: 60 }}>
-                    Start the conversation 👋
-                  </div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 13, paddingTop: 60 }}>Start the conversation 👋</div>
                 )}
                 {threadMsgs.map(m => {
                   const mine = m.sender_id === userId

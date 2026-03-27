@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { emitChatBus, onChatBus } from '@/lib/chatBus'
 import { Breadcrumb } from '@/components/ui'
 
+function inboxChannel(uid: string) { return 'inbox:' + uid }
 function mkInitials(name: string) {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
 }
@@ -98,7 +99,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
       chs.push(ch)
     })
     return () => chs.forEach(ch => supaPresence.removeChannel(ch))
-  }, [dmMsgs.map(m => m.sender_id === studentId ? m.recipient_id : m.sender_id).filter(Boolean).join(',')])
+  }, [Object.keys(contactMap).join(',')])
 
   // Sync messages from ChatWidget into this page
   useEffect(() => {
@@ -156,7 +157,10 @@ export default function StudentInboxClient({ messages: initial, announcements: i
       const chName = threadChannel(studentId, activeContact.id)
       const ch = broadcastChannels.current[chName] ?? supabase.channel(chName)
       broadcastChannels.current[chName] = ch
-      await ch.send({ type: 'broadcast', event: 'new_message', payload: real })
+      const recipientCh = supabase.channel(inboxChannel(real.recipient_id))
+      recipientCh.subscribe(s => {
+        if (s === 'SUBSCRIBED') recipientCh.send({ type: 'broadcast', event: 'msg', payload: real })
+      })
       emitChatBus({ event: 'new_message', payload: real })
     } else {
       setDmMsgs(prev => prev.filter(m => m.id !== optimistic.id))
