@@ -403,9 +403,10 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   const [scrollPct, setScrollPct] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  const currentIndex = allLessons.findIndex(l => l.id === lesson.id)
-  const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null
-  const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null
+  const topLevelLessons = allLessons.filter((l: any) => !l.parent_lesson_id)
+  const currentIndex = topLevelLessons.findIndex((l: any) => l.id === lesson.id)
+  const prevLesson = currentIndex > 0 ? topLevelLessons[currentIndex - 1] : null
+  const nextLesson = currentIndex < topLevelLessons.length - 1 ? topLevelLessons[currentIndex + 1] : null
   const completedSet = new Set(completedIds)
 
   // ── Estimated read time ────────────────────────────────────────────────────
@@ -620,17 +621,30 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         <div style={{ width:210, flexShrink:0, position:'sticky', top:80 }}>
           <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 0', maxHeight:'calc(100vh - 120px)', overflowY:'auto' }}>
             <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Lessons</div>
-            {allLessons.filter((l:any) => !l.parent_lesson_id).map((l:any, i:number) => {
+            {topLevelLessons.map((l:any, i:number) => {
               const isCurrent = l.id === lesson.id
               const isDone = completedSet.has(l.id)
+              const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
               return (
-                <a key={l.id} href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                  style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
-                  <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    {isDone ? '✓' : i+1}
-                  </div>
-                  <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
-                </a>
+                <div key={l.id}>
+                  <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
+                    <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      {isDone ? '✓' : i+1}
+                    </div>
+                    <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
+                  </a>
+                  {isCurrent && subs.length > 0 && subs.map((s:any) => (
+                    <div key={s.id}
+                      style={{ paddingLeft:28, paddingRight:8, paddingTop:2, paddingBottom:2 }}>
+                      <button onClick={() => setActiveTab(s.id === activeTab ? 'main' : s.id)}
+                        style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e5e7eb', color: activeTab===s.id?'#185FA5':'#888', fontSize:11, cursor:'pointer', border:'none', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e0e7ef', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
+                        <span style={{ fontSize:10, color: activeTab===s.id?'#185FA5':'#bbb' }}>↳</span>
+                        <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )
             })}
           </div>
@@ -646,23 +660,34 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div style={{ marginBottom:12 }}>
             <button onClick={() => setNavOpen(o => !o)}
               style={{ width:'100%', padding:'10px 14px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', fontFamily:'inherit', color:'#555' }}>
-              <span>📚 Lesson {currentIndex+1} of {allLessons.length}: <strong style={{ color:'#111' }}>{lesson.title}</strong></span>
+              <span>📚 Lesson {currentIndex+1} of {topLevelLessons.length}: <strong style={{ color:'#111' }}>{lesson.title}</strong></span>
               <span style={{ color:'#888' }}>{navOpen ? '▲' : '▼'}</span>
             </button>
             {navOpen && (
               <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'6px 0', maxHeight:260, overflowY:'auto' }}>
-                {allLessons.filter((l:any) => !l.parent_lesson_id).map((l:any, i:number) => {
+                {topLevelLessons.map((l:any, i:number) => {
                   const isCurrent = l.id === lesson.id
                   const isDone = completedSet.has(l.id)
+                  const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
                   return (
-                    <a key={l.id} href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                      onClick={() => { setNavOpen(false); setActiveTab('main') }}
-                      style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent' }}>
-                      <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                        {isDone ? '✓' : i+1}
-                      </div>
-                      <span style={{ fontSize:13, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
-                    </a>
+                    <div key={l.id}>
+                      <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                        onClick={() => { setNavOpen(false); setActiveTab('main') }}
+                        style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent' }}>
+                        <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          {isDone ? '✓' : i+1}
+                        </div>
+                        <span style={{ fontSize:13, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
+                      </a>
+                      {isCurrent && subs.length > 0 && subs.map((s:any) => (
+                        <button key={s.id}
+                          onClick={() => { setNavOpen(false); setActiveTab(s.id) }}
+                          style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'7px 14px 7px 36px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'3px solid #185FA5':'3px solid transparent', color: activeTab===s.id?'#0C447C':'#888', fontSize:12, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left' }}>
+                          <span style={{ fontSize:10 }}>↳</span>
+                          <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
+                        </button>
+                      ))}
+                    </div>
                   )
                 })}
               </div>
@@ -690,17 +715,38 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
         {/* Sub-lesson tabs */}
         {subLessons.length > 0 && (
-          <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e5e7eb', overflowX:'auto' }}>
-            <button onClick={() => setActiveTab('main')}
-              style={{ padding:'8px 16px', fontSize:13, fontWeight: activeTab==='main' ? 600 : 400, color: activeTab==='main' ? '#185FA5' : '#888', background:'none', border:'none', borderBottom: activeTab==='main' ? '2px solid #185FA5' : '2px solid transparent', marginBottom:'-2px', cursor:'pointer', whiteSpace:'nowrap', fontFamily:'inherit' }}>
-              {lesson.title}
-            </button>
-            {subLessons.map((s: any) => (
-              <button key={s.id} onClick={() => setActiveTab(s.id)}
-                style={{ padding:'8px 16px', fontSize:13, fontWeight: activeTab===s.id ? 600 : 400, color: activeTab===s.id ? '#185FA5' : '#888', background:'none', border:'none', borderBottom: activeTab===s.id ? '2px solid #185FA5' : '2px solid transparent', marginBottom:'-2px', cursor:'pointer', whiteSpace:'nowrap', fontFamily:'inherit' }}>
-                {s.title}
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:11, fontWeight:600, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>
+              Parts of this lesson
+            </div>
+            <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:8, overflowX:'auto' }}>
+              {/* Main lesson tab */}
+              <button onClick={() => setActiveTab('main')}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background: activeTab==='main' ? '#185FA5' : '#fff', color: activeTab==='main' ? '#fff' : '#555', border: activeTab==='main' ? '2px solid #185FA5' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
+                <div style={{ width:28, height:28, borderRadius:'50%', background: activeTab==='main' ? 'rgba(255,255,255,.2)' : '#E6F1FB', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>📖</div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap' }}>{lesson.title}</div>
+                  <div style={{ fontSize:11, opacity:0.7, marginTop:1 }}>Main lesson</div>
+                </div>
+                {activeTab==='main' && <span style={{ marginLeft:'auto', fontSize:12 }}>✓</span>}
               </button>
-            ))}
+              {/* Sub-lesson tabs */}
+              {subLessons.map((s: any, idx: number) => (
+                <button key={s.id} onClick={() => setActiveTab(s.id)}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background: activeTab===s.id ? '#185FA5' : '#fff', color: activeTab===s.id ? '#fff' : '#555', border: activeTab===s.id ? '2px solid #185FA5' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
+                  <div style={{ width:28, height:28, borderRadius:'50%', background: activeTab===s.id ? 'rgba(255,255,255,.2)' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>
+                    {idx === 0 ? '📝' : idx === 1 ? '💻' : '📄'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap' }}>{s.title}</div>
+                    <div style={{ fontSize:11, opacity:0.7, marginTop:1 }}>Part {idx + 2}</div>
+                  </div>
+                  {activeTab===s.id && <span style={{ marginLeft:'auto', fontSize:12 }}>✓</span>}
+                </button>
+              ))}
+            </div>
+            {/* Active tab indicator strip */}
+            <div style={{ marginTop:12, height:1, background:'#e5e7eb' }} />
           </div>
         )}
 

@@ -12,8 +12,9 @@ export default function StudentModuleView({ module, lessons, assignments, comple
   const [search, setSearch] = useState('')
   const done = new Set(completedIds)
   const bookmarked = new Set(bookmarkedIds)
-  // Hide locked lessons and sub-lessons (they appear as tabs inside their parent)
-  const visibleLessons = lessons.filter((l: any) => !l.locked && !l.parent_lesson_id)
+  // Show all top-level lessons (sub-lessons appear as tabs inside their parent)
+  // Locked lessons appear in the list but are non-clickable
+  const visibleLessons = lessons.filter((l: any) => !l.parent_lesson_id)
   const pct = visibleLessons.length > 0 ? Math.round(done.size / visibleLessons.length * 100) : 0
   const filteredLessons = search.trim()
     ? visibleLessons.filter((l: any) => l.title.toLowerCase().includes(search.toLowerCase()))
@@ -88,7 +89,21 @@ export default function StudentModuleView({ module, lessons, assignments, comple
             const unlocked = isUnlocked(realIndex)
             return (
               <div key={l.id}>
-                {unlocked ? (
+                {l.locked ? (
+                  // Locked: visible in list but not clickable
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fafafa', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, cursor: 'not-allowed' }}>
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f3f4f6', color: '#bbb', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🔒</div>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#aaa' }}>{l.title}</span>
+                    <span style={{ fontSize: 11, color: '#bbb', background: '#f3f4f6', padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>Not available</span>
+                  </div>
+                ) : !unlocked ? (
+                  // Sequentially locked
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f9fafb', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, opacity: 0.6 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f3f4f6', color: '#aaa', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🔒</div>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#888' }}>{l.title}</span>
+                    <Pill label="Locked" color="gray" />
+                  </div>
+                ) : (
                   <a href={'/student/modules/' + module.id + '/lessons/' + l.id}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, textDecoration: 'none', color: 'inherit' }}>
                     <div style={{ width: 22, height: 22, borderRadius: '50%', background: completed ? '#EAF3DE' : bookmarked.has(l.id) ? '#FFF3CD' : '#E6F1FB', color: completed ? '#27500A' : bookmarked.has(l.id) ? '#856404' : '#0C447C', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -99,12 +114,6 @@ export default function StudentModuleView({ module, lessons, assignments, comple
                     {!completed && bookmarked.has(l.id) && <Pill label="Not completed" color="amber" />}
                     {!completed && !bookmarked.has(l.id) && <Pill label="Read" color="blue" />}
                   </a>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f9fafb', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, opacity: 0.6 }}>
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f3f4f6', color: '#aaa', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🔒</div>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#888' }}>{l.title}</span>
-                    <Pill label="Locked" color="gray" />
-                  </div>
                 )}
               </div>
             )
