@@ -8,29 +8,39 @@ export async function POST(req: NextRequest) {
 
   const { messages, system } = await req.json()
 
-  // Convert messages to Gemini format (combine system into first user message)
-  const geminiMessages = messages.map((m: any, i: number) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: i === 0 ? `${system}\n\n---\n\n${m.content}` : m.content }],
-  }))
+  const apiKey = process.env.OPENROUTER_API_KEY ?? ''
+  if (!apiKey) {
+    return NextResponse.json({ error: 'OPENROUTER_API_KEY not configured' }, { status: 500 })
+  }
 
-  const apiKey = process.env.GEMINI_API_KEY ?? ''
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: geminiMessages }),
-    }
-  )
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://classbase.app',
+      'X-Title': 'ClassBase AI Tutor',
+    },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-3.3-8b-instruct:free',
+      messages: [
+        { role: 'system', content: system },
+        ...messages,
+      ],
+    }),
+  })
 
   if (!res.ok) {
     const err = await res.text()
-    console.error('Gemini API error:', err)
-    return NextResponse.json({ error: 'AI request failed' }, { status: 500 })
+    console.error('OpenRouter API error:', res.status, err)
+    return NextResponse.json({ error: `OpenRouter error ${res.status}: ${err}` }, { status: 500 })
   }
 
   const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  const text = data.choices?.[0]?.message?.content ?? ''
+  if (!text) {
+    console.error('OpenRouter returned no text:', JSON.stringify(data))
+    return NextResponse.json({ error: 'No response from AI' }, { status: 500 })
+  }
   return NextResponse.json({ text })
 }

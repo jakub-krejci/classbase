@@ -80,10 +80,16 @@ Keep responses concise but complete. If a question is unrelated to the lesson, g
       })
 
       const data = await response.json()
-      const text = data.text ?? 'Sorry, I had trouble responding. Please try again.'
-      setMsgs(prev => [...prev, { role: 'assistant', content: text }])
-    } catch {
-      setMsgs(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
+      if (!response.ok) {
+        console.error('AI tutor error:', data)
+        setMsgs(prev => [...prev, { role: 'assistant', content: `Error: ${data.error ?? response.status}. Check browser console for details.` }])
+      } else {
+        const text = data.text || 'No response received.'
+        setMsgs(prev => [...prev, { role: 'assistant', content: text }])
+      }
+    } catch (e: any) {
+      console.error('AI tutor fetch error:', e)
+      setMsgs(prev => [...prev, { role: 'assistant', content: `Network error: ${e?.message ?? 'unknown'}` }])
     }
     setLoading(false)
   }
