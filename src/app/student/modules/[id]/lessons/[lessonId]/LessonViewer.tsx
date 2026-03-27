@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { createClient } from '@/lib/supabase/client'
 import { BackLink, Breadcrumb } from '@/components/ui'
+import AiTutor from '@/components/AiTutor'
 import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
 // Parse lesson HTML into renderable blocks
@@ -1148,5 +1149,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         </div>
       )}
     </div>
+
+      {/* ── AI Tutor ── */}
+      <AiTutor
+        lessonTitle={activeLesson.title}
+        contentHtml={activeLesson.content_html ?? ''}
+        isMobile={isMobile}
+      />
   )
 }
