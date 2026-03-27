@@ -66,23 +66,21 @@ Your role:
 - If asked to quiz the student, generate relevant questions from the lesson
 - Stay focused on the lesson topic but draw on broader knowledge when it helps
 - Be encouraging and patient
-- Use markdown formatting: **bold** for key terms, bullet points for lists, \`code\` for code
+- Use markdown formatting: **bold** for key terms, \`code\` for code
 
 Keep responses concise but complete. If a question is unrelated to the lesson, gently redirect.`
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/ai-tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
           system: systemPrompt,
           messages: newMsgs.map(m => ({ role: m.role, content: m.content })),
         }),
       })
 
       const data = await response.json()
-      const text = data.content?.[0]?.text ?? 'Sorry, I had trouble responding. Please try again.'
+      const text = data.text ?? 'Sorry, I had trouble responding. Please try again.'
       setMsgs(prev => [...prev, { role: 'assistant', content: text }])
     } catch {
       setMsgs(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
