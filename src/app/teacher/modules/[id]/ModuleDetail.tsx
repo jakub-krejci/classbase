@@ -248,85 +248,132 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
       {/* Students tab */}
       {tab === 'students' && (
         <div>
-          {enrollmentList.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No students enrolled yet.</p>}
+          {enrollmentList.length === 0 && (
+            <div style={{ textAlign:'center', padding:'40px 20px', color:'#aaa', fontSize:13, border:'1px dashed #e5e7eb', borderRadius:12 }}>
+              No students enrolled yet. Share the access code <strong style={{ color:'#333' }}>{module.access_code}</strong> to invite students.
+            </div>
+          )}
+
           {enrollmentList.length > 0 && (
-            <div className='cb-progress-grid' style={{ overflowX: 'auto' }}>
-              {/* Header row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '200px repeat(' + lessons.length + ', 1fr)', gap: 0, marginBottom: 4, minWidth: 400 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em', padding: '4px 8px' }}>Student</div>
-                {lessons.map((l: any, i: number) => (
-                  <div key={l.id} title={l.title} style={{ fontSize: 9, color: '#888', padding: '4px 4px', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderLeft: '1px solid #f3f4f6' }}>
-                    {i + 1}. {l.title.slice(0, 12)}{l.title.length > 12 ? '…' : ''}
-                  </div>
-                ))}
+            <div>
+              {/* Summary bar */}
+              <div style={{ display:'flex', gap:16, marginBottom:16, flexWrap:'wrap' }}>
+                <span style={{ fontSize:13, color:'#555' }}>
+                  <strong>{enrollmentList.filter((e:any)=>!e.banned).length}</strong> active
+                </span>
+                {enrollmentList.filter((e:any)=>e.banned).length > 0 && (
+                  <span style={{ fontSize:13, color:'#856404' }}>
+                    <strong>{enrollmentList.filter((e:any)=>e.banned).length}</strong> banned
+                  </span>
+                )}
+                <span style={{ fontSize:13, color:'#888' }}>
+                  <strong>{enrollmentList.filter((e:any)=>(allProgress??[]).some((p:any)=>p.student_id===e.student_id&&p.status==='completed')).length}</strong> with completed lessons
+                </span>
               </div>
-              {/* Student rows */}
-              {enrollmentList.map((e: any) => {
-                const p = e.profiles as any
-                const initials = (p?.full_name ?? p?.email ?? '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
-                // Build progress map for this student
-                const studentProgress = (allProgress ?? []).filter((r: any) => r.student_id === e.student_id)
-                const progressMap: Record<string, any> = {}
-                studentProgress.forEach((r: any) => { progressMap[r.lesson_id] = r })
-                const completedCount = studentProgress.filter((r: any) => r.status === 'completed').length
-                const overallPct = lessons.length > 0 ? Math.round(completedCount / lessons.length * 100) : 0
-                return (
-                  <div key={e.student_id} style={{ display: 'grid', gridTemplateColumns: '200px repeat(' + lessons.length + ', 1fr)', gap: 0, borderTop: '0.5px solid #f3f4f6', alignItems: 'center', minWidth: 400 }}>
-                    {/* Student name cell */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: e.banned ? '#f3f4f6' : '#E6F1FB', color: e.banned ? '#aaa' : '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {e.banned ? '🚫' : initials}
-                      </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: e.banned ? '#aaa' : '#111' }}>
-                          {p?.full_name ?? 'Unknown'}
-                          {e.banned && <span style={{ fontSize: 10, color: '#856404', background: '#FFF3CD', padding: '1px 5px', borderRadius: 8, marginLeft: 5 }}>banned</span>}
+
+              {/* Student cards */}
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {enrollmentList.map((e: any) => {
+                  const p = e.profiles as any
+                  const initials = (p?.full_name ?? p?.email ?? '?').split(' ').map((w:string)=>w[0]).join('').toUpperCase().slice(0,2)
+                  const studentProgress = (allProgress??[]).filter((r:any)=>r.student_id===e.student_id)
+                  const completedCount = studentProgress.filter((r:any)=>r.status==='completed').length
+                  const topLevelLessons = lessons.filter((l:any)=>!l.parent_lesson_id)
+                  const overallPct = topLevelLessons.length > 0 ? Math.round(completedCount/topLevelLessons.length*100) : 0
+                  const lastSeen = p?.last_seen_at ? new Date(p.last_seen_at) : null
+                  const lastSeenStr = lastSeen
+                    ? (Date.now() - lastSeen.getTime() < 86400000
+                        ? 'Today'
+                        : Date.now() - lastSeen.getTime() < 7*86400000
+                          ? Math.floor((Date.now()-lastSeen.getTime())/86400000)+'d ago'
+                          : lastSeen.toLocaleDateString())
+                    : 'Never'
+
+                  return (
+                    <div key={e.student_id}
+                      style={{ background: e.banned ? '#fffbf0' : '#fff', border: e.banned ? '0.5px solid #FFE69C' : '0.5px solid #e5e7eb', borderRadius:10, padding:'12px 14px', opacity: e.banned ? 0.85 : 1 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                        {/* Avatar */}
+                        <div style={{ width:38, height:38, borderRadius:'50%', background: e.banned ? '#f3f4f6' : '#E6F1FB', color: e.banned ? '#bbb' : '#0C447C', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          {e.banned ? '🚫' : initials}
                         </div>
-                        <div style={{ fontSize: 9, color: '#bbb' }}>
-                          {p?.last_seen_at ? 'Last seen ' + new Date(p.last_seen_at).toLocaleDateString() : 'Never logged in'}
-                          {' · '}{overallPct}% done
+
+                        {/* Name + meta */}
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                            <span style={{ fontSize:14, fontWeight:600, color: e.banned ? '#888' : '#111' }}>
+                              {p?.full_name ?? 'Unknown'}
+                            </span>
+                            {e.banned && (
+                              <span style={{ fontSize:10, fontWeight:600, color:'#856404', background:'#FFF3CD', padding:'2px 7px', borderRadius:8 }}>
+                                BANNED
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize:11, color:'#888', marginTop:2 }}>{p?.email}</div>
+                          <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:6, flexWrap:'wrap' }}>
+                            {/* Progress bar */}
+                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                              <div style={{ width:80, height:5, background:'#f0f0f0', borderRadius:3, overflow:'hidden' }}>
+                                <div style={{ height:'100%', width:overallPct+'%', background: overallPct===100?'#27500A':'#185FA5', borderRadius:3 }} />
+                              </div>
+                              <span style={{ fontSize:11, color:'#555' }}>{overallPct}%</span>
+                            </div>
+                            <span style={{ fontSize:11, color:'#aaa' }}>
+                              {completedCount}/{topLevelLessons.length} lessons
+                            </span>
+                            <span style={{ fontSize:11, color:'#aaa' }}>
+                              Last seen: {lastSeenStr}
+                            </span>
+                          </div>
+                          {/* Per-lesson dots */}
+                          {topLevelLessons.length > 0 && (
+                            <div style={{ display:'flex', gap:3, marginTop:7, flexWrap:'wrap' }}>
+                              {topLevelLessons.map((l:any, i:number) => {
+                                const prog = studentProgress.find((r:any)=>r.lesson_id===l.id)
+                                const status = prog?.status
+                                const scroll = prog?.scroll_pct ?? 0
+                                const bg = status==='completed' ? '#27500A' : status==='bookmark' ? '#f59e0b' : scroll>0 ? '#185FA5' : '#e5e7eb'
+                                const title = l.title + ': ' + (status==='completed'?'Completed':status==='bookmark'?'Bookmarked':scroll>0?scroll+'% read':'Not started')
+                                return (
+                                  <div key={l.id} title={title}
+                                    style={{ width:10, height:10, borderRadius:'50%', background:bg, flexShrink:0 }} />
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
-                        <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+
+                        {/* Action buttons */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:5, flexShrink:0 }}>
                           <button onClick={() => toggleBan(e.student_id, e.banned)}
-                            style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, border: '0.5px solid #e5e7eb', background: e.banned ? '#EAF3DE' : '#FFF3CD', color: e.banned ? '#27500A' : '#856404', cursor: 'pointer', fontFamily: 'inherit' }}>
-                            {e.banned ? 'Unban' : 'Ban'}
+                            style={{ padding:'5px 12px', fontSize:12, fontWeight:500, borderRadius:7, border:'1px solid', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap',
+                              background: e.banned ? '#EAF3DE' : '#FFF3CD',
+                              color: e.banned ? '#27500A' : '#856404',
+                              borderColor: e.banned ? '#a7d68a' : '#FFE69C' }}>
+                            {e.banned ? '✓ Unban' : '⊘ Ban'}
                           </button>
                           <button onClick={() => removeStudent(e.student_id)}
-                            style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, border: '0.5px solid #F09595', background: '#FCEBEB', color: '#791F1F', cursor: 'pointer', fontFamily: 'inherit' }}>
-                            Remove
+                            style={{ padding:'5px 12px', fontSize:12, fontWeight:500, borderRadius:7, border:'1px solid #F09595', background:'#FCEBEB', color:'#791F1F', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                            ✕ Remove
                           </button>
                         </div>
                       </div>
                     </div>
-                    {/* Per-lesson progress cells */}
-                    {lessons.map((l: any) => {
-                      const prog = progressMap[l.id]
-                      const status = prog?.status
-                      const scroll = prog?.scroll_pct ?? 0
-                      const bg = status === 'completed' ? '#EAF3DE' : status === 'bookmark' ? '#FFF3CD' : scroll > 0 ? '#E6F1FB' : '#f9fafb'
-                      const icon = status === 'completed' ? '✓' : status === 'bookmark' ? '🔖' : scroll > 0 ? scroll + '%' : '—'
-                      const color = status === 'completed' ? '#27500A' : status === 'bookmark' ? '#856404' : scroll > 0 ? '#0C447C' : '#ccc'
-                      return (
-                        <div key={l.id} title={status === 'completed' ? 'Completed' : status === 'bookmark' ? 'Bookmarked' : scroll > 0 ? scroll + '% read' : 'Not started'}
-                          style={{ background: bg, borderLeft: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 36, fontSize: 10, fontWeight: 600, color }}>
-                          {icon}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+
               {/* Legend */}
-              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: '#888', flexWrap: 'wrap' }}>
-                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#EAF3DE', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />Completed</span>
-                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#FFF3CD', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />Bookmarked</span>
-                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#E6F1FB', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />In progress (% read)</span>
-                <span><span style={{ display: 'inline-block', width: 12, height: 12, background: '#f9fafb', borderRadius: 2, verticalAlign: 'middle', marginRight: 4 }} />Not started</span>
+              <div style={{ display:'flex', gap:14, marginTop:14, fontSize:11, color:'#888', flexWrap:'wrap' }}>
+                <span><span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#27500A', verticalAlign:'middle', marginRight:4 }} />Completed</span>
+                <span><span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#f59e0b', verticalAlign:'middle', marginRight:4 }} />Bookmarked</span>
+                <span><span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#185FA5', verticalAlign:'middle', marginRight:4 }} />In progress</span>
+                <span><span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#e5e7eb', verticalAlign:'middle', marginRight:4 }} />Not started</span>
               </div>
             </div>
           )}
         </div>
       )}
-    </div>
-  )
-}
+
+      
