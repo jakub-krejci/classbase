@@ -59,8 +59,9 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
   async function duplicateLesson(id: string) {
     const src = lessonList.find(l => l.id === id)
     if (!src) return
-    // Insert copy after the original
-    const pos = (src.position ?? 0) + 0.5   // will be re-ordered by DB position
+    // Insert copy after the original — use max position + 1 (DB requires integer)
+    const maxPos = Math.max(...lessonList.map(l => l.position ?? 0))
+    const pos = maxPos + 1
     const { data, error } = await supabase.from('lessons').insert({
       module_id: module.id,
       title: src.title + ' (copy)',

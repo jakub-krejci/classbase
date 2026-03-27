@@ -519,14 +519,18 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     const timer = setTimeout(() => {
       const el = contentRef.current
       if (!el) return
-      const headings = el.querySelectorAll('h1, h2, h3')
+      const allHeadings = el.querySelectorAll('h1, h2, h3')
       const items: { id: string; text: string; level: number }[] = []
-      headings.forEach((h, i) => {
-        const id = 'toc-' + i
+      let tocIdx = 0
+      allHeadings.forEach((h) => {
+        // Skip headings inside quiz blocks, callouts, or other special components
+        if (h.closest('.cb-quiz') || h.closest('[data-no-toc]')) return
+        const id = 'toc-' + tocIdx++
         h.id = id
         const tag = h.tagName.toLowerCase()
         const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3
-        items.push({ id, text: h.textContent ?? '', level })
+        const text = (h.textContent ?? '').trim()
+        if (text) items.push({ id, text, level })
       })
       setTocItems(items)
 
