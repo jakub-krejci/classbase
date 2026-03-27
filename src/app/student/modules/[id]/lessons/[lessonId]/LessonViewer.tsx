@@ -877,7 +877,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                 <div key={l.id} className="cb-strip-dot" style={{
                   background: isDone ? '#22c55e' : isCurrent ? '#185FA5' : '#dbe4ff',
                   border: isCurrent ? '2px solid #0c447c' : '2px solid transparent',
-                  title: l.title,
                 }} title={l.title} />
               )
             })}
