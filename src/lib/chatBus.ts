@@ -1,30 +1,21 @@
-// In-tab event bus for syncing ChatWidget ↔ Messages/Inbox page.
-// Uses the browser's native BroadcastChannel so both components
-// see every message regardless of which one sent it.
+// In-tab event bus: syncs ChatWidget ↔ Messages/Inbox page.
+// Plain event emitter — no BroadcastChannel needed since both
+// components live in the same JS context (same tab, AppShell tree).
 
 export type BusMsg = {
   event: 'new_message' | 'delete_message'
   payload: any
 }
 
-const CHANNEL_NAME = 'classbase_chat_bus'
-
-let _bc: BroadcastChannel | null = null
-
-function getBus(): BroadcastChannel | null {
-  if (typeof window === 'undefined') return null
-  if (!_bc) _bc = new BroadcastChannel(CHANNEL_NAME)
-  return _bc
-}
+type Handler = (msg: BusMsg) => void
+const handlers = new Set<Handler>()
 
 export function emitChatBus(msg: BusMsg) {
-  getBus()?.postMessage(msg)
+  // Notify all listeners asynchronously so state updates don't conflict
+  setTimeout(() => handlers.forEach(h => h(msg)), 0)
 }
 
-export function onChatBus(handler: (msg: BusMsg) => void): () => void {
-  const bc = getBus()
-  if (!bc) return () => {}
-  const listener = (e: MessageEvent) => handler(e.data as BusMsg)
-  bc.addEventListener('message', listener)
-  return () => bc.removeEventListener('message', listener)
+export function onChatBus(handler: Handler): () => void {
+  handlers.add(handler)
+  return () => handlers.delete(handler)
 }
