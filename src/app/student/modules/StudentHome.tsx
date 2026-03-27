@@ -1,17 +1,49 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Tag, PageHeader, EmptyState } from '@/components/ui'
 import { useIsMobile } from '@/lib/useIsMobile'
+import { createClient } from '@/lib/supabase/client'
 
-export default function StudentHome({ profile, enrollments, progressMap, messages }: {
+export default function StudentHome({ profile, enrollments, progressMap, messages: initMessages }: {
   profile: any
   enrollments: any[]
   progressMap: Record<string, { done: number; total: number }>
   messages: any[]
 }) {
   const isMobile = useIsMobile()
+  const supabase = createClient()
+  const [messages, setMessages] = useState(initMessages)
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('cb_dismissed_announcements')
+      return new Set(stored ? JSON.parse(stored) : [])
+    } catch { return new Set() }
+  })
   const [showEnroll, setShowEnroll] = useState(false)
+
+  // Real-time: new announcements
+  useEffect(() => {
+    const ch = supabase.channel('student-home-ann')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
+        const m = payload.new
+        if (m.recipient_type !== 'all' || m.message_type !== 'announcement') return
+        const { data: p } = await supabase.from('profiles').select('full_name').eq('id', m.sender_id).single()
+        setMessages(prev => [{ ...m, sender_name: (p as any)?.full_name ?? 'Teacher' }, ...prev])
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
+  function dismiss(id: string) {
+    setDismissed(prev => {
+      const next = new Set(prev).add(id)
+      try { localStorage.setItem('cb_dismissed_announcements', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
+  const visibleMessages = messages.filter(m => !dismissed.has(m.id))
   const [step, setStep] = useState<'code' | 'password'>('code')
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
@@ -75,27 +107,20 @@ export default function StudentHome({ profile, enrollments, progressMap, message
 
   return (
     <div>
-      {/* Notification banner */}
-      {messages.length > 0 && (
-        <div style={{ background: '#E6F1FB', border: '0.5px solid #B5D4F4', borderRadius: 10, padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#0C447C', marginBottom: 2 }}>Message from your teacher</div>
-            <div style={{ fontSize: 13, color: '#0C447C' }}>{messages[0].body}</div>
+      {/* Announcement banners */}
+      {visibleMessages.map(m => (
+        <div key={m.id} style={{ background: '#E6F1FB', border: '0.5px solid #B5D4F4', borderRadius: 10, padding: '10px 14px', marginBottom: 10, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#0C447C', marginBottom: 2 }}>📢 Announcement from your teacher</div>
+            <div style={{ fontSize: 13, color: '#0C447C', lineHeight: 1.5 }}>{m.body}</div>
           </div>
-          <a href="/student/inbox" style={{ fontSize: 11, color: '#185FA5', fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>View all →</a>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            <a href="/student/inbox" style={{ fontSize: 11, color: '#185FA5', fontWeight: 500, textDecoration: 'none', whiteSpace: 'nowrap' }}>View all →</a>
+            <button onClick={() => dismiss(m.id)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#7da8cc', lineHeight: 1, padding: '0 2px' }} title="Dismiss">✕</button>
+          </div>
         </div>
-      )}
-
-      <PageHeader
-        title={`Hello, ${name}`}
-        sub={enrollments.length > 0 ? `${enrollments.length} module${enrollments.length !== 1 ? 's' : ''} · ${overallPct}% overall progress` : 'Welcome to ClassBase'}
-        action={
-          <button onClick={() => { setShowEnroll(true); setStep('code') }}
-            style={{ padding: '7px 14px', background: '#185FA5', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
-            + Join module
-          </button>
-        }
-      />
+      ))}
 
       {/* Enroll modal */}
       {showEnroll && (

@@ -61,25 +61,24 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
       userId = u.id
       const { data: n } = await supabase.from('notifications')
         .select('*').eq('user_id', u.id).eq('read', false)
+        .eq('type', 'announcement')
         .order('created_at', { ascending: false }).limit(20)
       setNotifs(n ?? [])
       setUnread((n ?? []).length)
     }
-    load()
-
-    // Realtime: new notification arrives
-    const channel = supabase.channel('notif-' + Math.random())
+    supabase.channel('notif-ann-' + u.id)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'notifications',
+        filter: `user_id=eq.${u.id}`,
       }, (payload: any) => {
         const n = payload.new
-        if (n.user_id !== userId) return
+        if (n.type !== 'announcement') return
         setNotifs(prev => [n, ...prev].slice(0, 20))
         setUnread(c => c + 1)
       })
       .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+  }
+  load()
   }, [])
 
   async function markAllRead() {
@@ -211,8 +210,10 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
         </div>
       )}
 
-      {/* Floating chat widget */}
-      {user && <ChatWidget userId={user.id} userRole={role} contacts={contacts} />}
+      {/* Floating chat widget — hidden on Messages/Inbox pages which have their own UI */}
+      {user && !path.startsWith('/teacher/messages') && !path.startsWith('/student/inbox') && (
+        <ChatWidget userId={user.id} userRole={role} contacts={contacts} />
+      )}
 
       {/* Page content */}
       <div className="cb-page-wrap" style={{ maxWidth: wide ? 1140 : 860, margin: '0 auto', padding: '28px 20px' }}>

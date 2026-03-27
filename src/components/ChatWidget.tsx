@@ -217,7 +217,13 @@ export default function ChatWidget({ userId, userRole, contacts }: {
     ).length
   }
 
-  const totalUnread = contacts.reduce((sum, c) => sum + unreadCount(c.id), 0)
+  // Compute unread from allMsgs directly — no dependency on contacts array loading
+  const totalUnread = (() => {
+    const senders = new Set(
+      allMsgs.filter(m => m.sender_id !== userId && m.recipient_id === userId).map(m => m.sender_id)
+    )
+    return [...senders].reduce((sum, sid) => sum + unreadCount(sid), 0)
+  })()
 
   const recentContacts = contacts.filter(c => c.id !== userId && allMsgs.some(m =>
     (m.sender_id === userId && m.recipient_id === c.id) ||
