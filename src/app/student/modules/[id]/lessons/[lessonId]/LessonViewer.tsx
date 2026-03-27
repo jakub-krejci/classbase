@@ -91,8 +91,8 @@ function CodeViewer({ code, language = 'python' }: { code: string; language?: La
   const langLabel = LANGUAGE_LABELS[language] ?? language
   const ext: Record<Language, string> = { python:'py', javascript:'js', typescript:'ts', sql:'sql', html:'html', css:'css', pseudocode:'txt' }
   return (
-    <div style={{ background:'#1e1e2e', borderRadius:8, overflow:'hidden', margin:'12px 0' }}>
-      <div style={{ background:'#16213e', padding:'6px 14px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+    <div className="cb-code-wrapper" style={{ background:'#1c1f2b', borderRadius:10, overflow:'hidden', margin:'1.4em -4px', borderLeft:'3px solid #5b7fa6', boxShadow:'0 3px 12px rgba(0,0,0,.10), 0 1px 3px rgba(0,0,0,.06)' }}>
+      <div style={{ background:'#161825', padding:'6px 14px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <span style={{ fontFamily:'monospace', fontSize:10, color:'#7aa2f7', letterSpacing:'.06em' }}>{langLabel.toUpperCase()}</span>
         <div style={{ display:'flex', gap:6 }}>
           <button onClick={() => {
@@ -107,10 +107,10 @@ function CodeViewer({ code, language = 'python' }: { code: string; language?: La
         </div>
       </div>
       <div style={{ display:'flex', background:'#1e1e2e' }}>
-        <div style={{ width:36, flexShrink:0, background:'#181825', padding:'14px 6px 14px 0', textAlign:'right', fontFamily:'ui-monospace,monospace', fontSize:13, lineHeight:1.7, color:'#45475a', userSelect:'none' }}>
+        <div style={{ width:36, flexShrink:0, background:'#14161f', padding:'14px 6px 14px 0', textAlign:'right', fontFamily:'ui-monospace,monospace', fontSize:12, lineHeight:1.75, color:'#3d4660', userSelect:'none' }}>
           {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i + 1}</div>)}
         </div>
-        <pre style={{ flex:1, background:'transparent', color:'#cdd6f4', padding:'14px 16px', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:14, margin:0, whiteSpace:'pre-wrap', overflowX:'auto', lineHeight:1.7, wordBreak:'break-word' }}
+        <pre style={{ flex:1, background:'transparent', color:'#d4d8e8', padding:'14px 16px', fontFamily:'ui-monospace,"Cascadia Code","Fira Code",monospace', fontSize:13.5, margin:0, whiteSpace:'pre-wrap', overflowX:'auto', lineHeight:1.75, wordBreak:'break-word' }}
           dangerouslySetInnerHTML={{ __html: highlighted }} />
       </div>
     </div>
@@ -168,9 +168,9 @@ function TryItViewer({ initialCode, expectedOutput }: { initialCode: string; exp
   const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
 
   return (
-    <div style={{ background:'#1a1b26', borderRadius:8, overflow:'hidden', margin:'12px 0', border:'1px solid #2a2a4a' }}>
+    <div style={{ background:'#1a1b26', borderRadius:8, overflow:'hidden', margin:'1.2em 0', borderLeft:'3px solid #a6e3a1', boxShadow:'0 2px 8px rgba(0,0,0,.07)' }}>
       {/* Header */}
-      <div style={{ background:'#16213e', padding:'6px 14px', display:'flex', alignItems:'center', gap:8 }}>
+      <div style={{ background:'#161825', padding:'6px 14px', display:'flex', alignItems:'center', gap:8 }}>
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#f38ba8',flexShrink:0 }} />
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#f9e2af',flexShrink:0 }} />
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#a6e3a1',flexShrink:0 }} />
@@ -379,7 +379,6 @@ const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
 
   return (
     <div ref={ref} className="lesson-content"
-      style={{ fontSize:14, lineHeight:1.75, color:'inherit' }}
       dangerouslySetInnerHTML={{ __html: html }} />
   )
 })
@@ -546,7 +545,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           (entries) => {
             for (const entry of entries) {
               if (entry.isIntersecting) {
+                // Update React state for ToC sidebar highlight
                 setTocActiveId(entry.target.id)
+                // Update DOM attribute for CSS heading highlight
+                document.querySelectorAll('.lesson-content [data-toc-active]')
+                  .forEach(el => el.removeAttribute('data-toc-active'))
+                entry.target.setAttribute('data-toc-active', '1')
                 break
               }
             }
@@ -645,27 +649,144 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   return (
     <div style={{ display: isMobile ? 'block' : 'flex', gap: 18, alignItems: 'flex-start' }}>
       <style>{PYTHON_CSS}{`
-        .lesson-content h1{font-size:22px;font-weight:700;margin:14px 0 6px}
-        .lesson-content h2{font-size:18px;font-weight:700;margin:12px 0 5px}
-        .lesson-content h3{font-size:15px;font-weight:700;margin:10px 0 4px}
-        .lesson-content p{margin:5px 0}
-        .lesson-content ul{padding-left:22px;margin:6px 0;list-style:disc}
-        .lesson-content ol{padding-left:22px;margin:6px 0;list-style:decimal}
-        .lesson-content li{margin:3px 0}
-        .lesson-content blockquote{border-left:3px solid #185FA5;padding:4px 14px;margin:8px 0;color:#666;font-style:italic}
-        .lesson-content table{border-collapse:collapse;width:100%;margin:10px 0}
-        .lesson-content td,.lesson-content th{border:1px solid #e5e7eb;padding:7px 11px}
-        .lesson-content th{background:#f9fafb;font-weight:600}
-        .lesson-content img{max-width:100%;border-radius:8px;margin:8px 0;display:block}
-        .lesson-content iframe{width:100%;aspect-ratio:16/9;border:none;border-radius:8px;margin:8px 0;display:block}
-        .lesson-content a{color:#185FA5;text-decoration:underline}
-        .lesson-content details{border:1px solid #e5e7eb;border-radius:8px;margin:10px 0;overflow:hidden}
-        .lesson-content summary{padding:10px 14px;background:#f9fafb;cursor:pointer;font-weight:500;list-style:none}
-        .lesson-content summary::-webkit-details-marker{display:none}
-        .lesson-content details[open] summary{border-bottom:1px solid #e5e7eb}
-        .lesson-content details > *:not(summary){padding:10px 14px}
-        .cb-quiz{background:#f0f7ff;border:1px solid #B5D4F4;border-radius:10px;margin:12px 0;overflow:hidden}
-        .cb-quiz-details summary::-webkit-details-marker{display:none}
+        /* ─────────────────────────────────────────────────────────────
+           LESSON CONTENT TYPOGRAPHY
+           Reading-optimised: literary serif, generous line-height,
+           capped measure (~680 px), harmonious vertical rhythm.
+        ───────────────────────────────────────────────────────────── */
+
+        .lesson-content {
+          font-family: 'Georgia', 'Charter', 'Palatino Linotype', serif;
+          font-size: 16.5px;
+          line-height: 1.85;
+          color: #1c1c1e;
+          max-width: 680px;
+          margin: 0 auto;
+        }
+
+        /* Paragraphs */
+        .lesson-content p { margin: 0 0 1.1em; }
+        .lesson-content p:last-child { margin-bottom: 0; }
+
+        /* ── Headings (sans-serif for contrast with body serif) ── */
+        .lesson-content h1 {
+          font-family: system-ui, -apple-system, sans-serif;
+          font-size: 1.55em; font-weight: 700; line-height: 1.25;
+          color: #111; margin: 1.8em 0 0.45em;
+          letter-spacing: -.02em;
+        }
+        .lesson-content h2 {
+          font-family: system-ui, -apple-system, sans-serif;
+          font-size: 1.25em; font-weight: 700; line-height: 1.3;
+          color: #1a1a1a; margin: 1.6em 0 0.4em;
+          letter-spacing: -.01em;
+        }
+        .lesson-content h3 {
+          font-family: system-ui, -apple-system, sans-serif;
+          font-size: 1.05em; font-weight: 600; line-height: 1.4;
+          color: #222; margin: 1.3em 0 0.3em;
+        }
+        .lesson-content h1:first-child,
+        .lesson-content h2:first-child,
+        .lesson-content h3:first-child { margin-top: 0; }
+
+        /* ── Active heading — ToC scroll indicator ──────────────────
+           Soft background wash + accent left dot.
+           No layout shift (uses box-shadow instead of border-left).
+        ──────────────────────────────────────────────────────────── */
+        .lesson-content h1,
+        .lesson-content h2,
+        .lesson-content h3 {
+          border-radius: 4px;
+          padding: 2px 6px;
+          margin-left: -6px;
+          transition: background .25s, color .25s;
+        }
+        .lesson-content h1[data-toc-active],
+        .lesson-content h2[data-toc-active],
+        .lesson-content h3[data-toc-active] {
+          background: #EBF4FF;
+          color: #185FA5;
+          box-shadow: -3px 0 0 #185FA5;
+        }
+
+        /* ── Lists ── */
+        .lesson-content ul { padding-left: 1.6em; margin: 0 0 1.1em; list-style: disc; }
+        .lesson-content ol { padding-left: 1.6em; margin: 0 0 1.1em; list-style: decimal; }
+        .lesson-content li { margin: 0.35em 0; }
+        .lesson-content li > p { margin: 0; }
+
+        /* ── Inline code ── */
+        .lesson-content code {
+          font-family: ui-monospace, 'Cascadia Code', monospace;
+          font-size: 0.84em;
+          background: #f0f2f5;
+          padding: 2px 6px;
+          border-radius: 4px;
+          color: #b31d28;
+          letter-spacing: 0;
+        }
+
+        /* ── Blockquote ── */
+        .lesson-content blockquote {
+          border-left: 3px solid #185FA5;
+          padding: 8px 18px;
+          margin: 1.2em 0;
+          color: #4a4a4a;
+          font-style: italic;
+          background: #f7faff;
+          border-radius: 0 8px 8px 0;
+        }
+
+        /* ── Links ── */
+        .lesson-content a { color: #185FA5; text-decoration: underline; text-underline-offset: 3px; }
+        .lesson-content a:hover { color: #0c447c; }
+
+        /* ── Tables ── */
+        .lesson-content table { border-collapse: collapse; width: 100%; margin: 1.2em 0; font-size: 0.92em; font-family: system-ui, sans-serif; }
+        .lesson-content td, .lesson-content th { border: 1px solid #e2e8f0; padding: 9px 13px; }
+        .lesson-content th { background: #f8fafc; font-weight: 600; color: #374151; }
+        .lesson-content tr:nth-child(even) td { background: #fafbfc; }
+
+        /* ── Images & embeds ── */
+        .lesson-content img { max-width: 100%; border-radius: 8px; margin: 1.2em auto; display: block; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+        .lesson-content iframe { width: 100%; aspect-ratio: 16/9; border: none; border-radius: 10px; margin: 1.2em 0; display: block; }
+
+        /* ── Fold / collapsible ── */
+        .lesson-content details { border: 1px solid #e2e8f0; border-radius: 9px; margin: 1.2em 0; overflow: hidden; }
+        .lesson-content summary { padding: 11px 15px; background: #f8fafc; cursor: pointer; font-weight: 500; list-style: none; font-family: system-ui, sans-serif; font-size: 0.95em; color: #374151; }
+        .lesson-content summary::-webkit-details-marker { display: none; }
+        .lesson-content details[open] summary { border-bottom: 1px solid #e2e8f0; }
+        .lesson-content details > *:not(summary) { padding: 12px 15px; }
+
+        /* ── Code blocks ────────────────────────────────────────────
+           Bridge the dark block into the #fafafa card:
+           — warm dark background (#1c1f2b) instead of cold #1e1e2e
+           — top/bottom breathing room
+           — subtle shadow + left accent stripe
+           — language label in matching tone
+        ──────────────────────────────────────────────────────────── */
+        .lesson-content .cb-code-wrapper {
+          margin: 1.4em -4px;           /* slight bleed beyond text measure */
+          border-radius: 10px;
+          overflow: hidden;
+          border-left: 3px solid #5b7fa6;
+          box-shadow: 0 3px 12px rgba(0,0,0,.10), 0 1px 3px rgba(0,0,0,.06);
+        }
+
+        /* ── Quiz ── */
+        .cb-quiz { background: #f0f7ff; border: 1px solid #B5D4F4; border-radius: 10px; margin: 1.4em 0; overflow: hidden; }
+        .cb-quiz-details summary::-webkit-details-marker { display: none; }
+
+        /* ── Horizontal rule ── */
+        .lesson-content hr { border: none; border-top: 1px solid #e2e8f0; margin: 2em 0; }
+
+        /* ── First paragraph emphasis ── */
+        .lesson-content > p:first-of-type {
+          font-size: 1.07em;
+          color: #2c2c2e;
+          line-height: 1.9;
+        }
       `}</style>
 
       {/* Scroll progress bar */}
@@ -871,7 +992,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         )}
 
         {/* Lesson content */}
-        <div ref={contentRef} style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding: isMobile ? '16px 14px' : '20px 24px', marginBottom:20 }}>
+        <div ref={contentRef} style={{ background:'#fafafa', border:'1px solid #e9ecef', borderRadius:12, padding: isMobile ? '20px 16px' : '32px 40px', marginBottom:20 }}>
           {blocks.map((b, i) => (
             <div key={i}>
               {b.type === 'html'   && <HtmlBlock html={b.content} />}
@@ -925,7 +1046,13 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
               <button key={item.id}
                 onClick={() => {
                   const el = document.getElementById(item.id)
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    // Immediately highlight the clicked heading
+                    document.querySelectorAll('.lesson-content [data-toc-active]')
+                      .forEach(h => h.removeAttribute('data-toc-active'))
+                    el.setAttribute('data-toc-active', '1')
+                  }
                   setTocActiveId(item.id)
                 }}
                 style={{
