@@ -49,7 +49,7 @@ export default async function StudentLessonPage({ params }: { params: any }) {
     .select('*').eq('parent_lesson_id', params.lessonId).eq('locked', false).order('sub_position')
 
   return (
-    <AppShell user={profile} role="student">
+    <AppShell user={profile} role="student" wide>
       <LessonViewer
         lesson={lesson as any}
         moduleId={params.id}

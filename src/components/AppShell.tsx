@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { DarkContext } from '@/lib/darkMode'
 
-export default function AppShell({ user, role, children }: { user: any; role: 'teacher' | 'student'; children: React.ReactNode }) {
+export default function AppShell({ user, role, children, wide }: { user: any; role: 'teacher' | 'student'; children: React.ReactNode; wide?: boolean }) {
   const path = usePathname()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -101,7 +101,7 @@ export default function AppShell({ user, role, children }: { user: any; role: 't
       )}
 
       {/* Page content */}
-      <div className="cb-page-wrap" style={{ maxWidth: 860, margin: '0 auto', padding: '28px 20px' }}>
+      <div className="cb-page-wrap" style={{ maxWidth: wide ? 1140 : 860, margin: '0 auto', padding: '28px 20px' }}>
         <DarkContext.Provider value={false}>
           {children}
         </DarkContext.Provider>

@@ -394,6 +394,9 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   const supabase = createClient()
   const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<string>('main')
+  const [tocItems, setTocItems] = useState<{ id: string; text: string; level: number }[]>([])
+  const [tocActiveId, setTocActiveId] = useState<string>('')
+  const [tocOpen, setTocOpen] = useState(false)
   const [status, setStatus] = useState<'completed'|'bookmark'|'none'>(completionStatus)
   const [saving, setSaving] = useState(false)
   const [blocks, setBlocks] = useState<ViewBlock[]>([])
@@ -402,6 +405,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   // Scroll progress
   const [scrollPct, setScrollPct] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
+  const tocObserver = useRef<IntersectionObserver | null>(null)
 
   // allLessons from server is already filtered to top-level only (no parent_lesson_id)
   const topLevelLessons = allLessons
@@ -430,6 +434,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
   useEffect(() => {
     setBlocks(parseBlocks(activeLesson.content_html ?? ''))
+    setTocItems([])
+    setTocActiveId('')
   }, [activeTab])
 
   useEffect(() => {
@@ -505,6 +511,47 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     }
     setStatus(newStatus); setSaving(false)
   }
+
+  // ── Table of contents ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (blocks.length === 0) return
+    // Small delay to let DOM render
+    const timer = setTimeout(() => {
+      const el = contentRef.current
+      if (!el) return
+      const headings = el.querySelectorAll('h1, h2, h3')
+      const items: { id: string; text: string; level: number }[] = []
+      headings.forEach((h, i) => {
+        const id = 'toc-' + i
+        h.id = id
+        const tag = h.tagName.toLowerCase()
+        const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3
+        items.push({ id, text: h.textContent ?? '', level })
+      })
+      setTocItems(items)
+
+      // IntersectionObserver to highlight active heading
+      tocObserver.current?.disconnect()
+      if (items.length > 0) {
+        tocObserver.current = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                setTocActiveId(entry.target.id)
+                break
+              }
+            }
+          },
+          { rootMargin: '0px 0px -70% 0px', threshold: 0 }
+        )
+        items.forEach(item => {
+          const el2 = document.getElementById(item.id)
+          if (el2) tocObserver.current?.observe(el2)
+        })
+      }
+    }, 150)
+    return () => { clearTimeout(timer); tocObserver.current?.disconnect() }
+  }, [blocks])
 
   // ── Export to PDF ──────────────────────────────────────────────────────────
   function exportPDF() {
@@ -587,7 +634,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }
 
   return (
-    <div style={{ display: isMobile ? 'block' : 'flex', gap: 22, alignItems: 'flex-start' }}>
+    <div style={{ display: isMobile ? 'block' : 'flex', gap: 18, alignItems: 'flex-start' }}>
       <style>{PYTHON_CSS}{`
         .lesson-content h1{font-size:22px;font-weight:700;margin:14px 0 6px}
         .lesson-content h2{font-size:18px;font-weight:700;margin:12px 0 5px}
@@ -777,6 +824,43 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           </div>
         )}
 
+        {/* Mobile ToC toggle */}
+        {isMobile && tocItems.length > 1 && (
+          <div style={{ marginBottom:10 }}>
+            <button onClick={() => setTocOpen(o => !o)}
+              style={{ width:'100%', padding:'8px 14px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', fontFamily:'inherit', color:'#555' }}>
+              <span>📋 Contents ({tocItems.length})</span>
+              <span style={{ color:'#888', fontSize:11 }}>{tocOpen ? '▲ Hide' : '▼ Show'}</span>
+            </button>
+            {tocOpen && (
+              <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 8px 8px', padding:'6px 0' }}>
+                {tocItems.map(item => (
+                  <button key={item.id}
+                    onClick={() => {
+                      setTocOpen(false)
+                      setTimeout(() => {
+                        const el = document.getElementById(item.id)
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }, 100)
+                    }}
+                    style={{
+                      display:'block', width:'100%', textAlign:'left',
+                      padding: item.level === 1 ? '7px 14px' : item.level === 2 ? '6px 14px 6px 24px' : '5px 14px 5px 34px',
+                      fontSize: item.level === 1 ? 13 : 12,
+                      fontWeight: item.level === 1 ? 500 : 400,
+                      color: item.level === 1 ? '#333' : '#666',
+                      background:'none', border:'none', cursor:'pointer',
+                      lineHeight:1.4, fontFamily:'inherit', textAlign:'left',
+                    }}>
+                    {item.level > 1 && <span style={{ color:'#ccc', marginRight:4 }}>{'—'.repeat(item.level - 1)}</span>}
+                    {item.text}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Lesson content */}
         <div ref={contentRef} style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding: isMobile ? '16px 14px' : '20px 24px', marginBottom:20 }}>
           {blocks.map((b, i) => (
@@ -821,6 +905,37 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           </div>
         </div>
       </div>
+
+
+      {/* ── Table of contents sidebar (desktop only, shown when there are headings) */}
+      {!isMobile && tocItems.length > 1 && (
+        <div style={{ width:200, flexShrink:0, position:'sticky', top:80, maxHeight:'calc(100vh - 100px)', overflowY:'auto' }}>
+          <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'12px 0' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 8px' }}>Contents</div>
+            {tocItems.map(item => (
+              <button key={item.id}
+                onClick={() => {
+                  const el = document.getElementById(item.id)
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  setTocActiveId(item.id)
+                }}
+                style={{
+                  display:'block', width:'100%', textAlign:'left',
+                  padding: item.level === 1 ? '5px 14px' : item.level === 2 ? '4px 14px 4px 22px' : '3px 14px 3px 30px',
+                  fontSize: item.level === 1 ? 12 : 11,
+                  fontWeight: tocActiveId === item.id ? 600 : item.level === 1 ? 500 : 400,
+                  color: tocActiveId === item.id ? '#185FA5' : item.level === 1 ? '#333' : '#666',
+                  background: tocActiveId === item.id ? '#E6F1FB' : 'none',
+                  border:'none', borderLeft: tocActiveId === item.id ? '2px solid #185FA5' : '2px solid transparent',
+                  cursor:'pointer', lineHeight:1.4, fontFamily:'inherit',
+                  whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                }}>
+                {item.text}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

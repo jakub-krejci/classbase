@@ -56,6 +56,45 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
     setLessonList(prev => prev.filter(l => l.id !== id))
   }
 
+  async function duplicateLesson(id: string) {
+    const src = lessonList.find(l => l.id === id)
+    if (!src) return
+    // Insert copy after the original
+    const pos = (src.position ?? 0) + 0.5   // will be re-ordered by DB position
+    const { data, error } = await supabase.from('lessons').insert({
+      module_id: module.id,
+      title: src.title + ' (copy)',
+      content_html: src.content_html ?? '',
+      position: pos,
+      locked: false,
+      parent_lesson_id: src.parent_lesson_id ?? null,
+      sub_position: src.sub_position ?? 0,
+    } as any).select('*').single()
+    if (error) { alert('Error: ' + error.message); return }
+    // Also duplicate its sub-lessons
+    const subs = lessonList.filter(l => l.parent_lesson_id === id)
+    const newSubs: any[] = []
+    for (const sub of subs) {
+      const { data: subData } = await supabase.from('lessons').insert({
+        module_id: module.id,
+        title: sub.title,
+        content_html: sub.content_html ?? '',
+        position: 0,
+        locked: false,
+        parent_lesson_id: (data as any).id,
+        sub_position: sub.sub_position ?? 0,
+      } as any).select('*').single()
+      if (subData) newSubs.push(subData)
+    }
+    // Insert new lesson after the original in local state
+    setLessonList(prev => {
+      const idx = prev.findIndex(l => l.id === id)
+      const next = [...prev]
+      next.splice(idx + 1, 0, data as any, ...newSubs)
+      return next
+    })
+  }
+
   async function deleteAssignment(id: string) {
     if (!confirm('Delete this assignment?')) return
     await supabase.from('assignments').delete().eq('id', id)
@@ -141,6 +180,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
               </button>
               <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id + "/preview"} style={{ padding: '3px 9px', fontSize: 11 }}>View</Btn>
               <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id} style={{ padding: '3px 9px', fontSize: 11 }}>Edit</Btn>
+              <Btn onClick={() => duplicateLesson(l.id)} style={{ padding: '3px 9px', fontSize: 11 }} title="Duplicate this lesson and its sub-lessons">⎘ Copy</Btn>
               <Btn variant="danger" onClick={() => deleteLesson(l.id)} style={{ padding: '3px 9px', fontSize: 11 }}>Del</Btn>
             </div>
               {/* Sub-lessons */}
