@@ -212,7 +212,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
       )}
 
       {/* Floating chat widget */}
-      {user && <ChatWidget userId={user.id} userName={user.full_name ?? user.email ?? ''} userRole={role} contacts={contacts} />}
+      {user && <ChatWidget userId={user.id} userRole={role} contacts={contacts} />}
 
       {/* Page content */}
       <div className="cb-page-wrap" style={{ maxWidth: wide ? 1140 : 860, margin: '0 auto', padding: '28px 20px' }}>
