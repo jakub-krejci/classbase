@@ -95,12 +95,77 @@ Keep responses concise but complete. If a question is unrelated to the lesson, g
   }
 
   function renderContent(text: string) {
-    // Simple markdown: bold, inline code, line breaks
-    return text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // Escape HTML first
+    const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+    const lines = text.split('\n')
+    const out: string[] = []
+    let i = 0
+
+    while (i < lines.length) {
+      const line = lines[i]
+
+      // Fenced code block ```
+      if (line.trimStart().startsWith('```')) {
+        const lang = line.replace(/^`+/, '').trim()
+        const codeLines: string[] = []
+        i++
+        while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+          codeLines.push(escape(lines[i]))
+          i++
+        }
+        out.push(`<pre style="background:#1e1e2e;color:#cdd6f4;padding:12px 14px;border-radius:8px;font-size:12px;overflow-x:auto;margin:8px 0;font-family:ui-monospace,monospace;line-height:1.6">${codeLines.join('\n')}</pre>`)
+        i++
+        continue
+      }
+
+      // Heading #
+      const h3 = line.match(/^### (.+)/)
+      const h2 = line.match(/^## (.+)/)
+      const h1 = line.match(/^# (.+)/)
+      if (h1) { out.push(`<div style="font-weight:700;font-size:15px;margin:10px 0 4px;color:#1a1a2e">${inline(h1[1])}</div>`); i++; continue }
+      if (h2) { out.push(`<div style="font-weight:700;font-size:14px;margin:8px 0 3px;color:#1a1a2e">${inline(h2[1])}</div>`); i++; continue }
+      if (h3) { out.push(`<div style="font-weight:600;font-size:13px;margin:6px 0 2px;color:#1a1a2e">${inline(h3[1])}</div>`); i++; continue }
+
+      // Bullet list
+      if (line.match(/^[\-\*] /)) {
+        const items: string[] = []
+        while (i < lines.length && lines[i].match(/^[\-\*] /)) {
+          items.push(`<li style="margin:2px 0">${inline(lines[i].replace(/^[\-\*] /, ''))}</li>`)
+          i++
+        }
+        out.push(`<ul style="margin:4px 0;padding-left:18px">${items.join('')}</ul>`)
+        continue
+      }
+
+      // Numbered list
+      if (line.match(/^\d+\. /)) {
+        const items: string[] = []
+        while (i < lines.length && lines[i].match(/^\d+\. /)) {
+          items.push(`<li style="margin:2px 0">${inline(lines[i].replace(/^\d+\. /, ''))}</li>`)
+          i++
+        }
+        out.push(`<ol style="margin:4px 0;padding-left:18px">${items.join('')}</ol>`)
+        continue
+      }
+
+      // Blank line
+      if (line.trim() === '') { out.push('<div style="height:6px"></div>'); i++; continue }
+
+      // Regular paragraph
+      out.push(`<div style="margin:1px 0">${inline(line)}</div>`)
+      i++
+    }
+
+    return out.join('')
+  }
+
+  function inline(text: string) {
+    const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    return escape(text)
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/`([^`]+)`/g, '<code style="background:#f0f2f5;padding:1px 5px;border-radius:3px;font-size:.9em">$1</code>')
-      .replace(/\n/g, '<br/>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code style="background:#f0f2f5;padding:1px 5px;border-radius:3px;font-size:.88em;font-family:ui-monospace,monospace;color:#b31d28">$1</code>')
   }
 
   const W = isMobile ? '100vw' : 360
