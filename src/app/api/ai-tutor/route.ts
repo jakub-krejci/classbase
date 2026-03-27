@@ -8,28 +8,29 @@ export async function POST(req: NextRequest) {
 
   const { messages, system } = await req.json()
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system,
-      messages,
-    }),
-  })
+  // Convert messages to Gemini format (combine system into first user message)
+  const geminiMessages = messages.map((m: any, i: number) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: i === 0 ? `${system}\n\n---\n\n${m.content}` : m.content }],
+  }))
+
+  const apiKey = process.env.GEMINI_API_KEY ?? ''
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: geminiMessages }),
+    }
+  )
 
   if (!res.ok) {
     const err = await res.text()
-    console.error('Anthropic API error:', err)
+    console.error('Gemini API error:', err)
     return NextResponse.json({ error: 'AI request failed' }, { status: 500 })
   }
 
   const data = await res.json()
-  const text = data.content?.[0]?.text ?? ''
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
   return NextResponse.json({ text })
 }
