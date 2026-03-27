@@ -1,32 +1,35 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Contact = { id: string; full_name: string; role: 'teacher' | 'student'; initials: string }
 type Msg = { id: string; sender_id: string; body: string; created_at: string; recipient_type: string; recipient_id: string }
 
-function initials(name: string) {
+function mkInitials(name: string) {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
 }
 
 function Avatar({ name, size = 32, bg = '#E6F1FB', color = '#0C447C' }: { name: string; size?: number; bg?: string; color?: string }) {
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: bg, color, fontSize: size * 0.35, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      {initials(name)}
+    <div style={{ width: size, height: size, borderRadius: '50%', background: bg, color, fontSize: Math.round(size * 0.35), fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      {mkInitials(name)}
     </div>
   )
 }
 
-// Determine the correct recipient_type for a message
 function recipientType(senderRole: 'teacher' | 'student', targetRole: 'teacher' | 'student') {
   if (senderRole === 'teacher') return targetRole === 'teacher' ? 'teacher' : 'student'
   return targetRole === 'teacher' ? 'teacher' : 'student_direct'
 }
 
-export default function ChatWidget({ userId, userName, userRole, contacts }: {
+// Stable channel name for a conversation between two users (order-independent)
+function threadChannel(a: string, b: string) {
+  return 'chat:' + [a, b].sort().join(':')
+}
+
+export default function ChatWidget({ userId, userRole, contacts }: {
   userId: string
-  userName: string
   userRole: 'teacher' | 'student'
   contacts: Contact[]
 }) {
@@ -37,120 +40,186 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  // readUpTo[contactId] = latest created_at we've seen while their thread was open
+  const [readUpTo, setReadUpTo] = useState<Record<string, string>>({})
   const [allMsgs, setAllMsgs] = useState<Msg[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const activeContactRef = useRef<Contact | null>(null)
+  const broadcastChannels = useRef<Record<string, any>>({})
+
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
 
-  // Load all DM messages on mount
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from('messages')
-        .select('*')
-        .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
-        .in('recipient_type', ['student', 'teacher', 'student_direct'])
-        .order('created_at')
-      setAllMsgs(data ?? [])
+  function scrollBottom() {
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
+  }
 
-      // Count unread (received, not from me)
-      const counts: Record<string, number> = {}
-      ;(data ?? []).forEach((m: any) => {
-        if (m.sender_id === userId) return
-        const otherId = m.sender_id
-        counts[otherId] = (counts[otherId] ?? 0) + 1
-      })
-      setUnreadCounts(counts)
-    }
-    load()
+  // Load historical messages once
+  useEffect(() => {
+    supabase.from('messages')
+      .select('*')
+      .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
+      .in('recipient_type', ['student', 'teacher', 'student_direct'])
+      .order('created_at')
+      .then(({ data }) => setAllMsgs(data ?? []))
   }, [userId])
 
-  // Realtime subscription for all DMs involving this user
-  useEffect(() => {
-    const channel = supabase.channel('chat-widget-' + userId)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
-        const m = payload.new
-        // Only DM types
-        if (!['student', 'teacher', 'student_direct'].includes(m.recipient_type)) return
-        // Must involve me
-        if (m.sender_id !== userId && m.recipient_id !== userId) return
-        setAllMsgs(prev => [...prev, m])
-        // Update unread if not from me
-        if (m.sender_id !== userId) {
-          setUnreadCounts(prev => ({ ...prev, [m.sender_id]: (prev[m.sender_id] ?? 0) + 1 }))
-        }
-        // If this thread is open, append and scroll
-        if (activeContactRef.current?.id === m.sender_id || activeContactRef.current?.id === m.recipient_id) {
-          setMsgs(prev => [...prev, m])
-          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
-        }
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload: any) => {
-        const id = payload.old?.id
-        setAllMsgs(prev => prev.filter(m => m.id !== id))
-        setMsgs(prev => prev.filter(m => m.id !== id))
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [userId])
-
-  // Keep a ref to activeContact for use inside realtime callback
-  const activeContactRef = useRef<Contact | null>(null)
+  // Sync activeContactRef
   useEffect(() => { activeContactRef.current = activeContact }, [activeContact])
 
-  // When contact is selected, filter messages for that thread
-  const openThread = useCallback((contact: Contact) => {
-    setActiveContact(contact)
-    const threadMsgs = allMsgs.filter(m =>
-      (m.sender_id === userId && m.recipient_id === contact.id) ||
-      (m.sender_id === contact.id && m.recipient_id === userId)
-    ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    setMsgs(threadMsgs)
-    setUnreadCounts(prev => ({ ...prev, [contact.id]: 0 }))
-    setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); inputRef.current?.focus() }, 60)
-  }, [allMsgs, userId])
-
-  // Update thread messages when allMsgs changes (e.g. new realtime message)
+  // Derive thread messages whenever allMsgs or activeContact changes
   useEffect(() => {
     if (!activeContact) return
-    const threadMsgs = allMsgs.filter(m =>
+    const thread = allMsgs.filter(m =>
       (m.sender_id === userId && m.recipient_id === activeContact.id) ||
       (m.sender_id === activeContact.id && m.recipient_id === userId)
-    ).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    setMsgs(threadMsgs)
+    ).sort((a, b) => a.created_at.localeCompare(b.created_at))
+    setMsgs(thread)
   }, [allMsgs, activeContact, userId])
+
+  // Subscribe to a broadcast channel for a specific conversation
+  function subscribeToBroadcast(contactId: string) {
+    const chName = threadChannel(userId, contactId)
+    if (broadcastChannels.current[chName]) return // already subscribed
+
+    const ch = supabase.channel(chName)
+      .on('broadcast', { event: 'new_message' }, ({ payload }: any) => {
+        const m: Msg = payload
+        // Ignore own messages (already added optimistically)
+        if (m.sender_id === userId) return
+        setAllMsgs(prev => {
+          if (prev.some(x => x.id === m.id)) return prev
+          return [...prev, m]
+        })
+        // If thread open, mark as read immediately and scroll
+        if (activeContactRef.current?.id === m.sender_id) {
+          setReadUpTo(prev => ({ ...prev, [m.sender_id]: m.created_at }))
+          scrollBottom()
+        }
+      })
+      .on('broadcast', { event: 'delete_message' }, ({ payload }: any) => {
+        setAllMsgs(prev => prev.filter(m => m.id !== payload.id))
+        setMsgs(prev => prev.filter(m => m.id !== payload.id))
+      })
+      .subscribe()
+
+    broadcastChannels.current[chName] = ch
+  }
+
+  // Subscribe to broadcast channels for all existing conversations
+  useEffect(() => {
+    const contactsWithHistory = new Set<string>()
+    allMsgs.forEach(m => {
+      const other = m.sender_id === userId ? m.recipient_id : m.sender_id
+      if (other) contactsWithHistory.add(other)
+    })
+    contactsWithHistory.forEach(cid => subscribeToBroadcast(cid))
+  }, [allMsgs])
+
+  // Clean up all channels on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(broadcastChannels.current).forEach(ch => supabase.removeChannel(ch))
+    }
+  }, [])
+
+  function openThread(contact: Contact) {
+    setActiveContact(contact)
+    subscribeToBroadcast(contact.id)
+    // Mark all messages from this contact as read
+    const latest = allMsgs
+      .filter(m => m.sender_id === contact.id && m.recipient_id === userId)
+      .pop()?.created_at
+    if (latest) setReadUpTo(prev => ({ ...prev, [contact.id]: latest }))
+    scrollBottom()
+    setTimeout(() => inputRef.current?.focus(), 60)
+  }
 
   async function sendMsg() {
     if (!draft.trim() || !activeContact || sending) return
     setSending(true)
+    const text = draft.trim()
+    setDraft('')
+
     const rType = recipientType(userRole, activeContact.role)
+
+    // Optimistic message (temp id)
+    const optimistic: Msg = {
+      id: 'tmp-' + Date.now(),
+      sender_id: userId,
+      recipient_id: activeContact.id,
+      recipient_type: rType,
+      body: text,
+      created_at: new Date().toISOString(),
+    }
+    setAllMsgs(prev => [...prev, optimistic])
+    scrollBottom()
+
     const res = await fetch('/api/messages', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_type: rType, recipient_id: activeContact.id, message_type: 'direct', text: draft }),
+      body: JSON.stringify({ recipient_type: rType, recipient_id: activeContact.id, message_type: 'direct', text }),
     })
-    if (res.ok) setDraft('')
+
+    if (res.ok) {
+      const { id: realId } = await res.json()
+      const realMsg: Msg = { ...optimistic, id: realId }
+
+      // Replace optimistic with real message
+      setAllMsgs(prev => prev.map(m => m.id === optimistic.id ? realMsg : m))
+
+      // Broadcast to recipient's channel so they see it instantly
+      const chName = threadChannel(userId, activeContact.id)
+      const ch = broadcastChannels.current[chName] ?? supabase.channel(chName)
+      broadcastChannels.current[chName] = ch
+      await ch.send({ type: 'broadcast', event: 'new_message', payload: realMsg })
+    } else {
+      // Rollback optimistic on error
+      setAllMsgs(prev => prev.filter(m => m.id !== optimistic.id))
+    }
+
     setSending(false)
     setTimeout(() => inputRef.current?.focus(), 30)
   }
 
   async function deleteMsg(id: string) {
     await supabase.from('messages').delete().eq('id', id)
+    setAllMsgs(prev => prev.filter(m => m.id !== id))
+    // Broadcast deletion to the other side
+    if (activeContact) {
+      const chName = threadChannel(userId, activeContact.id)
+      const ch = broadcastChannels.current[chName]
+      if (ch) ch.send({ type: 'broadcast', event: 'delete_message', payload: { id } })
+    }
   }
 
-  const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0)
-  const filtered = contacts.filter(c => c.id !== userId && c.full_name.toLowerCase().includes(search.toLowerCase()))
+  // Unread count: messages from contact received after readUpTo[contact.id]
+  function unreadCount(contactId: string) {
+    const readTs = readUpTo[contactId] ?? ''
+    return allMsgs.filter(m =>
+      m.sender_id === contactId &&
+      m.recipient_id === userId &&
+      m.created_at > readTs
+    ).length
+  }
 
-  // Recent contacts sorted by last message time
-  const recentContacts = [...contacts].filter(c => c.id !== userId && allMsgs.some(m =>
+  const totalUnread = contacts.reduce((sum, c) => sum + unreadCount(c.id), 0)
+
+  const recentContacts = contacts.filter(c => c.id !== userId && allMsgs.some(m =>
     (m.sender_id === userId && m.recipient_id === c.id) ||
     (m.sender_id === c.id && m.recipient_id === userId)
   )).sort((a, b) => {
-    const la = allMsgs.filter(m => m.sender_id === a.id || m.recipient_id === a.id).pop()?.created_at ?? ''
-    const lb = allMsgs.filter(m => m.sender_id === b.id || m.recipient_id === b.id).pop()?.created_at ?? ''
-    return lb.localeCompare(la)
+    const getMsgTs = (cid: string) => allMsgs.filter(m =>
+      (m.sender_id === userId && m.recipient_id === cid) ||
+      (m.sender_id === cid && m.recipient_id === userId)
+    ).pop()?.created_at ?? ''
+    return getMsgTs(b.id).localeCompare(getMsgTs(a.id))
   })
 
-  // Layout constants
+  const filtered = contacts.filter(c =>
+    c.id !== userId &&
+    c.full_name.toLowerCase().includes(search.toLowerCase())
+  )
+
   const W = isMobile ? '100vw' : 340
   const H = isMobile ? '100dvh' : 480
   const BOTTOM = isMobile ? 0 : 70
@@ -158,12 +227,10 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
 
   return (
     <>
-      {/* Floating bubble button */}
+      {/* Bubble */}
       {!open && (
         <button onClick={() => setOpen(true)}
-          style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 999, width: 52, height: 52, borderRadius: '50%', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(24,95,165,.4)', transition: 'transform .15s' }}
-          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.08)')}
-          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}>
+          style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 999, width: 52, height: 52, borderRadius: '50%', background: '#185FA5', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(24,95,165,.4)' }}>
           💬
           {totalUnread > 0 && (
             <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 18, height: 18, borderRadius: 9, background: '#e53e3e', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', border: '2px solid #fff' }}>
@@ -173,7 +240,7 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
         </button>
       )}
 
-      {/* Chat panel */}
+      {/* Panel */}
       {open && (
         <div style={{ position: 'fixed', bottom: BOTTOM, right: RIGHT, width: W, height: H, zIndex: 1000, background: '#fff', border: isMobile ? 'none' : '1px solid #e5e7eb', borderRadius: isMobile ? 0 : 16, boxShadow: '0 12px 40px rgba(0,0,0,.15)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -181,7 +248,7 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
           <div style={{ background: '#185FA5', color: '#fff', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {activeContact ? (
               <>
-                <button onClick={() => setActiveContact(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, padding: 0, lineHeight: 1, opacity: .8 }}>←</button>
+                <button onClick={() => setActiveContact(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, padding: 0, lineHeight: 1, opacity: .85 }}>←</button>
                 <Avatar name={activeContact.full_name} size={28} bg="rgba(255,255,255,.2)" color="#fff" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeContact.full_name}</div>
@@ -189,9 +256,7 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
                 </div>
               </>
             ) : (
-              <>
-                <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Messages</span>
-              </>
+              <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>Messages</span>
             )}
             <button onClick={() => { setOpen(false); setActiveContact(null) }}
               style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 20, lineHeight: 1, opacity: .8, padding: '0 2px' }}>✕</button>
@@ -200,24 +265,25 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
           {/* Contact list */}
           {!activeContact && (
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-              {/* Search */}
               <div style={{ padding: '10px 12px', borderBottom: '0.5px solid #f3f4f6' }}>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search people…"
                   style={{ width: '100%', padding: '7px 10px', border: '0.5px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
               </div>
               <div style={{ flex: 1, overflowY: 'auto' }}>
-                {/* Recent conversations */}
                 {!search && recentContacts.length > 0 && (
                   <div>
                     <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em' }}>Recent</div>
                     {recentContacts.map(c => {
-                      const lastMsg = allMsgs.filter(m => (m.sender_id === userId && m.recipient_id === c.id) || (m.sender_id === c.id && m.recipient_id === userId)).pop()
-                      const uc = unreadCounts[c.id] ?? 0
+                      const lastMsg = allMsgs.filter(m =>
+                        (m.sender_id === userId && m.recipient_id === c.id) ||
+                        (m.sender_id === c.id && m.recipient_id === userId)
+                      ).pop()
+                      const uc = unreadCount(c.id)
                       const bg = c.role === 'teacher' ? '#E6F1FB' : '#EAF3DE'
                       const col = c.role === 'teacher' ? '#0C447C' : '#27500A'
                       return (
                         <div key={c.id} onClick={() => openThread(c)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f9fafb' }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f9fafb', background: 'transparent' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#f5f9ff')}
                           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                           <Avatar name={c.full_name} size={36} bg={bg} color={col} />
@@ -231,7 +297,6 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
                     })}
                   </div>
                 )}
-                {/* All contacts */}
                 <div>
                   <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '.06em' }}>{search ? 'Results' : 'All contacts'}</div>
                   {filtered.length === 0 && <div style={{ padding: '16px 12px', fontSize: 13, color: '#aaa', textAlign: 'center' }}>No contacts found</div>}
@@ -240,7 +305,7 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
                     const col = c.role === 'teacher' ? '#0C447C' : '#27500A'
                     return (
                       <div key={c.id} onClick={() => openThread(c)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f9fafb' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f9fafb', background: 'transparent' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f5f9ff')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                         <Avatar name={c.full_name} size={32} bg={bg} color={col} />
@@ -248,6 +313,7 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
                           <div style={{ fontSize: 13, fontWeight: 500, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.full_name}</div>
                           <div style={{ fontSize: 11, color: '#aaa' }}>{c.role === 'teacher' ? '👨‍🏫 Teacher' : '🎓 Student'}</div>
                         </div>
+                        {unreadCount(c.id) > 0 && <span style={{ minWidth: 18, height: 18, borderRadius: 9, background: '#185FA5', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}>{unreadCount(c.id)}</span>}
                       </div>
                     )
                   })}
@@ -261,22 +327,23 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
               <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {msgs.length === 0 && (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 13 }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 13, paddingTop: 60 }}>
                     Start the conversation 👋
                   </div>
                 )}
                 {msgs.map(m => {
                   const mine = m.sender_id === userId
+                  const isOptimistic = m.id.startsWith('tmp-')
                   return (
                     <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 6 }}>
                       {!mine && <Avatar name={activeContact.full_name} size={22} bg={activeContact.role === 'teacher' ? '#E6F1FB' : '#EAF3DE'} color={activeContact.role === 'teacher' ? '#0C447C' : '#27500A'} />}
                       <div style={{ maxWidth: '78%' }}>
-                        <div style={{ background: mine ? '#185FA5' : '#f0f2f5', color: mine ? '#fff' : '#111', borderRadius: mine ? '14px 14px 3px 14px' : '14px 14px 14px 3px', padding: '8px 11px', fontSize: 13, lineHeight: 1.45, wordBreak: 'break-word' }}>
+                        <div style={{ background: mine ? '#185FA5' : '#f0f2f5', color: mine ? '#fff' : '#111', borderRadius: mine ? '14px 14px 3px 14px' : '14px 14px 14px 3px', padding: '8px 11px', fontSize: 13, lineHeight: 1.45, wordBreak: 'break-word', opacity: isOptimistic ? .6 : 1 }}>
                           {m.body}
                         </div>
                         <div style={{ fontSize: 9, color: '#bbb', marginTop: 2, textAlign: mine ? 'right' : 'left', display: 'flex', gap: 5, justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'center' }}>
-                          {new Date(m.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                          {mine && <button onClick={() => deleteMsg(m.id)} style={{ color: '#ddd', background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, padding: 0, lineHeight: 1 }}>✕</button>}
+                          {isOptimistic ? '…' : new Date(m.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                          {mine && !isOptimistic && <button onClick={() => deleteMsg(m.id)} style={{ color: '#ddd', background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, padding: 0, lineHeight: 1 }}>✕</button>}
                         </div>
                       </div>
                     </div>
@@ -284,15 +351,14 @@ export default function ChatWidget({ userId, userName, userRole, contacts }: {
                 })}
                 <div ref={bottomRef} />
               </div>
-              {/* Input */}
               <div style={{ borderTop: '0.5px solid #f0f0f0', padding: '8px 10px', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
                 <textarea ref={inputRef} value={draft} onChange={e => setDraft(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }}
                   placeholder="Message… (Enter to send)"
                   rows={1}
-                  style={{ flex: 1, padding: '8px 10px', border: '0.5px solid #e5e7eb', borderRadius: 18, fontSize: 13, fontFamily: 'inherit', resize: 'none', outline: 'none', lineHeight: 1.4, maxHeight: 80, overflowY: 'auto' }} />
+                  style={{ flex: 1, padding: '8px 10px', border: '0.5px solid #e5e7eb', borderRadius: 18, fontSize: 13, fontFamily: 'inherit', resize: 'none', outline: 'none', lineHeight: 1.4, maxHeight: 80, overflowY: 'auto', boxSizing: 'border-box' }} />
                 <button onClick={sendMsg} disabled={sending || !draft.trim()}
-                  style={{ width: 34, height: 34, borderRadius: '50%', background: draft.trim() ? '#185FA5' : '#e5e7eb', color: draft.trim() ? '#fff' : '#aaa', border: 'none', cursor: draft.trim() ? 'pointer' : 'default', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .15s' }}>
+                  style={{ width: 34, height: 34, borderRadius: '50%', background: draft.trim() ? '#185FA5' : '#e5e7eb', color: draft.trim() ? '#fff' : '#aaa', border: 'none', cursor: draft.trim() ? 'pointer' : 'default', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .15s' }}>
                   ↑
                 </button>
               </div>
