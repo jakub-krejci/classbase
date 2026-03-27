@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { DarkContext } from '@/lib/darkMode'
@@ -14,6 +14,19 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
     await supabase.auth.signOut()
     window.location.href = '/login'
   }
+
+  // Update last_seen_at on mount and every 2 minutes
+  useEffect(() => {
+    async function ping() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() } as any).eq('id', user.id)
+      }
+    }
+    ping()
+    const interval = setInterval(ping, 2 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const teacherNav = [
     { label: 'Modules', href: '/teacher/modules' },

@@ -281,21 +281,33 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
                   const topLevelLessons = lessons.filter((l:any)=>!l.parent_lesson_id)
                   const overallPct = topLevelLessons.length > 0 ? Math.round(completedCount/topLevelLessons.length*100) : 0
                   const lastSeen = p?.last_seen_at ? new Date(p.last_seen_at) : null
-                  const lastSeenStr = lastSeen
-                    ? (Date.now() - lastSeen.getTime() < 86400000
-                        ? 'Today'
-                        : Date.now() - lastSeen.getTime() < 7*86400000
-                          ? Math.floor((Date.now()-lastSeen.getTime())/86400000)+'d ago'
-                          : lastSeen.toLocaleDateString())
-                    : 'Never'
+                  const msSince = lastSeen ? Date.now() - lastSeen.getTime() : Infinity
+                  const isOnline = msSince < 3 * 60 * 1000          // online = seen in last 3 min
+                  const isRecent = msSince < 10 * 60 * 1000          // recent = last 10 min
+                  const lastSeenStr = !lastSeen ? 'Never'
+                    : isOnline ? 'Online now'
+                    : isRecent ? 'Just now'
+                    : msSince < 3600000 ? Math.floor(msSince/60000) + 'm ago'
+                    : msSince < 86400000 ? Math.floor(msSince/3600000) + 'h ago'
+                    : msSince < 7*86400000 ? Math.floor(msSince/86400000) + 'd ago'
+                    : lastSeen.toLocaleDateString()
 
                   return (
                     <div key={e.student_id}
                       style={{ background: e.banned ? '#fffbf0' : '#fff', border: e.banned ? '0.5px solid #FFE69C' : '0.5px solid #e5e7eb', borderRadius:10, padding:'12px 14px', opacity: e.banned ? 0.85 : 1 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:12 }}>
                         {/* Avatar */}
-                        <div style={{ width:38, height:38, borderRadius:'50%', background: e.banned ? '#f3f4f6' : '#E6F1FB', color: e.banned ? '#bbb' : '#0C447C', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                          {e.banned ? '🚫' : initials}
+                        <div style={{ position:'relative', flexShrink:0 }}>
+                          <div style={{ width:38, height:38, borderRadius:'50%', background: e.banned ? '#f3f4f6' : '#E6F1FB', color: e.banned ? '#bbb' : '#0C447C', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                            {e.banned ? '🚫' : initials}
+                          </div>
+                          {/* Online/offline dot */}
+                          <div style={{
+                            position:'absolute', bottom:0, right:0,
+                            width:11, height:11, borderRadius:'50%',
+                            background: e.banned ? '#ccc' : isOnline ? '#22c55e' : isRecent ? '#f59e0b' : '#d1d5db',
+                            border:'2px solid #fff',
+                          }} title={e.banned ? 'Banned' : isOnline ? 'Online now' : isRecent ? 'Active recently' : 'Offline'} />
                         </div>
 
                         {/* Name + meta */}
@@ -323,7 +335,9 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
                               {completedCount}/{topLevelLessons.length} lessons
                             </span>
                             <span style={{ fontSize:11, color:'#aaa' }}>
-                              Last seen: {lastSeenStr}
+                              <span style={{ color: isOnline ? '#16a34a' : isRecent ? '#d97706' : '#aaa', fontWeight: isOnline ? 600 : 400 }}>
+                              {isOnline ? '● Online' : isRecent ? '◐ ' + lastSeenStr : lastSeenStr}
+                            </span>
                             </span>
                           </div>
                           {/* Per-lesson dots */}

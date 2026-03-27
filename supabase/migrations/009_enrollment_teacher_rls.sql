@@ -23,3 +23,11 @@ create policy "lesson_progress_teacher_delete"
       where l.id = lesson_id and m.teacher_id = auth.uid()
     )
   );
+
+-- Students (and teachers) can update their own profile's last_seen_at
+-- (profiles already has update policy for own row from migration 001)
+-- If it doesn't exist yet, add it:
+create policy if not exists "profiles_update_own"
+  on public.profiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
