@@ -149,6 +149,21 @@ Keep responses concise but complete. If a question is unrelated to the lesson, g
         continue
       }
 
+      // Table
+      if (line.startsWith('|') && lines[i + 1]?.match(/^\|[-| :]+\|/)) {
+        const headers = line.split('|').slice(1, -1).map(h => h.trim())
+        i += 2 // skip separator row
+        const rows: string[][] = []
+        while (i < lines.length && lines[i].startsWith('|')) {
+          rows.push(lines[i].split('|').slice(1, -1).map(c => c.trim()))
+          i++
+        }
+        const thead = `<tr>${headers.map(h => `<th style="padding:6px 10px;border:1px solid #ddd;background:#f8f7ff;font-weight:600;font-size:12px;text-align:left">${inline(h)}</th>`).join('')}</tr>`
+        const tbody = rows.map(row => `<tr>${row.map(c => `<td style="padding:6px 10px;border:1px solid #e5e7eb;font-size:12px">${inline(c)}</td>`).join('')}</tr>`).join('')
+        out.push(`<div style="overflow-x:auto;margin:6px 0"><table style="border-collapse:collapse;width:100%;font-size:12px">${thead}${tbody}</table></div>`)
+        continue
+      }
+
       // Blank line
       if (line.trim() === '') { out.push('<div style="height:6px"></div>'); i++; continue }
 
