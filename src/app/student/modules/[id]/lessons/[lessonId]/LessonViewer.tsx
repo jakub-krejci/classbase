@@ -710,54 +710,67 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           </div>
         )}
 
-        {/* Title + read time + export */}
-        <div style={{ display:'flex', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap:10, flexWrap:'wrap', marginBottom:4, justifyContent:'space-between' }}>
-          <div style={{ display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap' }}>
-            <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight:700, margin:0 }}>{activeLesson.title}</h1>
-            {readTime && (
-              <span style={{ fontSize:12, color:'#888', background:'#f3f4f6', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' }}>
-                🕐 {readTime}
-              </span>
-            )}
+        {/* ── Lesson header ────────────────────────────────────────────── */}
+        <div style={{ marginBottom:16 }}>
+          {/* Row 1: title + export PDF */}
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, marginBottom:4, flexWrap:'wrap' }}>
+            <h1 style={{ fontSize: isMobile ? 20 : 22, fontWeight:700, margin:0, flex:1, minWidth:0 }}>
+              {activeLesson.title}
+            </h1>
+            <button onClick={exportPDF}
+              style={{ padding:'5px 12px', fontSize:12, background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, cursor:'pointer', color:'#888', display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', flexShrink:0 }}
+              title="Export lesson as printable PDF">
+              ⬇ PDF
+            </button>
           </div>
-          <button onClick={exportPDF}
-            style={{ padding:'6px 14px', fontSize:12, background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, cursor:'pointer', color:'#555', display:'flex', alignItems:'center', gap:6, whiteSpace:'nowrap', alignSelf: isMobile ? 'stretch' : 'auto', justifyContent:'center' }}
-            title="Export lesson as printable PDF">
-            ⬇ Export PDF
-          </button>
+          {/* Row 2: author + read time */}
+          <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom: subLessons.length > 0 ? 14 : 0 }}>
+            {authorName && <span style={{ fontSize:12, color:'#aaa' }}>By {authorName}</span>}
+            {authorName && readTime && <span style={{ color:'#e5e7eb' }}>·</span>}
+            {readTime && <span style={{ fontSize:12, color:'#aaa' }}>🕐 {readTime}</span>}
+          </div>
         </div>
-        {authorName && <div style={{ fontSize:12, color:'#888', marginBottom: subLessons.length > 0 ? 8 : 14 }}>By {authorName}</div>}
 
-        {/* Sub-lesson tabs */}
+        {/* ── Parts of this lesson (sub-lessons) ───────────────────────────── */}
         {subLessons.length > 0 && (
           <div style={{ marginBottom:20 }}>
             <div style={{ fontSize:11, fontWeight:600, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>
               Parts of this lesson
             </div>
-            <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:8, overflowX:'auto' }}>
-              {subLessons.map((s: any, idx: number) => (
+            <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:8, flexWrap:'wrap' }}>
+              {/* If we're on a sub-lesson, show "← Main lesson" link */}
+              {activeTab !== 'main' && (
+                <button onClick={() => setActiveTab('main')}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', background:'#fff', color:'#555', border:'2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
+                  <div style={{ width:26, height:26, borderRadius:'50%', background:'#E6F1FB', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 }}>📖</div>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:500 }}>{lesson.title}</div>
+                    <div style={{ fontSize:11, color:'#aaa' }}>Main lesson</div>
+                  </div>
+                </button>
+              )}
+              {/* Sub-lesson tabs */}
+              {subLessons.map((s: any, i: number) => (
                 <button key={s.id} onClick={() => setActiveTab(s.id)}
-                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background: activeTab===s.id ? '#185FA5' : '#fff', color: activeTab===s.id ? '#fff' : '#555', border: activeTab===s.id ? '2px solid #185FA5' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
-                  <div style={{ width:28, height:28, borderRadius:'50%', background: activeTab===s.id ? 'rgba(255,255,255,.2)' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>
-                    {idx === 0 ? '📝' : idx === 1 ? '💻' : '📄'}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', background: activeTab===s.id ? '#185FA5' : '#fff', color: activeTab===s.id ? '#fff' : '#555', border: activeTab===s.id ? '2px solid #185FA5' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
+                  <div style={{ width:26, height:26, borderRadius:'50%', background: activeTab===s.id ? 'rgba(255,255,255,.2)' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 }}>
+                    {i === 0 ? '📝' : i === 1 ? '💻' : '📄'}
                   </div>
                   <div>
-                    <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap' }}>{s.title}</div>
-                    <div style={{ fontSize:11, opacity:0.7, marginTop:1 }}>Part {idx + 1}</div>
+                    <div style={{ fontSize:12, fontWeight:600 }}>{s.title}</div>
+                    <div style={{ fontSize:11, opacity:0.75 }}>Part {i + 1}</div>
                   </div>
-                  {activeTab===s.id && <span style={{ marginLeft:'auto', fontSize:12 }}>✓</span>}
+                  {activeTab===s.id && <span style={{ marginLeft:'auto', paddingLeft:8, fontSize:11 }}>✓</span>}
                 </button>
               ))}
             </div>
-            {/* Active tab indicator strip */}
-            <div style={{ marginTop:12, height:1, background:'#e5e7eb' }} />
           </div>
         )}
 
-        {/* Scroll progress label */}
+        {/* Scroll progress */}
         {scrollPct > 0 && scrollPct < 100 && (
-          <div style={{ fontSize:11, color:'#888', marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
-            <div style={{ flex:1, height:4, background:'#f0f0f0', borderRadius:2, overflow:'hidden', maxWidth:200 }}>
+          <div style={{ fontSize:11, color:'#aaa', marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ flex:1, height:3, background:'#f0f0f0', borderRadius:2, overflow:'hidden', maxWidth:160 }}>
               <div style={{ height:'100%', width: scrollPct + '%', background:'#185FA5', borderRadius:2 }} />
             </div>
             <span>{scrollPct}% read</span>
