@@ -12,10 +12,9 @@ export default function StudentModuleView({ module, lessons, assignments, comple
   const [search, setSearch] = useState('')
   const done = new Set(completedIds)
   const bookmarked = new Set(bookmarkedIds)
-  const pct = visibleLessons.length > 0 ? Math.round(done.size / visibleLessons.length * 100) : 0
-  // Locked lessons are hidden from students entirely
   // Hide locked lessons and sub-lessons (they appear as tabs inside their parent)
   const visibleLessons = lessons.filter((l: any) => !l.locked && !l.parent_lesson_id)
+  const pct = visibleLessons.length > 0 ? Math.round(done.size / visibleLessons.length * 100) : 0
   const filteredLessons = search.trim()
     ? visibleLessons.filter((l: any) => l.title.toLowerCase().includes(search.toLowerCase()))
     : visibleLessons
