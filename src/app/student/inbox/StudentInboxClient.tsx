@@ -99,7 +99,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
       chs.push(ch)
     })
     return () => chs.forEach(ch => supaPresence.removeChannel(ch))
-  }, [Object.keys(contactMap).join(',')])
+  }, [dmMsgs.length])
 
   // Sync messages from ChatWidget into this page
   useEffect(() => {
