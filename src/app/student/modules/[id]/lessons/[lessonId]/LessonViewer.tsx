@@ -516,15 +516,20 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   useEffect(() => {
     if (blocks.length === 0) return
     // Small delay to let DOM render
-    const timer = setTimeout(() => {
+    const timer = setTimeout(() => { // 400ms: wait for quiz activation
       const el = contentRef.current
       if (!el) return
       const allHeadings = el.querySelectorAll('h1, h2, h3')
       const items: { id: string; text: string; level: number }[] = []
       let tocIdx = 0
       allHeadings.forEach((h) => {
-        // Skip headings inside quiz blocks, callouts, or other special components
-        if (h.closest('.cb-quiz') || h.closest('[data-no-toc]')) return
+        // Skip headings inside quiz blocks, fold/collapsible blocks, or any special component
+        if (
+          h.closest('.cb-quiz') ||          // quiz blocks
+          h.closest('details') ||           // fold/collapsible blocks (including quiz after activation)
+          h.closest('[data-no-toc]') ||     // explicit opt-out
+          h.closest('.cb-callout')          // callout blocks
+        ) return
         const id = 'toc-' + tocIdx++
         h.id = id
         const tag = h.tagName.toLowerCase()
@@ -553,7 +558,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           if (el2) tocObserver.current?.observe(el2)
         })
       }
-    }, 150)
+    }, 400)
     return () => { clearTimeout(timer); tocObserver.current?.disconnect() }
   }, [blocks])
 
