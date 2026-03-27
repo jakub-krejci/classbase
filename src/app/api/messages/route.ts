@@ -10,12 +10,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { recipient_type, recipient_id, message_type, subject, text, module_id } = body
 
-  // Insert the message
   const { data: msg, error } = await admin.from('messages').insert({
     sender_id: user.id,
     recipient_type,
     recipient_id: recipient_id || null,
-    message_type,
+    message_type: message_type || 'direct',
     module_id: module_id || null,
     subject: subject || null,
     body: text,
@@ -24,66 +23,46 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Get sender name
   const { data: sender } = await admin.from('profiles').select('full_name').eq('id', user.id).single()
-  const senderName = (sender as any)?.full_name ?? 'Teacher'
+  const senderName = (sender as any)?.full_name ?? 'User'
+  const msgId = (msg as any).id
 
-  // Create notifications for recipients
-  const notifLink = '/student/inbox'
-  const notifTitle = message_type === 'announcement'
-    ? `📢 ${senderName}: ${subject || 'New announcement'}`
-    : `💬 ${senderName}: ${subject || 'New message'}`
+  // Create notifications
+  async function notify(userId: string, type: string, title: string, link: string) {
+    await admin.from('notifications').insert({
+      user_id: userId, type, title, body: text.slice(0, 120), link, read: false,
+    } as any)
+  }
 
   if (recipient_type === 'all') {
-    // All students
     const { data: students } = await admin.from('profiles').select('id').eq('role', 'student')
     if (students?.length) {
       await admin.from('notifications').insert(
-        (students as any[]).map(s => ({
-          user_id: s.id,
-          type: message_type === 'announcement' ? 'announcement' : 'message',
-          title: notifTitle,
-          body: text.slice(0, 120),
-          link: notifLink,
-          read: false,
+        (students as any[]).filter(s => s.id !== user.id).map(s => ({
+          user_id: s.id, type: 'announcement',
+          title: `📢 ${senderName}: ${subject || 'New announcement'}`,
+          body: text.slice(0, 120), link: '/student/inbox', read: false,
         }))
       )
     }
   } else if (recipient_type === 'group' && recipient_id) {
-    // Group members
     const { data: members } = await admin.from('group_members').select('student_id').eq('group_id', recipient_id)
     if (members?.length) {
       await admin.from('notifications').insert(
-        (members as any[]).map(m => ({
-          user_id: m.student_id,
-          type: message_type === 'announcement' ? 'announcement' : 'message',
-          title: notifTitle,
-          body: text.slice(0, 120),
-          link: notifLink,
-          read: false,
+        (members as any[]).filter(m => m.student_id !== user.id).map(m => ({
+          user_id: m.student_id, type: 'announcement',
+          title: `📢 ${senderName}: ${subject || 'New announcement'}`,
+          body: text.slice(0, 120), link: '/student/inbox', read: false,
         }))
       )
     }
   } else if (recipient_type === 'student' && recipient_id) {
-    await admin.from('notifications').insert({
-      user_id: recipient_id,
-      type: 'message',
-      title: notifTitle,
-      body: text.slice(0, 120),
-      link: notifLink,
-      read: false,
-    } as any)
+    await notify(recipient_id, 'message', `💬 ${senderName}`, '/student/inbox')
+  } else if (recipient_type === 'student_direct' && recipient_id) {
+    await notify(recipient_id, 'message', `💬 ${senderName}`, '/student/inbox')
   } else if (recipient_type === 'teacher' && recipient_id) {
-    // Student reply to teacher
-    await admin.from('notifications').insert({
-      user_id: recipient_id,
-      type: 'reply',
-      title: `💬 Reply from ${senderName}`,
-      body: text.slice(0, 120),
-      link: '/teacher/messages',
-      read: false,
-    } as any)
+    await notify(recipient_id, 'reply', `💬 ${senderName}`, '/teacher/messages')
   }
 
-  return NextResponse.json({ id: (msg as any).id })
+  return NextResponse.json({ id: msgId })
 }

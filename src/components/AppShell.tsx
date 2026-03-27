@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { DarkContext } from '@/lib/darkMode'
+import ChatWidget from './ChatWidget'
 
 export default function AppShell({ user, role, children, wide }: { user: any; role: 'teacher' | 'student'; children: React.ReactNode; wide?: boolean }) {
   const path = usePathname()
@@ -12,6 +13,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   const [unread, setUnread] = useState(0)
   const [notifs, setNotifs] = useState<any[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
+  const [contacts, setContacts] = useState<any[]>([])
 
   async function logout() {
     await supabase.auth.signOut()
@@ -27,6 +29,27 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
     ping()
     const t = setInterval(ping, 2 * 60 * 1000)
     return () => clearInterval(t)
+  }, [])
+
+  // Load contacts for chat widget
+  useEffect(() => {
+    async function loadContacts() {
+      const { data: { user: u } } = await supabase.auth.getUser()
+      if (!u) return
+      // For teachers: all students
+      // For students: their teachers (via enrollments) + classmates (same module)
+      const { data: profiles } = await supabase.from('profiles')
+        .select('id, full_name, role')
+        .neq('id', u.id)
+        .in('role', ['teacher', 'student'])
+      setContacts((profiles ?? []).map((p: any) => ({
+        id: p.id,
+        full_name: p.full_name ?? p.email ?? 'User',
+        role: p.role,
+        initials: (p.full_name ?? '?').split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2),
+      })))
+    }
+    loadContacts()
   }, [])
 
   // Load notifications + subscribe realtime
@@ -187,6 +210,9 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
           </div>
         </div>
       )}
+
+      {/* Floating chat widget */}
+      {user && <ChatWidget userId={user.id} userName={user.full_name ?? user.email ?? ''} userRole={role} contacts={contacts} />}
 
       {/* Page content */}
       <div className="cb-page-wrap" style={{ maxWidth: wide ? 1140 : 860, margin: '0 auto', padding: '28px 20px' }}>
