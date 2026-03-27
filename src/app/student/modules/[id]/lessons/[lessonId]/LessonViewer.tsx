@@ -647,7 +647,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ display: isMobile ? 'block' : 'flex', gap: 18, alignItems: 'flex-start' }}>
       <style>{PYTHON_CSS}{`
         /* ─────────────────────────────────────────────────────────────
            LESSON CONTENT TYPOGRAPHY
@@ -789,18 +789,19 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         }
 
         /* ── Overlay sidebars ── */
-        /* ── Left nav: always-visible fixed sidebar ── */
+        /* ── Left nav: sticky in-flow sidebar ── */
         .cb-sidebar-left {
-          position: fixed;
-          top: 52px;
-          left: 0;
-          height: calc(100vh - 52px);
-          width: 220px;
-          z-index: 40;
-          background: #fff;
-          border-right: 1px solid #e5e7eb;
+          width: 210px;
+          flex-shrink: 0;
+          position: sticky;
+          top: 80px;
+          max-height: calc(100vh - 100px);
           overflow-y: auto;
-          padding: 14px 0;
+          background: #fff;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          padding: 10px 0;
+          align-self: flex-start;
         }
 
         /* ── Right ToC: hover-expand overlay ── */
@@ -901,8 +902,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         </div>
       )}
 
-      {/* Main content — offset by left nav width on desktop */}
-      <div style={{ width:'100%', marginLeft: isMobile ? 0 : 220 }}>
+      {/* Main content */}
+      <div style={{ flex:1, minWidth:0 }}>
         <Breadcrumb items={[{ label: 'Modules', href: '/student/modules' }, { label: lesson.module_title ?? 'Module', href: `/student/modules/${moduleId}` }, { label: lesson.title }]} />
 
         {/* Mobile: inline lesson nav */}
