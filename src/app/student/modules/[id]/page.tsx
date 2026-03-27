@@ -20,8 +20,9 @@ export default async function StudentModuleDetailPage({ params }: { params: any 
   if (!mod) redirect('/student/modules')
 
   // verify enrolled
-  const { data: enr } = await admin.from('enrollments').select('id').eq('student_id', (user as any).id).eq('module_id', moduleId).single()
+  const { data: enr } = await admin.from('enrollments').select('id, banned').eq('student_id', (user as any).id).eq('module_id', moduleId).single()
   if (!enr) redirect('/student/modules')
+  if ((enr as any).banned) redirect('/student/modules?banned=1')
 
   const { data: lessons } = await admin.from('lessons').select('*').eq('module_id', moduleId).order('position')
   const { data: assignments } = await admin.from('assignments').select('*').eq('module_id', moduleId).order('created_at')

@@ -12,6 +12,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
   const isMobile = useIsMobile()
   const [tab, setTab] = useState<'lessons' | 'assignments' | 'students'>('lessons')
   const [lessonList, setLessonList] = useState(lessons)
+  const [enrollmentList, setEnrollmentList] = useState(enrollments)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const supabase = createClient()
   const router = useRouter()
@@ -34,6 +35,19 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
   async function toggleLock(id: string, currentlyLocked: boolean) {
     await supabase.from('lessons').update({ locked: !currentlyLocked } as any).eq('id', id)
     setLessonList(prev => prev.map(l => l.id === id ? { ...l, locked: !currentlyLocked } : l))
+  }
+
+  async function removeStudent(studentId: string) {
+    if (!confirm('Remove this student from the module? Their progress will be deleted.')) return
+    await supabase.from('enrollments').delete().eq('student_id', studentId).eq('module_id', module.id)
+    await supabase.from('lesson_progress').delete().eq('student_id', studentId).in('lesson_id', lessons.map(l => l.id))
+    setEnrollmentList(prev => prev.filter(e => e.student_id !== studentId))
+  }
+
+  async function toggleBan(studentId: string, currentlyBanned: boolean) {
+    await supabase.from('enrollments').update({ banned: !currentlyBanned } as any)
+      .eq('student_id', studentId).eq('module_id', module.id)
+    setEnrollmentList(prev => prev.map(e => e.student_id === studentId ? { ...e, banned: !currentlyBanned } : e))
   }
 
   async function addSubLesson(parentId: string, parentTitle: string) {
@@ -234,8 +248,8 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
       {/* Students tab */}
       {tab === 'students' && (
         <div>
-          {enrollments.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No students enrolled yet.</p>}
-          {enrollments.length > 0 && (
+          {enrollmentList.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No students enrolled yet.</p>}
+          {enrollmentList.length > 0 && (
             <div className='cb-progress-grid' style={{ overflowX: 'auto' }}>
               {/* Header row */}
               <div style={{ display: 'grid', gridTemplateColumns: '200px repeat(' + lessons.length + ', 1fr)', gap: 0, marginBottom: 4, minWidth: 400 }}>
@@ -247,7 +261,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
                 ))}
               </div>
               {/* Student rows */}
-              {enrollments.map((e: any) => {
+              {enrollmentList.map((e: any) => {
                 const p = e.profiles as any
                 const initials = (p?.full_name ?? p?.email ?? '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)
                 // Build progress map for this student
@@ -260,10 +274,28 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
                   <div key={e.student_id} style={{ display: 'grid', gridTemplateColumns: '200px repeat(' + lessons.length + ', 1fr)', gap: 0, borderTop: '0.5px solid #f3f4f6', alignItems: 'center', minWidth: 400 }}>
                     {/* Student name cell */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#E6F1FB', color: '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p?.full_name ?? 'Unknown'}</div>
-                        <div style={{ fontSize: 10, color: '#888' }}>{overallPct}% done</div>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: e.banned ? '#f3f4f6' : '#E6F1FB', color: e.banned ? '#aaa' : '#0C447C', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {e.banned ? '🚫' : initials}
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: e.banned ? '#aaa' : '#111' }}>
+                          {p?.full_name ?? 'Unknown'}
+                          {e.banned && <span style={{ fontSize: 10, color: '#856404', background: '#FFF3CD', padding: '1px 5px', borderRadius: 8, marginLeft: 5 }}>banned</span>}
+                        </div>
+                        <div style={{ fontSize: 9, color: '#bbb' }}>
+                          {p?.last_seen_at ? 'Last seen ' + new Date(p.last_seen_at).toLocaleDateString() : 'Never logged in'}
+                          {' · '}{overallPct}% done
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+                          <button onClick={() => toggleBan(e.student_id, e.banned)}
+                            style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, border: '0.5px solid #e5e7eb', background: e.banned ? '#EAF3DE' : '#FFF3CD', color: e.banned ? '#27500A' : '#856404', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            {e.banned ? 'Unban' : 'Ban'}
+                          </button>
+                          <button onClick={() => removeStudent(e.student_id)}
+                            style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, border: '0.5px solid #F09595', background: '#FCEBEB', color: '#791F1F', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     </div>
                     {/* Per-lesson progress cells */}
