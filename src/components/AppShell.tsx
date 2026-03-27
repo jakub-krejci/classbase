@@ -9,24 +9,38 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   const path = usePathname()
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [unread, setUnread] = useState(0)
+  const [notifs, setNotifs] = useState<any[]>([])
+  const [notifOpen, setNotifOpen] = useState(false)
 
   async function logout() {
     await supabase.auth.signOut()
     window.location.href = '/login'
   }
 
-  // Update last_seen_at on mount and every 2 minutes
+  // Update last_seen_at + fetch notifications on mount, repeat every 30s
   useEffect(() => {
     async function ping() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() } as any).eq('id', user.id)
-      }
+      if (!user) return
+      await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() } as any).eq('id', user.id)
+      const { data: n } = await supabase.from('notifications')
+        .select('*').eq('user_id', user.id).eq('read', false)
+        .order('created_at', { ascending: false }).limit(10)
+      setNotifs(n ?? [])
+      setUnread((n ?? []).length)
     }
     ping()
-    const interval = setInterval(ping, 2 * 60 * 1000)
+    const interval = setInterval(ping, 30 * 1000)
     return () => clearInterval(interval)
   }, [])
+
+  async function markAllRead() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('notifications').update({ read: true } as any).eq('user_id', user.id).eq('read', false)
+    setNotifs([]); setUnread(0)
+  }
 
   const teacherNav = [
     { label: 'Modules', href: '/teacher/modules' },
@@ -77,6 +91,32 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
               <span className="cb-nav-label">{n.label}</span>
             </a>
           ))}
+          {/* Notification bell */}
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => { setNotifOpen(o => !o); if (!notifOpen && unread) markAllRead() }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', fontSize: 16, lineHeight: 1, position: 'relative', color: '#555' }}>
+              🔔
+              {unread > 0 && (
+                <span style={{ position: 'absolute', top: 0, right: 0, width: 16, height: 16, borderRadius: '50%', background: '#e53e3e', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
+            </button>
+            {notifOpen && (
+              <div style={{ position: 'absolute', right: 0, top: 36, width: 300, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.12)', zIndex: 100, overflow: 'hidden' }}>
+                <div style={{ padding: '10px 14px', borderBottom: '0.5px solid #f3f4f6', fontWeight: 600, fontSize: 13, color: '#111' }}>Notifications</div>
+                {notifs.length === 0 && <div style={{ padding: '16px 14px', fontSize: 13, color: '#aaa', textAlign: 'center' }}>All caught up ✓</div>}
+                {notifs.map((n: any) => (
+                  <a key={n.id} href={n.link ?? '#'} onClick={() => setNotifOpen(false)}
+                    style={{ display: 'block', padding: '10px 14px', borderBottom: '0.5px solid #f9fafb', textDecoration: 'none', color: 'inherit' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#111', marginBottom: 2 }}>{n.title}</div>
+                    {n.body && <div style={{ fontSize: 12, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.body}</div>}
+                    <div style={{ fontSize: 10, color: '#ccc', marginTop: 2 }}>{new Date(n.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
           <a href={profileHref} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: roleColor.bg, color: roleColor.text, fontSize: 11, fontWeight: 600, textDecoration: 'none', flexShrink: 0, marginLeft: 4 }}>
             {initials}
           </a>
