@@ -375,5 +375,6 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
           )}
         </div>
       )}
-
-      
+    </div>
+  )
+}
