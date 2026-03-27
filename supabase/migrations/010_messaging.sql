@@ -61,3 +61,12 @@ create policy "messages_teacher_all" on public.messages for all
 
 -- Service role (admin) can do anything — needed for creating notifications server-side
 -- (admin client bypasses RLS by default)
+
+-- Enable realtime for messages and notifications
+-- (Run in Supabase dashboard: Realtime > Tables, or via this migration)
+alter publication supabase_realtime add table public.messages;
+alter publication supabase_realtime add table public.notifications;
+
+-- Add delete support for messages (own messages only)
+create policy "messages_delete_own" on public.messages for delete
+  using (auth.uid() = sender_id);
