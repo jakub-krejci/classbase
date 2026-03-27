@@ -54,31 +54,28 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
 
   // Load notifications + subscribe realtime
   useEffect(() => {
-    let userId = ''
     async function load() {
       const { data: { user: u } } = await supabase.auth.getUser()
       if (!u) return
-      userId = u.id
       const { data: n } = await supabase.from('notifications')
         .select('*').eq('user_id', u.id).eq('read', false)
         .eq('type', 'announcement')
         .order('created_at', { ascending: false }).limit(20)
       setNotifs(n ?? [])
       setUnread((n ?? []).length)
+      supabase.channel('notif-ann-' + u.id)
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'notifications',
+          filter: `user_id=eq.${u.id}`,
+        }, (payload: any) => {
+          const n = payload.new
+          if (n.type !== 'announcement') return
+          setNotifs(prev => [n, ...prev].slice(0, 20))
+          setUnread(c => c + 1)
+        })
+        .subscribe()
     }
-    supabase.channel('notif-ann-' + u.id)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'notifications',
-        filter: `user_id=eq.${u.id}`,
-      }, (payload: any) => {
-        const n = payload.new
-        if (n.type !== 'announcement') return
-        setNotifs(prev => [n, ...prev].slice(0, 20))
-        setUnread(c => c + 1)
-      })
-      .subscribe()
-  }
-  load()
+    load()
   }, [])
 
   async function markAllRead() {
