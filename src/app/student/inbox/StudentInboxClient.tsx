@@ -19,6 +19,10 @@ function fmtTime(ts: string) {
 }
 function threadChannel(a: string, b: string) { return 'chat:' + [a, b].sort().join(':') }
 
+function OnlineDot({ isOn }: { isOn?: boolean }) {
+  return <div style={{ width: 9, height: 9, borderRadius: '50%', background: isOn ? '#22c55e' : '#d1d5db', border: '1.5px solid #fff', flexShrink: 0 }} title={isOn ? 'Online' : 'Offline'} />
+}
+
 export default function StudentInboxClient({ messages: initial, announcements: initAnn, studentId }: {
   messages: any[]; announcements: any[]; studentId: string
 }) {
@@ -79,6 +83,22 @@ export default function StudentInboxClient({ messages: initial, announcements: i
   }, [dmMsgs])
 
   useEffect(() => () => { Object.values(broadcastChannels.current).forEach(ch => supabase.removeChannel(ch)) }, [])
+
+  // Online presence
+  const [online, setOnline] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    const supaPresence = createClient()
+    const chs: any[] = []
+    Object.values(contactMap).forEach((c: any) => {
+      const ch = supaPresence.channel('presence:' + c.id)
+        .on('broadcast', { event: 'ping' }, ({ payload }: any) => {
+          if (payload.userId !== c.id) return
+          setOnline(prev => ({ ...prev, [c.id]: Date.now() - payload.ts < 3 * 60_000 }))
+        }).subscribe()
+      chs.push(ch)
+    })
+    return () => chs.forEach(ch => supaPresence.removeChannel(ch))
+  }, [Object.keys(contactMap).join(',')])
 
   // Sync messages from ChatWidget into this page
   useEffect(() => {
@@ -208,7 +228,10 @@ export default function StudentInboxClient({ messages: initial, announcements: i
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', background: active ? '#E6F1FB' : 'transparent', borderLeft: active ? '3px solid #185FA5' : '3px solid transparent' }}
                       onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#f0f4ff' }}
                       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
-                      <Avatar name={c.full_name} size={34} bg={bg} col={col} />
+                      <div style={{ position: 'relative' }}>
+                        <Avatar name={c.full_name} size={34} bg={bg} col={col} />
+                        <div style={{ position: 'absolute', bottom: 0, right: 0 }}><OnlineDot isOn={online[c.id]} /></div>
+                      </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.full_name}</div>
                         <div style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
