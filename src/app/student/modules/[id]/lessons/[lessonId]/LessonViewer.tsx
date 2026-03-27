@@ -419,11 +419,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     const minutes = Math.ceil(words / 200 + codeBlocks * 0.5)
     return minutes <= 1 ? '< 1 min read' : `~${minutes} min read`
   }
+  // The content currently shown: main lesson or a selected sub-lesson tab
+  const activeLesson = activeTab === 'main' ? lesson : subLessons.find(s => s.id === activeTab) ?? lesson
+
   const readTime = blocks.length > 0 ? calcReadTime(activeLesson.content_html ?? '') : ''
 
   // ── Load blocks + existing progress ───────────────────────────────────────
-  // The content currently shown: main lesson or a selected sub-lesson tab
-  const activeLesson = activeTab === 'main' ? lesson : subLessons.find(s => s.id === activeTab) ?? lesson
 
   useEffect(() => {
     setBlocks(parseBlocks(activeLesson.content_html ?? ''))
