@@ -149,6 +149,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
                   </a>
                 ))}
                 </div>
+              </div>
             )}
           </div>
           <a href={profileHref} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: roleColor.bg, color: roleColor.text, fontSize: 11, fontWeight: 600, textDecoration: 'none', flexShrink: 0, marginLeft: 4 }}>
