@@ -50,6 +50,9 @@ export default function ChatWidget({ userId, userRole, contacts }: {
       return stored ? JSON.parse(stored) : {}
     } catch { return {} }
   })
+  // Track widget mount time — messages older than this are considered already read
+  // if there's no explicit readUpTo entry for that contact
+  const mountTimeRef = useRef(new Date().toISOString())
 
   function setReadUpTo(updater: (prev: Record<string, string>) => Record<string, string>) {
     setReadUpToState(prev => {
@@ -211,12 +214,14 @@ export default function ChatWidget({ userId, userRole, contacts }: {
 
   // Unread count: messages from contact received after readUpTo[contact.id]
   function unreadCount(contactId: string) {
-    // Suppress badge if the full Messages/Inbox page currently has this thread open
+    // Suppress if thread open on full Messages/Inbox page
     try {
       const pageActive = sessionStorage.getItem('cb_page_active_thread')
       if (pageActive === contactId) return 0
     } catch {}
-    const readTs = readUpTo[contactId] ?? ''
+    // If we have an explicit readUpTo, use it.
+    // Otherwise use mountTime as baseline so historical msgs don't all appear unread.
+    const readTs = readUpTo[contactId] ?? mountTimeRef.current
     return allMsgs.filter(m =>
       m.sender_id === contactId &&
       m.recipient_id === userId &&
@@ -224,7 +229,12 @@ export default function ChatWidget({ userId, userRole, contacts }: {
     ).length
   }
 
-  const totalUnread = contacts.reduce((sum, c) => sum + unreadCount(c.id), 0)
+  // Compute total unread directly from allMsgs, independent of contacts list
+  const totalUnread = (() => {
+    try { const pa = sessionStorage.getItem('cb_page_active_thread'); if (pa) return 0 } catch {}
+    const allSenderIds = new Set(allMsgs.filter(m => m.sender_id !== userId && m.recipient_id === userId).map(m => m.sender_id))
+    return [...allSenderIds].reduce((sum, sid) => sum + unreadCount(sid), 0)
+  })()
 
   const recentContacts = contacts.filter(c => c.id !== userId && allMsgs.some(m =>
     (m.sender_id === userId && m.recipient_id === c.id) ||
