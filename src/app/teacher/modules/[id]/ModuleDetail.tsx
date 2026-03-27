@@ -180,7 +180,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
               </button>
               <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id + "/preview"} style={{ padding: '3px 9px', fontSize: 11 }}>View</Btn>
               <Btn href={"/teacher/modules/" + module.id + "/lessons/" + l.id} style={{ padding: '3px 9px', fontSize: 11 }}>Edit</Btn>
-              <Btn onClick={() => duplicateLesson(l.id)} style={{ padding: '3px 9px', fontSize: 11 }} title="Duplicate this lesson and its sub-lessons">⎘ Copy</Btn>
+              <Btn onClick={() => duplicateLesson(l.id)} style={{ padding: '3px 9px', fontSize: 11 }}>⎘ Copy</Btn>
               <Btn variant="danger" onClick={() => deleteLesson(l.id)} style={{ padding: '3px 9px', fontSize: 11 }}>Del</Btn>
             </div>
               {/* Sub-lessons */}
