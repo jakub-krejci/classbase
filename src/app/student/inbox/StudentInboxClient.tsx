@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/client'
 import { emitChatBus, onChatBus } from '@/lib/chatBus'
 import { Breadcrumb } from '@/components/ui'
 
-function inboxChannel(uid: string) { return 'inbox:' + uid }
 function mkInitials(name: string) {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
 }
@@ -18,7 +17,6 @@ function fmtTime(ts: string) {
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
-function threadChannel(a: string, b: string) { return 'chat:' + [a, b].sort().join(':') }
 
 function OnlineDot({ isOn }: { isOn?: boolean }) {
   return <div style={{ width: 9, height: 9, borderRadius: '50%', background: isOn ? '#22c55e' : '#d1d5db', border: '1.5px solid #fff', flexShrink: 0 }} title={isOn ? 'Online' : 'Offline'} />
@@ -37,53 +35,12 @@ export default function StudentInboxClient({ messages: initial, announcements: i
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const activeContactRef = useRef<any>(null)
-  const broadcastChannels = useRef<Record<string, any>>({})
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
 
   useEffect(() => { activeContactRef.current = activeContact }, [activeContact])
 
   function scrollBottom() { setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30) }
 
-  function subscribeTo(contactId: string) {
-    const chName = threadChannel(studentId, contactId)
-    if (broadcastChannels.current[chName]) return
-    const ch = supabase.channel(chName)
-      .on('broadcast', { event: 'new_message' }, ({ payload }: any) => {
-        if (payload.sender_id === studentId) return
-        setDmMsgs(prev => prev.some(m => m.id === payload.id) ? prev : [...prev, payload])
-        if (activeContactRef.current?.id === payload.sender_id) scrollBottom()
-      })
-      .on('broadcast', { event: 'delete_message' }, ({ payload }: any) => {
-        setDmMsgs(prev => prev.filter(m => m.id !== payload.id))
-      })
-      .subscribe()
-    broadcastChannels.current[chName] = ch
-  }
-
-  // Also listen for new announcements via postgres_changes
-  useEffect(() => {
-    const ch = supabase.channel('student-ann-' + studentId)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
-        const m = payload.new
-        if (m.message_type !== 'announcement') return
-        if (m.recipient_type !== 'all') return
-        const { data: p } = await supabase.from('profiles').select('full_name').eq('id', m.sender_id).single()
-        setAnnList(prev => [{ ...m, sender_name: (p as any)?.full_name ?? 'Teacher' }, ...prev])
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [studentId])
-
-  useEffect(() => {
-    const ids = new Set<string>()
-    dmMsgs.forEach(m => {
-      const other = m.sender_id === studentId ? m.recipient_id : m.sender_id
-      if (other) ids.add(other)
-    })
-    ids.forEach(subscribeTo)
-  }, [dmMsgs])
-
-  useEffect(() => () => { Object.values(broadcastChannels.current).forEach(ch => supabase.removeChannel(ch)) }, [])
 
   // Online presence
   const [online, setOnline] = useState<Record<string, boolean>>({})
@@ -99,7 +56,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
       chs.push(ch)
     })
     return () => chs.forEach(ch => supaPresence.removeChannel(ch))
-  }, [dmMsgs.length])
+  }, [Object.keys(contactMap).join(',')])
 
   // Sync messages from ChatWidget into this page
   useEffect(() => {
@@ -154,13 +111,6 @@ export default function StudentInboxClient({ messages: initial, announcements: i
       const { id } = await res.json()
       const real = { ...optimistic, id }
       setDmMsgs(prev => prev.map(m => m.id === optimistic.id ? real : m))
-      const chName = threadChannel(studentId, activeContact.id)
-      const ch = broadcastChannels.current[chName] ?? supabase.channel(chName)
-      broadcastChannels.current[chName] = ch
-      const recipientCh = supabase.channel(inboxChannel(real.recipient_id))
-      recipientCh.subscribe(s => {
-        if (s === 'SUBSCRIBED') recipientCh.send({ type: 'broadcast', event: 'msg', payload: real })
-      })
       emitChatBus({ event: 'new_message', payload: real })
     } else {
       setDmMsgs(prev => prev.filter(m => m.id !== optimistic.id))
@@ -172,8 +122,6 @@ export default function StudentInboxClient({ messages: initial, announcements: i
     await supabase.from('messages').delete().eq('id', id)
     setDmMsgs(prev => prev.filter(m => m.id !== id))
     if (activeContact) {
-      const ch = broadcastChannels.current[threadChannel(studentId, activeContact.id)]
-      if (ch) ch.send({ type: 'broadcast', event: 'delete_message', payload: { id } })
     }
   }
 
@@ -195,6 +143,31 @@ export default function StudentInboxClient({ messages: initial, announcements: i
   })
 
   const SIDEBAR = 240
+
+
+  // Real-time: receive new messages
+  useEffect(() => {
+    const ch = supabase.channel('pg-dm-' + studentId)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'messages',
+        filter: `recipient_id=eq.${studentId}`,
+      }, (payload: any) => {
+        const m = payload.new
+        if (!['student', 'teacher', 'student_direct'].includes(m.recipient_type)) return
+        setDmMsgs(prev => prev.some((x: any) => x.id === m.id) ? prev : [...prev, m])
+        if (activeContactRef.current?.id === m.sender_id) {
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
+        }
+      })
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'messages',
+      }, (payload: any) => {
+        if (payload.old?.id) setDmMsgs((prev: any) => prev.filter((m: any) => m.id !== payload.old.id))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [studentId])
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', minHeight: 500 }}>

@@ -6,7 +6,6 @@ import { emitChatBus, onChatBus } from '@/lib/chatBus'
 import { Breadcrumb } from '@/components/ui'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-function inboxChannel(uid: string) { return 'inbox:' + uid }
 function mkInitials(name: string) {
   return name.split(' ').map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2) || '?'
 }
@@ -19,7 +18,6 @@ function fmtTime(ts: string) {
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
-function threadChannel(a: string, b: string) { return 'chat:' + [a, b].sort().join(':') }
 
 // ── component ─────────────────────────────────────────────────────────────────
 function OnlineDot({ isOn }: { isOn?: boolean }) {
@@ -48,7 +46,6 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const activeContactRef = useRef<any>(null)
-  const broadcastChannels = useRef<Record<string, any>>({})
 
   // ── announcements ─────────────────────────────────────────────────────────
   const [announcements, setAnnouncements] = useState(initSent.filter(m => m.message_type === 'announcement' || !m.message_type))
@@ -62,32 +59,6 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
   function scrollBottom() { setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30) }
 
   // ── subscribe to broadcast for a contact ──────────────────────────────────
-  function subscribeTo(contactId: string) {
-    const chName = threadChannel(senderId, contactId)
-    if (broadcastChannels.current[chName]) return
-    const ch = supabase.channel(chName)
-      .on('broadcast', { event: 'new_message' }, ({ payload }: any) => {
-        if (payload.sender_id === senderId) return
-        setDmMsgs(prev => prev.some(m => m.id === payload.id) ? prev : [...prev, payload])
-        if (activeContactRef.current?.id === payload.sender_id) scrollBottom()
-      })
-      .on('broadcast', { event: 'delete_message' }, ({ payload }: any) => {
-        setDmMsgs(prev => prev.filter(m => m.id !== payload.id))
-      })
-      .subscribe()
-    broadcastChannels.current[chName] = ch
-  }
-
-  useEffect(() => {
-    const ids = new Set<string>()
-    dmMsgs.forEach(m => {
-      const other = m.sender_id === senderId ? m.recipient_id : m.sender_id
-      if (other) ids.add(other)
-    })
-    ids.forEach(subscribeTo)
-  }, [dmMsgs])
-
-  useEffect(() => () => { Object.values(broadcastChannels.current).forEach(ch => supabase.removeChannel(ch)) }, [])
 
   // Online presence
   const [online, setOnline] = useState<Record<string, boolean>>({})
@@ -161,13 +132,6 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
       const { id } = await res.json()
       const real = { ...optimistic, id }
       setDmMsgs(prev => prev.map(m => m.id === optimistic.id ? real : m))
-      const chName = threadChannel(senderId, activeContact.id)
-      const ch = broadcastChannels.current[chName] ?? supabase.channel(chName)
-      broadcastChannels.current[chName] = ch
-      const recipientCh = supabase.channel(inboxChannel(real.recipient_id))
-      recipientCh.subscribe(s => {
-        if (s === 'SUBSCRIBED') recipientCh.send({ type: 'broadcast', event: 'msg', payload: real })
-      })
       emitChatBus({ event: 'new_message', payload: real })
     } else {
       setDmMsgs(prev => prev.filter(m => m.id !== optimistic.id))
@@ -179,8 +143,6 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
     await supabase.from('messages').delete().eq('id', id)
     setDmMsgs(prev => prev.filter(m => m.id !== id))
     if (activeContact) {
-      const ch = broadcastChannels.current[threadChannel(senderId, activeContact.id)]
-      if (ch) ch.send({ type: 'broadcast', event: 'delete_message', payload: { id } })
     }
   }
 
@@ -228,6 +190,31 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
   const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }
 
   const SIDEBAR = 260
+
+
+  // Real-time: receive new messages
+  useEffect(() => {
+    const ch = supabase.channel('pg-dm-' + senderId)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'messages',
+        filter: `recipient_id=eq.${senderId}`,
+      }, (payload: any) => {
+        const m = payload.new
+        if (!['student', 'teacher', 'student_direct'].includes(m.recipient_type)) return
+        setDmMsgs(prev => prev.some((x: any) => x.id === m.id) ? prev : [...prev, m])
+        if (activeContactRef.current?.id === m.sender_id) {
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
+        }
+      })
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'messages',
+      }, (payload: any) => {
+        if (payload.old?.id) setDmMsgs((prev: any) => prev.filter((m: any) => m.id !== payload.old.id))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [senderId])
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', minHeight: 500 }}>
