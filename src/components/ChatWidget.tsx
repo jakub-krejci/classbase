@@ -41,7 +41,22 @@ export default function ChatWidget({ userId, userRole, contacts }: {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   // readUpTo[contactId] = latest created_at we've seen while their thread was open
-  const [readUpTo, setReadUpTo] = useState<Record<string, string>>({})
+  // Persisted to localStorage so it survives page navigation and refresh
+  const [readUpTo, setReadUpToState] = useState<Record<string, string>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const stored = localStorage.getItem('cb_read_up_to_' + userId)
+      return stored ? JSON.parse(stored) : {}
+    } catch { return {} }
+  })
+
+  function setReadUpTo(updater: (prev: Record<string, string>) => Record<string, string>) {
+    setReadUpToState(prev => {
+      const next = updater(prev)
+      try { localStorage.setItem('cb_read_up_to_' + userId, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
   const [allMsgs, setAllMsgs] = useState<Msg[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
