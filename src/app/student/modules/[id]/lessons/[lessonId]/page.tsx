@@ -18,8 +18,13 @@ export default async function StudentLessonPage({ params }: { params: any }) {
   // Block access to locked lessons
   if ((lesson as any).locked) redirect('/student/modules/' + params.id)
 
-  // All lessons in this module for nav panel — exclude locked ones
-  const { data: allLessons } = await admin.from('lessons').select('id,title,position,locked').eq('module_id', params.id).eq('locked', false).order('position')
+  // All top-level lessons for nav panel (includes locked so they show as non-clickable)
+  // Sub-lessons (parent_lesson_id IS NOT NULL) are excluded — they appear under their parent
+  const { data: allLessons } = await admin.from('lessons')
+    .select('id,title,position,locked,parent_lesson_id')
+    .eq('module_id', params.id)
+    .is('parent_lesson_id', null)
+    .order('position')
 
   // Completion status for all lessons (#9 — show checkmarks in nav)
   const lessonIds = (allLessons ?? []).map((l: any) => l.id)

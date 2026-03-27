@@ -403,7 +403,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   const [scrollPct, setScrollPct] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  const topLevelLessons = allLessons.filter((l: any) => !l.parent_lesson_id)
+  // allLessons from server is already filtered to top-level only (no parent_lesson_id)
+  const topLevelLessons = allLessons
   const currentIndex = topLevelLessons.findIndex((l: any) => l.id === lesson.id)
   const prevLesson = currentIndex > 0 ? topLevelLessons[currentIndex - 1] : null
   const nextLesson = currentIndex < topLevelLessons.length - 1 ? topLevelLessons[currentIndex + 1] : null
@@ -627,13 +628,20 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
               const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
               return (
                 <div key={l.id}>
-                  <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                    style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
-                    <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                      {isDone ? '✓' : i+1}
+                  {l.locked ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', color:'#bbb', borderLeft:'3px solid transparent', fontSize:13, cursor:'not-allowed' }}>
+                      <div style={{ width:20, height:20, borderRadius:'50%', background:'#f3f4f6', color:'#ccc', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔒</div>
+                      <span style={{ fontSize:12, lineHeight:1.4, color:'#ccc' }}>{l.title}</span>
                     </div>
-                    <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
-                  </a>
+                  ) : (
+                    <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                      style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
+                      <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        {isDone ? '✓' : i+1}
+                      </div>
+                      <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
+                    </a>
+                  )}
                   {isCurrent && subs.length > 0 && subs.map((s:any) => (
                     <div key={s.id}
                       style={{ paddingLeft:28, paddingRight:8, paddingTop:2, paddingBottom:2 }}>
@@ -671,14 +679,21 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                   const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
                   return (
                     <div key={l.id}>
-                      <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                        onClick={() => { setNavOpen(false); setActiveTab('main') }}
-                        style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent' }}>
-                        <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                          {isDone ? '✓' : i+1}
+                      {l.locked ? (
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', borderLeft:'3px solid transparent', cursor:'not-allowed' }}>
+                          <div style={{ width:20, height:20, borderRadius:'50%', background:'#f3f4f6', color:'#ccc', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔒</div>
+                          <span style={{ fontSize:13, lineHeight:1.4, color:'#ccc' }}>{l.title}</span>
                         </div>
-                        <span style={{ fontSize:13, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
-                      </a>
+                      ) : (
+                        <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                          onClick={() => { setNavOpen(false); setActiveTab('main') }}
+                          style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent' }}>
+                          <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                            {isDone ? '✓' : i+1}
+                          </div>
+                          <span style={{ fontSize:13, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
+                        </a>
+                      )}
                       {isCurrent && subs.length > 0 && subs.map((s:any) => (
                         <button key={s.id}
                           onClick={() => { setNavOpen(false); setActiveTab(s.id) }}
@@ -720,17 +735,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
               Parts of this lesson
             </div>
             <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:8, overflowX:'auto' }}>
-              {/* Main lesson tab */}
-              <button onClick={() => setActiveTab('main')}
-                style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background: activeTab==='main' ? '#185FA5' : '#fff', color: activeTab==='main' ? '#fff' : '#555', border: activeTab==='main' ? '2px solid #185FA5' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
-                <div style={{ width:28, height:28, borderRadius:'50%', background: activeTab==='main' ? 'rgba(255,255,255,.2)' : '#E6F1FB', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>📖</div>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap' }}>{lesson.title}</div>
-                  <div style={{ fontSize:11, opacity:0.7, marginTop:1 }}>Main lesson</div>
-                </div>
-                {activeTab==='main' && <span style={{ marginLeft:'auto', fontSize:12 }}>✓</span>}
-              </button>
-              {/* Sub-lesson tabs */}
               {subLessons.map((s: any, idx: number) => (
                 <button key={s.id} onClick={() => setActiveTab(s.id)}
                   style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background: activeTab===s.id ? '#185FA5' : '#fff', color: activeTab===s.id ? '#fff' : '#555', border: activeTab===s.id ? '2px solid #185FA5' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
@@ -739,7 +743,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                   </div>
                   <div>
                     <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap' }}>{s.title}</div>
-                    <div style={{ fontSize:11, opacity:0.7, marginTop:1 }}>Part {idx + 2}</div>
+                    <div style={{ fontSize:11, opacity:0.7, marginTop:1 }}>Part {idx + 1}</div>
                   </div>
                   {activeTab===s.id && <span style={{ marginLeft:'auto', fontSize:12 }}>✓</span>}
                 </button>
