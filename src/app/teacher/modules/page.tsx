@@ -37,6 +37,10 @@ export default async function TeacherModulesPage() {
 
   return (
     <AppShell user={profile} role="teacher">
+      <style>{`
+        .module-card { transition: border-color .15s, box-shadow .15s; }
+        .module-card:hover { border-color: #b5cce0 !important; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+      `}</style>
       <PageHeader title="My modules" sub={`Welcome back, ${profile?.full_name ?? ''}`}
         action={<Btn href="/teacher/modules/new" variant="primary">+ New module</Btn>} />
       <StatGrid stats={[
@@ -48,9 +52,7 @@ export default async function TeacherModulesPage() {
       {activeModules.length > 0 && (
         <div style={{ display: 'grid', gap: 10, marginBottom: archivedModules.length ? 24 : 0 }}>
           {activeModules.map((m: any) => (
-            <div key={m.id} style={{ position: 'relative', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, textDecoration: 'none', color: 'inherit', transition: 'border-color .15s, box-shadow .15s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#b5cce0'; (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,.06)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}>
+            <div key={m.id} className="module-card" style={{ position: 'relative', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, textDecoration: 'none', color: 'inherit' }}>
               {/* Clickable main area */}
               <a href={"/teacher/modules/" + m.id}
                 style={{ display: 'block', padding: '14px 16px 12px', textDecoration: 'none', color: 'inherit' }}>
