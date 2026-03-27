@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { emitChatBus, onChatBus } from '@/lib/chatBus'
 import { Breadcrumb } from '@/components/ui'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -83,6 +84,23 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
 
   useEffect(() => () => { Object.values(broadcastChannels.current).forEach(ch => supabase.removeChannel(ch)) }, [])
 
+  // Sync messages from the ChatWidget into this page
+  useEffect(() => {
+    const unsub = onChatBus(({ event, payload }) => {
+      if (event === 'new_message') {
+        const involves = payload.sender_id === senderId || payload.recipient_id === senderId
+        if (!involves) return
+        setDmMsgs(prev => prev.some(m => m.id === payload.id) ? prev : [...prev, payload])
+        if (activeContactRef.current?.id === (payload.sender_id === senderId ? payload.recipient_id : payload.sender_id)) {
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
+        }
+      } else if (event === 'delete_message') {
+        setDmMsgs(prev => prev.filter(m => m.id !== payload.id))
+      }
+    })
+    return unsub
+  }, [senderId])
+
   // ── thread messages for active contact ───────────────────────────────────
   const threadMsgs = activeContact
     ? dmMsgs.filter(m =>
@@ -96,6 +114,13 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
     subscribeTo(contact.id)
     setTimeout(scrollBottom, 80)
     setTimeout(() => inputRef.current?.focus(), 80)
+    // Tell ChatWidget this thread is active so it suppresses the badge
+    try { sessionStorage.setItem('cb_page_active_thread', contact.id) } catch {}
+  }
+
+  function closeContact() {
+    setActiveContact(null)
+    try { sessionStorage.removeItem('cb_page_active_thread') } catch {}
   }
 
   async function sendMsg() {
@@ -118,6 +143,7 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
       const ch = broadcastChannels.current[chName] ?? supabase.channel(chName)
       broadcastChannels.current[chName] = ch
       await ch.send({ type: 'broadcast', event: 'new_message', payload: real })
+      emitChatBus({ event: 'new_message', payload: real })
     } else {
       setDmMsgs(prev => prev.filter(m => m.id !== optimistic.id))
     }
@@ -184,7 +210,7 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 14, padding: '4px', background: '#f3f4f6', borderRadius: 10, alignSelf: 'flex-start' }}>
-        <button style={tabBtn('messages')} onClick={() => { setTab('messages'); setActiveContact(null) }}>💬 Messages</button>
+        <button style={tabBtn('messages')} onClick={() => { setTab('messages'); closeContact() }}>💬 Messages</button>
         <button style={tabBtn('announcements')} onClick={() => setTab('announcements')}>📢 Announcements</button>
       </div>
 
@@ -263,7 +289,7 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
                 <>
                   {/* Thread header */}
                   <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                    {isMobile && <button onClick={() => setActiveContact(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#555', padding: 0 }}>←</button>}
+                    {isMobile && <button onClick={closeContact} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#555', padding: 0 }}>←</button>}
                     <Avatar name={activeContact.full_name} size={32} />
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 14, color: '#111' }}>{activeContact.full_name}</div>

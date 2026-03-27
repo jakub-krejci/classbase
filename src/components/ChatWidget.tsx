@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { emitChatBus, onChatBus } from '@/lib/chatBus'
 
 type Contact = { id: string; full_name: string; role: 'teacher' | 'student'; initials: string }
 type Msg = { id: string; sender_id: string; body: string; created_at: string; recipient_type: string; recipient_id: string }
@@ -187,6 +188,7 @@ export default function ChatWidget({ userId, userRole, contacts }: {
       const ch = broadcastChannels.current[chName] ?? supabase.channel(chName)
       broadcastChannels.current[chName] = ch
       await ch.send({ type: 'broadcast', event: 'new_message', payload: realMsg })
+      emitChatBus({ event: 'new_message', payload: realMsg })
     } else {
       // Rollback optimistic on error
       setAllMsgs(prev => prev.filter(m => m.id !== optimistic.id))
@@ -209,6 +211,11 @@ export default function ChatWidget({ userId, userRole, contacts }: {
 
   // Unread count: messages from contact received after readUpTo[contact.id]
   function unreadCount(contactId: string) {
+    // Suppress badge if the full Messages/Inbox page currently has this thread open
+    try {
+      const pageActive = sessionStorage.getItem('cb_page_active_thread')
+      if (pageActive === contactId) return 0
+    } catch {}
     const readTs = readUpTo[contactId] ?? ''
     return allMsgs.filter(m =>
       m.sender_id === contactId &&

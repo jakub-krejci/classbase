@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { emitChatBus, onChatBus } from '@/lib/chatBus'
 import { Breadcrumb } from '@/components/ui'
 
 function mkInitials(name: string) {
@@ -79,6 +80,23 @@ export default function StudentInboxClient({ messages: initial, announcements: i
 
   useEffect(() => () => { Object.values(broadcastChannels.current).forEach(ch => supabase.removeChannel(ch)) }, [])
 
+  // Sync messages from ChatWidget into this page
+  useEffect(() => {
+    const unsub = onChatBus(({ event, payload }) => {
+      if (event === 'new_message') {
+        const involves = payload.sender_id === studentId || payload.recipient_id === studentId
+        if (!involves) return
+        setDmMsgs(prev => prev.some(m => m.id === payload.id) ? prev : [...prev, payload])
+        if (activeContactRef.current?.id === (payload.sender_id === studentId ? payload.recipient_id : payload.sender_id)) {
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
+        }
+      } else if (event === 'delete_message') {
+        setDmMsgs(prev => prev.filter(m => m.id !== payload.id))
+      }
+    })
+    return unsub
+  }, [studentId])
+
   const threadMsgs = activeContact
     ? dmMsgs.filter(m =>
         (m.sender_id === studentId && m.recipient_id === activeContact.id) ||
@@ -91,6 +109,12 @@ export default function StudentInboxClient({ messages: initial, announcements: i
     subscribeTo(contact.id)
     setTimeout(scrollBottom, 80)
     setTimeout(() => inputRef.current?.focus(), 80)
+    try { sessionStorage.setItem('cb_page_active_thread', contact.id) } catch {}
+  }
+
+  function closeContact() {
+    setActiveContact(null)
+    try { sessionStorage.removeItem('cb_page_active_thread') } catch {}
   }
 
   async function sendMsg() {
@@ -113,6 +137,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
       const ch = broadcastChannels.current[chName] ?? supabase.channel(chName)
       broadcastChannels.current[chName] = ch
       await ch.send({ type: 'broadcast', event: 'new_message', payload: real })
+      emitChatBus({ event: 'new_message', payload: real })
     } else {
       setDmMsgs(prev => prev.filter(m => m.id !== optimistic.id))
     }
@@ -153,7 +178,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 14, padding: '4px', background: '#f3f4f6', borderRadius: 10, alignSelf: 'flex-start' }}>
-        <button style={tabBtn('messages')} onClick={() => { setTab('messages'); setActiveContact(null) }}>💬 Messages</button>
+        <button style={tabBtn('messages')} onClick={() => { setTab('messages'); closeContact() }}>💬 Messages</button>
         <button style={tabBtn('announcements')} onClick={() => setTab('announcements')}>
           📢 Announcements {annList.length > 0 && <span style={{ fontSize: 10, background: '#E6F1FB', color: '#0C447C', padding: '1px 5px', borderRadius: 8, marginLeft: 4 }}>{annList.length}</span>}
         </button>
@@ -209,7 +234,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
               ) : (
                 <>
                   <div style={{ padding: '12px 16px', borderBottom: '0.5px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                    {isMobile && <button onClick={() => setActiveContact(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#555', padding: 0 }}>←</button>}
+                    {isMobile && <button onClick={closeContact} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#555', padding: 0 }}>←</button>}
                     <Avatar name={activeContact.full_name} size={32} bg={activeContact.role === 'teacher' ? '#E6F1FB' : '#EAF3DE'} col={activeContact.role === 'teacher' ? '#0C447C' : '#27500A'} />
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 14, color: '#111' }}>{activeContact.full_name}</div>
