@@ -789,19 +789,30 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         }
 
         /* ── Overlay sidebars ── */
-        .cb-sidebar-left, .cb-sidebar-right {
+        /* ── Left nav: always-visible fixed sidebar ── */
+        .cb-sidebar-left {
           position: fixed;
           top: 52px;
+          left: 0;
+          height: calc(100vh - 52px);
+          width: 220px;
+          z-index: 40;
+          background: #fff;
+          border-right: 1px solid #e5e7eb;
+          overflow-y: auto;
+          padding: 14px 0;
+        }
+
+        /* ── Right ToC: hover-expand overlay ── */
+        .cb-sidebar-right {
+          position: fixed;
+          top: 52px;
+          right: 0;
           height: calc(100vh - 52px);
           z-index: 40;
           display: flex;
           align-items: stretch;
-          transition: none;
         }
-        .cb-sidebar-left { left: 0; }
-        .cb-sidebar-right { right: 0; }
-
-        /* Collapsed strip (always visible) */
         .cb-sidebar-strip {
           width: 28px;
           display: flex;
@@ -811,42 +822,28 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           gap: 6px;
           cursor: pointer;
           flex-shrink: 0;
+          background: #f0f4ff;
+          border-left: 1px solid #dbe4ff;
           transition: background .15s;
         }
-        .cb-sidebar-left .cb-sidebar-strip { background: #f0f4ff; border-right: 1px solid #dbe4ff; }
-        .cb-sidebar-right .cb-sidebar-strip { background: #f0f4ff; border-left: 1px solid #dbe4ff; }
-        .cb-sidebar-left:hover .cb-sidebar-strip,
         .cb-sidebar-right:hover .cb-sidebar-strip { background: #e0eaff; }
 
-        /* Expanded panel — hidden by default, shown on hover */
         .cb-sidebar-panel {
           width: 0;
           overflow: hidden;
           transition: width .22s cubic-bezier(.4,0,.2,1);
           background: #fff;
-          box-shadow: 0 0 24px rgba(0,0,0,.10);
+          border-left: 1px solid #e5e7eb;
+          box-shadow: -4px 0 16px rgba(0,0,0,.08);
         }
-        .cb-sidebar-left .cb-sidebar-panel { border-right: 1px solid #e5e7eb; }
-        .cb-sidebar-right .cb-sidebar-panel { border-left: 1px solid #e5e7eb; }
-        .cb-sidebar-left:hover .cb-sidebar-panel { width: 230px; }
         .cb-sidebar-right:hover .cb-sidebar-panel { width: 200px; }
 
         .cb-sidebar-panel-inner {
-          width: 230px;
+          width: 200px;
           height: 100%;
           overflow-y: auto;
           padding: 14px 0;
         }
-        .cb-sidebar-right .cb-sidebar-panel-inner { width: 200px; }
-
-        /* Strip dots for lesson nav */
-        .cb-strip-dot {
-          width: 10px; height: 10px;
-          border-radius: 50%;
-          flex-shrink: 0;
-          transition: transform .12s;
-        }
-        .cb-sidebar-left:hover .cb-strip-dot { transform: scale(1.15); }
 
         /* Strip lines for ToC */
         .cb-strip-line {
@@ -865,65 +862,47 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#27500A' : '#185FA5', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
       </div>
 
-      {/* ── Left nav overlay sidebar (desktop only) ── */}
+      {/* ── Left nav — always-visible fixed sidebar (desktop only) ── */}
       {!isMobile && (
         <div className="cb-sidebar-left">
-          {/* Collapsed strip — lesson number circles */}
-          <div className="cb-sidebar-strip">
-            {topLevelLessons.map((l:any, i:number) => {
-              const isCurrent = l.id === lesson.id
-              const isDone = completedSet.has(l.id)
-              return (
-                <div key={l.id} className="cb-strip-dot" style={{
-                  background: isDone ? '#22c55e' : isCurrent ? '#185FA5' : '#dbe4ff',
-                  border: isCurrent ? '2px solid #0c447c' : '2px solid transparent',
-                }} title={l.title} />
-              )
-            })}
-          </div>
-          {/* Expanded panel */}
-          <div className="cb-sidebar-panel">
-            <div className="cb-sidebar-panel-inner">
-              <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 10px' }}>Lessons</div>
-              {topLevelLessons.map((l:any, i:number) => {
-                const isCurrent = l.id === lesson.id
-                const isDone = completedSet.has(l.id)
-                const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
-                return (
-                  <div key={l.id}>
-                    {l.locked ? (
-                      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', color:'#bbb', borderLeft:'3px solid transparent', fontSize:13, cursor:'not-allowed' }}>
-                        <div style={{ width:20, height:20, borderRadius:'50%', background:'#f3f4f6', color:'#ccc', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔒</div>
-                        <span style={{ fontSize:12, lineHeight:1.4, color:'#ccc' }}>{l.title}</span>
-                      </div>
-                    ) : (
-                      <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                        style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
-                        <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                          {isDone ? '✓' : i+1}
-                        </div>
-                        <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
-                      </a>
-                    )}
-                    {isCurrent && subs.length > 0 && subs.map((s:any) => (
-                      <div key={s.id} style={{ paddingLeft:28, paddingRight:8, paddingTop:2, paddingBottom:2 }}>
-                        <button onClick={() => setActiveTab(s.id === activeTab ? 'main' : s.id)}
-                          style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e0e7ef', color: activeTab===s.id?'#185FA5':'#888', fontSize:11, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
-                          <span style={{ fontSize:10, color: activeTab===s.id?'#185FA5':'#bbb' }}>↳</span>
-                          <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
-                        </button>
-                      </div>
-                    ))}
+          <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 10px' }}>Lessons</div>
+          {topLevelLessons.map((l:any, i:number) => {
+            const isCurrent = l.id === lesson.id
+            const isDone = completedSet.has(l.id)
+            const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
+            return (
+              <div key={l.id}>
+                {l.locked ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', color:'#bbb', borderLeft:'3px solid transparent', fontSize:13, cursor:'not-allowed' }}>
+                    <div style={{ width:20, height:20, borderRadius:'50%', background:'#f3f4f6', color:'#ccc', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔒</div>
+                    <span style={{ fontSize:12, lineHeight:1.4, color:'#ccc' }}>{l.title}</span>
                   </div>
-                )
-              })}
-            </div>
-          </div>
+                ) : (
+                  <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
+                    <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      {isDone ? '✓' : i+1}
+                    </div>
+                    <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
+                  </a>
+                )}
+                {isCurrent && subs.length > 0 && subs.map((s:any) => (
+                  <div key={s.id} style={{ paddingLeft:28, paddingRight:8, paddingTop:2, paddingBottom:2 }}>
+                    <button onClick={() => setActiveTab(s.id === activeTab ? 'main' : s.id)}
+                      style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e0e7ef', color: activeTab===s.id?'#185FA5':'#888', fontSize:11, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
+                      <span style={{ fontSize:10, color: activeTab===s.id?'#185FA5':'#bbb' }}>↳</span>
+                      <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {/* Main content — full width, content capped by .lesson-content max-width */}
-      <div style={{ width:'100%' }}>
+      {/* Main content — offset by left nav width on desktop */}
+      <div style={{ width:'100%', marginLeft: isMobile ? 0 : 220 }}>
         <Breadcrumb items={[{ label: 'Modules', href: '/student/modules' }, { label: lesson.module_title ?? 'Module', href: `/student/modules/${moduleId}` }, { label: lesson.title }]} />
 
         {/* Mobile: inline lesson nav */}
