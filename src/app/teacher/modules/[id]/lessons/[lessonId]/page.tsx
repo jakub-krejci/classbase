@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams } from 'next/navigation'
-import { BackLink } from '@/components/ui'
+import { BackLink, Breadcrumb } from '@/components/ui'
 import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
 // ─── Block types ──────────────────────────────────────────────────────────────
@@ -1319,7 +1319,7 @@ export default function LessonEditorPage() {
   return (
     <div style={{ maxWidth: 860, margin: '24px auto', padding: '0 20px', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
       <style>{EDITOR_CSS}{PYTHON_CSS}</style>
-      <BackLink href={'/teacher/modules/' + moduleId} label="Back to module" />
+      <Breadcrumb items={[{ label: 'Modules', href: '/teacher/modules' }, { label: 'Module', href: '/teacher/modules/' + moduleId }, { label: isNew ? 'New lesson' : (title || 'Edit lesson') }]} />
       <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4, color: '#111' }}>{isNew ? 'New lesson' : 'Edit lesson'}</h1>
       {authorName && <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Author: {authorName}</div>}
 

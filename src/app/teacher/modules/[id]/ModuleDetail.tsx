@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Tag, Btn, BackLink, Pill } from '@/components/ui'
+import { Tag, Btn, BackLink, Breadcrumb, Pill } from '@/components/ui'
 
 export default function ModuleDetail({ module, lessons, assignments, enrollments, allProgress }: {
   module: any; lessons: any[]; assignments: any[]; enrollments: any[]; allProgress?: any[]
@@ -123,7 +123,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
 
   return (
     <div>
-      <BackLink href="/teacher/modules" label="All modules" />
+      <Breadcrumb items={[{ label: 'Modules', href: '/teacher/modules' }, { label: module.title }]} />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 12 }}>

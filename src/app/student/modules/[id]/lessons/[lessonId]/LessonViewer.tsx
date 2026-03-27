@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { createClient } from '@/lib/supabase/client'
-import { BackLink } from '@/components/ui'
+import { BackLink, Breadcrumb } from '@/components/ui'
 import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
 // Parse lesson HTML into renderable blocks
@@ -838,7 +838,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
       {/* Main content */}
       <div style={{ flex:1, minWidth:0, width:'100%' }}>
-        <BackLink href={`/student/modules/${moduleId}`} label="Back to module" />
+        <Breadcrumb items={[{ label: 'Modules', href: '/student/modules' }, { label: lesson.module_title ?? 'Module', href: `/student/modules/${moduleId}` }, { label: lesson.title }]} />
 
         {/* Mobile: inline lesson nav */}
         {isMobile && (

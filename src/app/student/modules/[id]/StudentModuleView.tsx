@@ -1,7 +1,7 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
-import { Tag, BackLink, Pill } from '@/components/ui'
+import { Tag, BackLink, Breadcrumb, Pill } from '@/components/ui'
 import { useIsMobile } from '@/lib/useIsMobile'
 
 export default function StudentModuleView({ module, lessons, assignments, completedIds, bookmarkedIds, submissions, studentId }: {
@@ -39,7 +39,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
 
   return (
     <div>
-      <BackLink href="/student/modules" label="My modules" />
+      <Breadcrumb items={[{ label: 'Modules', href: '/student/modules' }, { label: module.title }]} />
       <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'flex-start', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', gap: isMobile ? 6 : 0, marginBottom: 6 }}>
         <div>
           <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: 3 }}>{module.title}</h1>

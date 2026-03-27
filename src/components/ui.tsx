@@ -93,3 +93,23 @@ export function Pill({ label, color = 'blue' }: { label: string; color?: 'blue' 
   const c = map[color]
   return <span style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: c.bg, color: c.color }}>{label}</span>
 }
+
+export function Breadcrumb({ items }: { items: { label: string; href?: string }[] }) {
+  return (
+    <nav style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#888', marginBottom: 16, flexWrap: 'wrap' }}>
+      {items.map((item, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <span style={{ color: '#ccc', userSelect: 'none' }}>›</span>}
+          {item.href
+            ? <a href={item.href} style={{ color: i === items.length - 1 ? '#333' : '#185FA5', textDecoration: 'none', fontWeight: i === items.length - 1 ? 500 : 400 }}
+                onMouseEnter={e => { if (i < items.length - 1) (e.target as HTMLElement).style.textDecoration = 'underline' }}
+                onMouseLeave={e => { (e.target as HTMLElement).style.textDecoration = 'none' }}>
+                {item.label}
+              </a>
+            : <span style={{ color: '#333', fontWeight: 500 }}>{item.label}</span>
+          }
+        </React.Fragment>
+      ))}
+    </nav>
+  )
+}

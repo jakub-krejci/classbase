@@ -43,18 +43,38 @@ export default async function TeacherModulesPage() {
       {modules.length === 0 ? <EmptyState message="No modules yet. Create your first one." /> : (
         <div style={{ display: 'grid', gap: 10 }}>
           {modules.map((m: any) => (
-            <a key={m.id} href={"/teacher/modules/" + m.id}
-              style={{ display: 'block', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 500, fontSize: 14, marginBottom: 3 }}>{m.title}</div>
-                  <div style={{ fontSize: 11, color: '#888' }}>
-                    {counts[m.id]?.lessons ?? 0} lessons · {counts[m.id]?.enrollments ?? 0} enrolled · Code: <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '1px 5px', borderRadius: 4 }}>{m.access_code}</code>
+            <div key={m.id} style={{ position: 'relative', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 12, textDecoration: 'none', color: 'inherit', transition: 'border-color .15s, box-shadow .15s' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#b5cce0'; (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,.06)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}>
+              {/* Clickable main area */}
+              <a href={"/teacher/modules/" + m.id}
+                style={{ display: 'block', padding: '14px 16px 12px', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 3, color: '#111' }}>{m.title}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>
+                      {counts[m.id]?.lessons ?? 0} lessons · {counts[m.id]?.enrollments ?? 0} enrolled · Code: <code style={{ fontFamily: 'monospace', background: '#f3f4f6', padding: '1px 5px', borderRadius: 4 }}>{m.access_code}</code>
+                    </div>
                   </div>
+                  <Tag tag={m.tag} />
                 </div>
-                <Tag tag={m.tag} />
+              </a>
+              {/* Quick action bar */}
+              <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', borderTop: '0.5px solid #f3f4f6' }}>
+                <a href={"/teacher/modules/" + m.id + "/lessons/new"}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: '#185FA5', color: '#E6F1FB', borderRadius: 6, textDecoration: 'none', border: 'none', cursor: 'pointer' }}>
+                  + New lesson
+                </a>
+                <a href={"/teacher/modules/" + m.id + "/edit"}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: '#f3f4f6', color: '#555', borderRadius: 6, textDecoration: 'none' }}>
+                  ✏ Edit module
+                </a>
+                <a href={"/teacher/modules/" + m.id}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 11, fontWeight: 500, background: '#f3f4f6', color: '#555', borderRadius: 6, textDecoration: 'none' }}>
+                  ⚙ Manage
+                </a>
               </div>
-            </a>
+            </div>
           ))}
         </div>
       )}

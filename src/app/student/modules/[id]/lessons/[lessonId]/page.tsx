@@ -18,6 +18,10 @@ export default async function StudentLessonPage({ params }: { params: any }) {
   // Block access to locked lessons
   if ((lesson as any).locked) redirect('/student/modules/' + params.id)
 
+  // Fetch module title for breadcrumb
+  const { data: modData } = await admin.from('modules').select('title').eq('id', params.id).single()
+  const moduleTitle = (modData as any)?.title ?? 'Module'
+
   // All top-level lessons for nav panel (includes locked so they show as non-clickable)
   // Sub-lessons (parent_lesson_id IS NOT NULL) are excluded — they appear under their parent
   const { data: allLessons } = await admin.from('lessons')
@@ -51,7 +55,7 @@ export default async function StudentLessonPage({ params }: { params: any }) {
   return (
     <AppShell user={profile} role="student" wide>
       <LessonViewer
-        lesson={lesson as any}
+        lesson={{ ...(lesson as any), module_title: moduleTitle }}
         moduleId={params.id}
         studentId={(user as any).id}
         completionStatus={(prog as any)?.status ?? (completedIds.has(params.lessonId) ? 'completed' : 'none')}
