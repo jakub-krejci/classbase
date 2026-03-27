@@ -84,7 +84,6 @@ export default function StudentInboxClient({ messages: initial, announcements: i
 
   function openContact(contact: any) {
     setActiveContact(contact)
-    subscribeTo(contact.id)
     setTimeout(scrollBottom, 80)
     setTimeout(() => inputRef.current?.focus(), 80)
     try { sessionStorage.setItem('cb_page_active_thread', contact.id) } catch {}

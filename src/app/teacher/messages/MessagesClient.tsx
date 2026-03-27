@@ -104,7 +104,6 @@ export default function MessagesClient({ sent: initSent, received: initReceived,
 
   function openContact(contact: any) {
     setActiveContact(contact)
-    subscribeTo(contact.id)
     setTimeout(scrollBottom, 80)
     setTimeout(() => inputRef.current?.focus(), 80)
     // Tell ChatWidget this thread is active so it suppresses the badge
