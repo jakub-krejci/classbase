@@ -850,7 +850,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                       fontWeight: item.level === 1 ? 500 : 400,
                       color: item.level === 1 ? '#333' : '#666',
                       background:'none', border:'none', cursor:'pointer',
-                      lineHeight:1.4, fontFamily:'inherit', textAlign:'left',
+                      lineHeight:1.4, fontFamily:'inherit',
                     }}>
                     {item.level > 1 && <span style={{ color:'#ccc', marginRight:4 }}>{'—'.repeat(item.level - 1)}</span>}
                     {item.text}
