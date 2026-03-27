@@ -34,6 +34,8 @@ export default async function MessagesPage() {
 
   const { data: grps } = await admin.from('groups').select('id,name').eq('teacher_id', (user as any).id)
   const { data: students } = await admin.from('profiles').select('id,full_name,email').eq('role', 'student')
+  const { data: modules } = await admin.from('modules').select('id,title').eq('teacher_id', (user as any).id).eq('archived', false as any)
+
   return (
     <AppShell user={profile} role="teacher">
       <MessagesClient
@@ -41,6 +43,7 @@ export default async function MessagesPage() {
         received={receivedWithName}
         groups={(grps ?? []) as any[]}
         students={(students ?? []) as any[]}
+        modules={(modules ?? []) as any[]}
         senderId={(user as any).id}
       />
     </AppShell>
