@@ -648,6 +648,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }
 
   return (
+    <>
     <div style={{ display: isMobile ? 'block' : 'flex', gap: 18, alignItems: 'flex-start' }}>
       <style>{PYTHON_CSS}{`
         /* ─────────────────────────────────────────────────────────────
@@ -1149,12 +1150,11 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         </div>
       )}
     </div>
-
-      {/* ── AI Tutor ── */}
-      <AiTutor
-        lessonTitle={activeLesson.title}
-        contentHtml={activeLesson.content_html ?? ''}
-        isMobile={isMobile}
-      />
+    <AiTutor
+      lessonTitle={activeLesson.title}
+      contentHtml={activeLesson.content_html ?? ''}
+      isMobile={isMobile}
+    />
+  </>
   )
 }
