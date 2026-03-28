@@ -27,13 +27,22 @@ function highlight(code: string, rules: [string, RegExp][]): string {
 
 // ── Python ────────────────────────────────────────────────────────────────────
 export function highlightPython(code: string): string {
-  return highlight(code, [
-    ['s', /"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g],
-    ['c', /#[^\n]*/g],
-    ['k', /\b(?:def|class|if|elif|else|for|while|return|import|from|as|in|not|and|or|is|None|True|False|pass|break|continue|with|try|except|finally|raise|lambda|yield|global|nonlocal|del|assert|async|await)\b/g],
-    ['b', /\b(?:print|len|range|int|float|str|list|dict|set|tuple|bool|type|input|open|sum|max|min|abs|round|sorted|enumerate|zip|map|filter|isinstance|hasattr|getattr|setattr|repr|super)\b/g],
-    ['n', /\b\d+\.?\d*(?:[eE][+-]?\d+)?\b/g],
+  const base = highlight(code, [
+    ['s',  /"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g],
+    ['c',  /#[^\n]*/g],
+    ['k',  /\b(?:def|class|if|elif|else|for|while|return|import|from|as|in|not|and|or|is|None|True|False|pass|break|continue|with|try|except|finally|raise|lambda|yield|global|nonlocal|del|assert|async|await)\b/g],
+    ['b',  /\b(?:print|len|range|int|float|str|list|dict|set|tuple|bool|type|input|open|sum|max|min|abs|round|sorted|enumerate|zip|map|filter|isinstance|hasattr|getattr|setattr|repr|super|vars|dir|id|hex|bin|oct|chr|ord|hash|iter|next|reversed|any|all|callable|format|staticmethod|classmethod|property)\b/g],
+    ['t',  /__[a-zA-Z_][a-zA-Z0-9_]*__/g],
+    ['n',  /\b\d+\.?\d*(?:[eE][+-]?\d+)?\b/g],
+    ['c2', /@[a-zA-Z_][a-zA-Z0-9_.]*/g],
   ])
+  // Post-process HTML: colour the name that immediately follows `def ` or `class `
+  // The keyword was wrapped in <span class="hl-k">def</span> — match that and grab what follows
+  return base
+    .replace(/(<span class="hl-k">def<\/span>)(\s+)([a-zA-Z_][a-zA-Z0-9_]*)/g,
+      '$1$2<span class="hl-fn">$3</span>')
+    .replace(/(<span class="hl-k">class<\/span>)(\s+)([a-zA-Z_][a-zA-Z0-9_]*)/g,
+      '$1$2<span class="hl-fn">$3</span>')
 }
 
 // ── JavaScript / TypeScript ───────────────────────────────────────────────────
@@ -136,15 +145,17 @@ export function highlightCode(code: string, lang: Language): string {
 // ── Shared CSS for all languages ──────────────────────────────────────────────
 // Uses unified hl-* classes so one stylesheet covers every language
 export const PYTHON_CSS = `
-.hl-k { color:#c678dd; font-weight:600 }   /* keyword */
-.hl-s { color:#98c379 }                    /* string */
-.hl-n { color:#d19a66 }                    /* number */
-.hl-c { color:#7f848e; font-style:italic } /* comment */
-.hl-b { color:#61afef }                    /* builtin / function */
-.hl-t { color:#e5c07b }                    /* type / class name */
-.hl-rx { color:#56b6c2 }                   /* regex / entity */
+.hl-k  { color:#c678dd; font-weight:600 }   /* keyword */
+.hl-s  { color:#98c379 }                    /* string */
+.hl-n  { color:#d19a66 }                    /* number */
+.hl-c  { color:#7f848e; font-style:italic } /* comment */
+.hl-b  { color:#61afef }                    /* builtin */
+.hl-t  { color:#e5c07b; font-style:italic } /* dunder __x__ */
+.hl-fn { color:#61afef; font-weight:600 }   /* function/class name after def/class */
+.hl-c2 { color:#e06c75 }                    /* decorator @x */
+.hl-rx { color:#56b6c2 }                    /* regex/entity */
 
-/* Legacy aliases so old py-* class refs still work */
+/* Legacy aliases */
 .py-k { color:#c678dd; font-weight:600 }
 .py-s { color:#98c379 }
 .py-n { color:#d19a66 }

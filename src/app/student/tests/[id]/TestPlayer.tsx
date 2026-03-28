@@ -501,7 +501,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
                 <div style={{ background: '#1a1b26', borderRadius: 8, overflow: 'hidden' }}>
                   <div style={{ background: '#161825', padding: '5px 12px', fontSize: 11, color: '#6c7086', fontFamily: 'ui-monospace,monospace' }}>💻 Submitted code</div>
                   {ans?.answer_text
-                    ? <pre style={{ margin: 0, padding: '12px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
+                    ? <pre style={{ margin: 0, padding: '12px 14px', color: '#cdd6f4', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
                         dangerouslySetInnerHTML={{ __html: highlightPython(ans.answer_text) }} />
                     : <div style={{ padding: '12px 14px', color: '#6c7086', fontFamily: 'ui-monospace,monospace', fontSize: 13 }}>No code submitted</div>
                   }
