@@ -282,8 +282,9 @@ function CodingEditor({ starterCode, savedCode, onSubmit, suppressAntiCheat }: {
 }
 
 
-export default function TestPlayer({ test, questions, attempt: initAttempt, answers: initAnswers, studentId }: {
+export default function TestPlayer({ test, questions, attempt: initAttempt, answers: initAnswers, studentId, canRetake = true, completedCount = 0 }: {
   test: any; questions: any[]; attempt: any; answers: any[]; studentId: string
+  canRetake?: boolean; completedCount?: number
 }) {
   const supabase = createClient()
   const [phase, setPhase] = useState<Phase>(() => {
@@ -613,19 +614,34 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               <div style={{ marginBottom: 24, fontSize: 14, color: '#555', lineHeight: 1.7 }}>{test.description}</div>
             ) : null}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 28 }}>
-              {[['📝', 'Questions', sortedQ.length.toString()], ['⏱', 'Time limit', test.time_limit_mins ? `${test.time_limit_mins} min` : 'No limit'], ['🛡', 'Anti-cheat', `${maxWarnings} warning${maxWarnings !== 1 ? 's' : ''} max`], ['⚠️', 'Availability', test.available_until ? `Until ${new Date(test.available_until).toLocaleDateString('en-GB')}` : 'Open']].map(([icon, label, val]) => (
+              {[['📝', 'Questions', sortedQ.length.toString()],
+                ['⏱', 'Time limit', test.time_limit_mins ? `${test.time_limit_mins} min` : 'No limit'],
+                ['🛡', 'Anti-cheat', `${maxWarnings} warning${maxWarnings !== 1 ? 's' : ''} max`],
+                ['🔁', 'Attempts', test.retake_mode === 'practice' ? 'Practice (unlimited)' : test.retake_mode === 'best' ? `${completedCount} / ${test.max_attempts ?? '∞'} used` : completedCount > 0 ? 'Already submitted' : '1 attempt'],
+              ].map(([icon, label, val]) => (
                 <div key={label} style={{ background: '#f9fafb', borderRadius: 10, padding: '14px 16px' }}>
                   <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>{icon} {label}</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>{val}</div>
                 </div>
               ))}
             </div>
+            {test.retake_mode === 'practice' && (
+              <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
+                📖 Practice mode — your score will not be recorded or sent to your teacher.
+              </div>
+            )}
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 24, fontSize: 13, color: '#92400E', lineHeight: 1.6 }}>
               ⚠️ Do not switch tabs or leave this page. Each detected attempt is logged as a warning. After {maxWarnings} warning{maxWarnings !== 1 ? 's' : ''} your test will be locked.
             </div>
-            <button onClick={startTest} style={{ width: '100%', padding: '14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-              ▶ Start Test
-            </button>
+            {canRetake ? (
+              <button onClick={startTest} style={{ width: '100%', padding: '14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                {completedCount > 0 ? `▶ Retake Test (attempt ${completedCount + 1})` : '▶ Start Test'}
+              </button>
+            ) : (
+              <div style={{ width: '100%', padding: '14px', background: '#f3f4f6', color: '#888', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 15, fontWeight: 600, textAlign: 'center' }}>
+                Maximum attempts reached
+              </div>
+            )}
           </div>
         </div>
       </div>

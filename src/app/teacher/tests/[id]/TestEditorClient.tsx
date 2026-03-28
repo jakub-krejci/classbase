@@ -203,6 +203,12 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
   const [qSaving, setQSaving] = useState(false)
   const [qSaved, setQSaved] = useState(false)
   const [error, setError] = useState('')
+  const [bankToast, setBankToast] = useState<string | null>(null)
+
+  function showBankToast(msg: string) {
+    setBankToast(msg)
+    setTimeout(() => setBankToast(null), 2500)
+  }
 
   async function unlockAttempt(attemptId: string) {
     setError('')
@@ -228,6 +234,9 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
       randomise_options: !!test.randomise_options,
       available_from: test.available_from || null,
       available_until: test.available_until || null,
+      tags: test.tags ?? [],
+      max_attempts: test.max_attempts || null,
+      retake_mode: test.retake_mode ?? 'single',
       updated_at: new Date().toISOString(),
     }).eq('id', test.id)
     setSettingsSaving(false)
@@ -345,6 +354,12 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
 
   return (
     <div>
+      {/* Bank save toast */}
+      {bankToast && (
+        <div style={{ position: 'fixed', bottom: 32, right: 32, background: '#1a1b26', color: '#a6e3a1', padding: '12px 22px', borderRadius: 12, fontSize: 14, fontWeight: 600, zIndex: 99999, boxShadow: '0 4px 24px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>📚</span> {bankToast}
+        </div>
+      )}
       <Breadcrumb items={[{ label: 'Tests', href: '/teacher/tests' }, { label: test.title }]} />
 
       {/* Top bar */}
@@ -469,6 +484,46 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                 )}
               </div>
               <div style={CARD}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🏷 Tags</div>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Comma-separated tags for filtering: e.g. algebra, chapter-3, hard</div>
+                <input type="text" value={(test.tags ?? []).join(', ')}
+                  onChange={e => setTest((t: any) => ({ ...t, tags: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) }))}
+                  placeholder="e.g. algebra, chapter-3, midterm" style={inp} />
+                {(test.tags ?? []).length > 0 && (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+                    {(test.tags as string[]).map((tag: string) => (
+                      <span key={tag} style={{ padding: '2px 9px', background: '#E6F1FB', color: '#0C447C', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={CARD}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🔁 Retake policy</div>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Controls how many times a student can attempt this test.</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                  {([
+                    ['single',   'Single attempt',       'Students can only take the test once'],
+                    ['best',     'Best of N attempts',   'Students can retake up to N times; highest score counts'],
+                    ['practice', 'Practice mode',        'Unlimited attempts; scores are not recorded or sent to the teacher'],
+                  ] as [string, string, string][]).map(([val, label, desc]) => (
+                    <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${(test.retake_mode ?? 'single') === val ? '#185FA5' : '#e5e7eb'}`, background: (test.retake_mode ?? 'single') === val ? '#E6F1FB' : '#fff' }}>
+                      <input type="radio" checked={(test.retake_mode ?? 'single') === val} onChange={() => setTest((t: any) => ({ ...t, retake_mode: val }))} style={{ marginTop: 2 }} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{label}</div>
+                        <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {(test.retake_mode === 'best') && (
+                  <div>
+                    <label style={lbl}>Maximum attempts</label>
+                    <input type="number" min={2} max={20} value={test.max_attempts ?? ''} placeholder="e.g. 3"
+                      onChange={e => setTest((t: any) => ({ ...t, max_attempts: e.target.value ? +e.target.value : null }))} style={inp} />
+                  </div>
+                )}
+              </div>
+              <div style={CARD}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🔀 Randomisation</div>
                 <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Each student gets a uniquely shuffled test, reducing copying.</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -533,7 +588,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                     const o = q.options[j]
                     await supabase.from('question_bank_options').insert({ question_id: bq.id, body_html: o.body_html, is_correct: o.is_correct, position: j })
                   }
-                  alert('Saved to Question Bank!')
+                  showBankToast('✓ Saved to Question Bank')
                 }} style={{ fontSize: 11, color: '#6c47ff', background: 'none', border: '1px solid #e5e7eb', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>
                   💾 Save to bank
                 </button>

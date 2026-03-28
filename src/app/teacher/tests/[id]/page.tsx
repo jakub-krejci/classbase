@@ -14,6 +14,17 @@ export default async function TestEditorPage({ params }: { params: any }) {
   const { data: test } = await admin.from('tests').select('*').eq('id', params.id).single()
   if (!test || (test as any).teacher_id !== user.id) redirect('/teacher/tests')
 
+  // Auto-scheduling: keep status in sync with dates
+  const now = new Date()
+  const t = test as any
+  let autoStatus: string | null = null
+  if (t.available_from && new Date(t.available_from) <= now && t.status === 'draft') autoStatus = 'published'
+  if (t.available_until && new Date(t.available_until) <= now && t.status === 'published') autoStatus = 'closed'
+  if (autoStatus) {
+    await admin.from('tests').update({ status: autoStatus }).eq('id', t.id)
+    ;(test as any).status = autoStatus
+  }
+
   const { data: questions } = await admin.from('test_questions')
     .select('*, test_question_options(*)')
     .eq('test_id', params.id)
