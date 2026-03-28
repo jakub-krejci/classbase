@@ -78,8 +78,14 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
 
       {/* ── Hero card ── */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 20, marginBottom: 24, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
-        <div style={{ height: 6, background: accent }} />
-        <div className="db-hero-inner" style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        {/* Banner or accent strip */}
+        {profile.banner_url
+          ? <div style={{ height: 80, background: `url(${profile.banner_url}) center/cover no-repeat`, position: 'relative' }}>
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.15)' }} />
+            </div>
+          : <div style={{ height: 6, background: accent }} />
+        }
+        <div className="db-hero-inner" style={{ padding: profile.banner_url ? '12px 24px 20px' : '20px 24px', display: 'flex', alignItems: 'center', gap: 16, marginTop: profile.banner_url ? -36 : 0 }}>
           {/* Avatar — always visible, never collapses */}
           <Avatar url={profile.avatar_url} name={profile.full_name ?? 'S'} size={64} color={accent} />
 

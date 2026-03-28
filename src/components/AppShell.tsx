@@ -115,6 +115,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   return (
     <div style={{ minHeight: '100vh', background: '#f9fafb', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
       <style>{`
+        :root { --accent: ${role === 'student' ? (user?.accent_color ?? '#185FA5') : '#185FA5'}; }
         @media (max-width: 640px) {
           .cb-desktop-nav { display: none !important; }
           .cb-hamburger { display: flex !important; }
@@ -188,11 +189,14 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
               </div>
             )}
           </div>
-          <a href={profileHref} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: roleColor.bg, color: roleColor.text, fontSize: 11, fontWeight: 600, textDecoration: 'none', flexShrink: 0, marginLeft: 4 }}>
-            {initials}
+          <a href={profileHref} style={{ position: 'relative', width: 32, height: 32, borderRadius: '50%', flexShrink: 0, marginLeft: 4, textDecoration: 'none', display: 'block' }}>
+            {user?.avatar_url
+              ? <img src={user.avatar_url} alt={initials} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${roleColor.bg}`, display: 'block' }} />
+              : <div style={{ width: 32, height: 32, borderRadius: '50%', background: roleColor.bg, color: roleColor.text, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials}</div>
+            }
           </a>
           <button onClick={logout} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', color: '#111', whiteSpace: 'nowrap' }}>
-            Sign out
+            Odhlásit se
           </button>
         </div>
 
