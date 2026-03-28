@@ -27,21 +27,6 @@ function ScoreRing({ pct, size = 64 }: { pct: number; size?: number }) {
   )
 }
 
-function MiniBarChart({ values, labels, color = '#185FA5', height = 80 }: { values: number[]; labels: string[]; color?: string; height?: number }) {
-  if (!values.length) return null
-  const max = Math.max(...values, 1)
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height }}>
-      {values.map((v, i) => (
-        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 2 }}>
-          <div style={{ width: '100%', background: color, borderRadius: '3px 3px 0 0', height: Math.max(4, (v / max) * (height - 20)), opacity: 0.85 }} />
-          <span style={{ fontSize: 9, color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 28, textOverflow: 'ellipsis' }}>{labels[i]}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 export default function TestHistoryClient({ attempts, answers }: {
   attempts: any[]; answers: any[]
 }) {
@@ -61,11 +46,7 @@ export default function TestHistoryClient({ attempts, answers }: {
 
   // ── Compute score trend across all attempts ───────────────────────────────
   const allScored = attempts.filter(a => a.score != null && a.max_score)
-  const trendValues = allScored.slice(-10).map(a => (a.final_score ?? a.score) / a.max_score * 100)
-  const trendLabels = allScored.slice(-10).map(a => {
-    const d = new Date(a.submitted_at ?? a.started_at)
-    return `${d.getDate()}/${d.getMonth() + 1}`
-  })
+  const trendValues = allScored.map(a => (a.final_score ?? a.score) / a.max_score * 100)
 
   // ── Per-question stats for selected attempt ───────────────────────────────
   const qStats = attemptAnswers.map((ans: any) => {
@@ -107,26 +88,47 @@ export default function TestHistoryClient({ attempts, answers }: {
       <Breadcrumb items={[{ label: 'Tests', href: '/student/tests' }, { label: 'History & Statistics' }]} />
       <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 24px' }}>📊 Test History & Statistics</h1>
 
-      {/* ── Score trend ── */}
-      {trendValues.length > 1 && (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '20px 24px', marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#444', marginBottom: 12 }}>Score trend (last {trendValues.length} attempts)</div>
-          <MiniBarChart values={trendValues} labels={trendLabels} height={100} />
-          <div style={{ display: 'flex', gap: 20, marginTop: 14, flexWrap: 'wrap' }}>
-            {[
-              ['Average', `${Math.round(trendValues.reduce((a, b) => a + b, 0) / trendValues.length)}%`],
-              ['Best', `${Math.round(Math.max(...trendValues))}%`],
-              ['Latest', `${Math.round(trendValues[trendValues.length - 1])}%`],
-              ['Attempts', `${attempts.length}`],
-            ].map(([label, val]) => (
-              <div key={label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: '#185FA5' }}>{val}</div>
-                <div style={{ fontSize: 11, color: '#888' }}>{label}</div>
+      {/* ── Overall stats strip ── */}
+      {trendValues.length > 0 && (() => {
+        const avg = Math.round(trendValues.reduce((a, b) => a + b, 0) / trendValues.length)
+        const best = Math.round(Math.max(...trendValues))
+        const latest = Math.round(trendValues[trendValues.length - 1])
+        // Trend: compare last 3 vs previous 3
+        let trend: 'up' | 'down' | 'stable' = 'stable'
+        if (trendValues.length >= 4) {
+          const recent = trendValues.slice(-3).reduce((a, b) => a + b, 0) / 3
+          const older = trendValues.slice(-6, -3).reduce((a, b) => a + b, 0) / Math.min(3, trendValues.length - 3)
+          if (recent - older > 5) trend = 'up'
+          else if (older - recent > 5) trend = 'down'
+        }
+        const trendInfo = {
+          up:     { icon: '↑', label: 'Improving', color: '#16a34a', bg: '#f0fdf4' },
+          down:   { icon: '↓', label: 'Declining',  color: '#dc2626', bg: '#fef2f2' },
+          stable: { icon: '→', label: 'Stable',     color: '#2563eb', bg: '#eff6ff' },
+        }[trend]
+        const stats = [
+          { label: 'Average score', value: `${avg}%`, color: avg >= 80 ? '#16a34a' : avg >= 50 ? '#d97706' : '#dc2626' },
+          { label: 'Best score',    value: `${best}%`, color: '#16a34a' },
+          { label: 'Latest score',  value: `${latest}%`, color: latest >= 80 ? '#16a34a' : latest >= 50 ? '#d97706' : '#dc2626' },
+          { label: 'Total attempts', value: `${attempts.length}`, color: '#185FA5' },
+        ]
+        return (
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
+            {stats.map(({ label, value, color }, i) => (
+              <div key={label} style={{ flex: '1 1 120px', textAlign: 'center', padding: '8px 16px', borderRight: i < stats.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                <div style={{ fontSize: 26, fontWeight: 700, color, lineHeight: 1.1 }}>{value}</div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{label}</div>
               </div>
             ))}
+            {trendValues.length >= 4 && (
+              <div style={{ flex: '1 1 120px', textAlign: 'center', padding: '8px 16px', borderLeft: '1px solid #f3f4f6' }}>
+                <div style={{ fontSize: 26, fontWeight: 700, color: trendInfo.color, lineHeight: 1.1 }}>{trendInfo.icon}</div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{trendInfo.label}</div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 20 }}>
         {/* ── Sidebar: grouped by test ── */}
