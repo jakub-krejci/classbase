@@ -141,11 +141,6 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
   const [showAnnotationModal, setShowAnnotationModal] = useState(false)
   const [annotationText, setAnnotationText] = useState('')
   const savedColorRange = useRef<Range | null>(null)
-  const slashMenuRef = useRef<{x:number;y:number} | null>(null)
-  const [slashMenu, setSlashMenuState] = useState<{x:number;y:number} | null>(null)
-  function setSlashMenu(v: {x:number;y:number} | null) { slashMenuRef.current = v; setSlashMenuState(v) }
-  const savedSlashRange = useRef<Range | null>(null)
-  const [slashFilter, setSlashFilter] = useState('')
 
   // Sync content into div on first render / when block changes externally
   useEffect(() => {
@@ -466,33 +461,6 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
         }}
         onClick={updateActiveFormats}
         onKeyDown={e => {
-          // Slash command — ONLY trigger when the entire block is empty
-          if (e.key === '/') {
-            const blockEmpty = (ref.current?.textContent ?? '').replace(/\u200B/g, '').trim() === ''
-            if (blockEmpty) {
-              e.preventDefault()
-              const sel = window.getSelection()
-              const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null
-              const editorEl = ref.current!
-              const editorRect = editorEl.getBoundingClientRect()
-              const cursorRect = range ? range.getBoundingClientRect() : null
-              const x = (cursorRect && cursorRect.width > 0) ? cursorRect.left - editorRect.left : 14
-              const y = (cursorRect && cursorRect.height > 0) ? cursorRect.bottom - editorRect.top + 4 : 40
-              if (range) savedSlashRange.current = range.cloneRange()
-              setSlashFilter('')
-              setSlashMenu({ x, y })
-              return
-            }
-          }
-          // Use ref (not state) to synchronously check if menu is open
-          const menuOpen = !!slashMenuRef.current
-          // Close slash menu on Escape or any typing when menu is open
-          if (menuOpen) {
-            if (e.key === 'Escape') { e.preventDefault(); setSlashMenu(null); return }
-            if (e.key === 'Backspace') { e.preventDefault(); setSlashFilter(f => f.slice(0, -1)); return }
-            if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return }
-            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setSlashFilter(f => f + e.key); return }
-          }
           if (e.key === 'Enter' && e.shiftKey) {
             let node: Node | null = window.getSelection()?.getRangeAt(0).startContainer ?? null
             while (node && (node as HTMLElement).tagName !== 'BLOCKQUOTE') node = node.parentElement
@@ -531,56 +499,6 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
           onClose={() => setShowTableModal(false)}
         />
       )}
-
-      {/* ── Slash command menu ── */}
-      {slashMenu && (() => {
-        const SLASH_ITEMS: { icon: string; label: string; desc: string; type: BlockType | 'annotation' }[] = [
-          { icon: '📝', label: 'Text', desc: 'Plain text block', type: 'html' },
-          { icon: '💻', label: 'Code', desc: 'Syntax-highlighted code', type: 'code' },
-          { icon: '▶️', label: 'Try-it', desc: 'Interactive Python', type: 'tryit' },
-          { icon: '∑', label: 'Math', desc: 'LaTeX equation', type: 'math' },
-          { icon: '🔗', label: 'Embed', desc: 'YouTube, Vimeo, CodePen…', type: 'embed' },
-          { icon: '🃏', label: 'Flashcard', desc: 'Flippable study card', type: 'flashcard' },
-          { icon: '💡', label: 'Tip', desc: 'Tip callout box', type: 'callout' },
-          { icon: '⚠️', label: 'Warning', desc: 'Warning callout box', type: 'callout' },
-          { icon: '📌', label: 'Annotation', desc: 'Side note on selected text', type: 'annotation' },
-        ]
-        const filtered = SLASH_ITEMS.filter(it =>
-          !slashFilter || it.label.toLowerCase().startsWith(slashFilter.toLowerCase())
-        )
-        return (
-          <div style={{ position: 'absolute', left: slashMenu.x, top: slashMenu.y, zIndex: 200, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.12)', minWidth: 220, overflow: 'hidden' }}
-            onMouseDown={e => e.preventDefault()}>
-            <div style={{ padding: '6px 10px', fontSize: 10, color: '#aaa', borderBottom: '1px solid #f3f4f6', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-              <span>BLOCKS {slashFilter && <span style={{ color: '#185FA5' }}>/ {slashFilter}</span>}</span>
-              <span style={{ cursor: 'pointer', color: '#ccc' }} onClick={() => setSlashMenu(null)}>✕</span>
-            </div>
-            {filtered.length === 0 && <div style={{ padding: '12px', fontSize: 13, color: '#aaa', textAlign: 'center' }}>No match</div>}
-            {filtered.map(item => (
-              <div key={item.label} onClick={() => {
-                setSlashMenu(null)
-                if (item.type === 'annotation') {
-                  setShowAnnotationModal(true)
-                } else if (item.type === 'callout') {
-                  const variantMap: Record<string, CalloutVariant> = { 'Tip': 'tip', 'Warning': 'warning', 'Info': 'info', 'Example': 'example' }
-                  onAddAfter('callout', variantMap[item.label] ?? 'info')
-                } else {
-                  onAddAfter(item.type as BlockType)
-                }
-              }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', fontSize: 13 }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#f5f9ff')}
-                onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{item.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 500, color: '#111' }}>{item.label}</div>
-                  <div style={{ fontSize: 11, color: '#888' }}>{item.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      })()}
 
       {/* ── Annotation modal ── */}
       {showAnnotationModal && (
@@ -1092,6 +1010,7 @@ function FlashcardBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDup
   onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
 }) {
   const [flipped, setFlipped] = useState(false)
+  const [activeField, setActiveField] = useState<'front'|'back'>('front')
   const frontRef = useRef<HTMLDivElement>(null)
   const backRef = useRef<HTMLDivElement>(null)
   const BC: React.CSSProperties = { padding: '3px 8px', fontSize: 11, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 5, cursor: 'pointer', color: '#555' }
@@ -1101,40 +1020,97 @@ function FlashcardBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDup
     if (backRef.current && backRef.current.innerHTML !== (block.back ?? '')) backRef.current.innerHTML = block.back ?? ''
   }, [])
 
-  const richStyle: React.CSSProperties = { minHeight: 72, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', lineHeight: 1.6 }
+  function activeRef() { return activeField === 'front' ? frontRef : backRef }
+
+  function exec(cmd: string, val?: string) {
+    activeRef().current?.focus()
+    document.execCommand(cmd, false, val ?? '')
+  }
+
+  function insertCodeSnippet() {
+    const ref = activeRef().current
+    if (!ref) return
+    ref.focus()
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount) return
+    const range = sel.getRangeAt(0)
+    const selected = range.toString()
+    const code = document.createElement('code')
+    code.style.cssText = 'background:#f0f2f5;padding:2px 6px;border-radius:4px;font-family:ui-monospace,monospace;font-size:.9em;color:#b31d28'
+    code.textContent = selected || 'code'
+    range.deleteContents()
+    range.insertNode(code)
+    // Move cursor after
+    const after = document.createRange()
+    after.setStartAfter(code); after.collapse(true)
+    sel.removeAllRanges(); sel.addRange(after)
+    const field = activeField === 'front' ? 'front' : 'back'
+    onChange({ [field]: ref.innerHTML })
+  }
+
+  const TB: React.CSSProperties = { padding: '3px 7px', fontSize: 12, background: 'transparent', border: '1px solid #e5e7eb', borderRadius: 4, cursor: 'pointer', color: '#444', fontFamily: 'inherit' }
 
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', margin: '4px 0', background: '#fafafa' }}>
+      {/* Header */}
       <div style={{ background: '#f3f4f6', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>🃏 Flashcard</span>
-        <span style={{ fontSize: 11, color: '#aaa' }}>Type freely — bold, italic and formatting work here</span>
         <div style={{ flex: 1 }} />
         <button style={BC} onClick={onDuplicate}>⎘</button>
         <button style={BC} onClick={onMoveUp}>↑</button>
         <button style={BC} onClick={onMoveDown}>↓</button>
         <button style={{ ...BC, color: '#A32D2D' }} onClick={onDelete}>✕</button>
       </div>
+
+      {/* Mini toolbar — applies to whichever field is focused */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #f0f0f0', padding: '4px 10px', display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: 10, color: '#bbb', marginRight: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+          {activeField === 'front' ? 'Editing: Front' : 'Editing: Back'}
+        </span>
+        <div style={{ width: 1, background: '#e5e7eb', height: 14, margin: '0 2px' }} />
+        <button style={{ ...TB, fontWeight: 700 }} onMouseDown={e => { e.preventDefault(); exec('bold') }}><b>B</b></button>
+        <button style={{ ...TB, fontStyle: 'italic' }} onMouseDown={e => { e.preventDefault(); exec('italic') }}><i>I</i></button>
+        <button style={{ ...TB, textDecoration: 'underline' }} onMouseDown={e => { e.preventDefault(); exec('underline') }}><u>U</u></button>
+        <div style={{ width: 1, background: '#e5e7eb', height: 14, margin: '0 2px' }} />
+        <button style={{ ...TB, fontWeight: 700, fontSize: 11 }} onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'h3') }}>H3</button>
+        <button style={TB} onMouseDown={e => { e.preventDefault(); exec('formatBlock', 'p') }}>¶</button>
+        <div style={{ width: 1, background: '#e5e7eb', height: 14, margin: '0 2px' }} />
+        <button style={{ ...TB, fontFamily: 'monospace', background: '#f5f5f5', color: '#b31d28', fontSize: 11 }}
+          onMouseDown={e => { e.preventDefault(); insertCodeSnippet() }} title="Wrap selection in inline code">
+          {'</>'}
+        </button>
+        <button style={{ ...TB, fontSize: 11 }} onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList') }}>• List</button>
+      </div>
+
+      {/* Fields */}
       <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>FRONT (term / question)</label>
+          <label style={{ fontSize: 11, fontWeight: 600, color: activeField === 'front' ? '#185FA5' : '#888', display: 'block', marginBottom: 4 }}>
+            FRONT — term / question
+          </label>
           <div ref={frontRef} contentEditable suppressContentEditableWarning
+            onFocus={() => setActiveField('front')}
             onInput={() => onChange({ front: frontRef.current?.innerHTML ?? '' })}
-            style={richStyle}
-            data-placeholder="Term or question…"
+            style={{ minHeight: 80, padding: '8px 10px', border: `1.5px solid ${activeField === 'front' ? '#185FA5' : '#e5e7eb'}`, borderRadius: 8, fontSize: 13, outline: 'none', lineHeight: 1.6, background: '#fff', transition: 'border-color .15s' }}
           />
         </div>
         <div>
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>BACK (definition / answer)</label>
+          <label style={{ fontSize: 11, fontWeight: 600, color: activeField === 'back' ? '#185FA5' : '#888', display: 'block', marginBottom: 4 }}>
+            BACK — definition / answer
+          </label>
           <div ref={backRef} contentEditable suppressContentEditableWarning
+            onFocus={() => setActiveField('back')}
             onInput={() => onChange({ back: backRef.current?.innerHTML ?? '' })}
-            style={richStyle}
-            data-placeholder="Definition or answer…"
+            style={{ minHeight: 80, padding: '8px 10px', border: `1.5px solid ${activeField === 'back' ? '#185FA5' : '#e5e7eb'}`, borderRadius: 8, fontSize: 13, outline: 'none', lineHeight: 1.6, background: '#fff', transition: 'border-color .15s' }}
           />
         </div>
       </div>
+
+      {/* Flip preview */}
       <div style={{ padding: '0 16px 16px' }}>
-        <div style={{ fontSize: 11, color: '#aaa', marginBottom: 6 }}>Preview (click to flip):</div>
-        <div onClick={() => setFlipped(f => !f)} style={{ cursor: 'pointer', background: flipped ? '#E6F1FB' : '#fff', border: '2px solid #dbe4ff', borderRadius: 10, padding: '16px 20px', textAlign: 'center', fontSize: 14, fontWeight: 500, color: flipped ? '#0C447C' : '#333', minHeight: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s' }}
+        <div style={{ fontSize: 11, color: '#aaa', marginBottom: 6 }}>Preview — click to flip:</div>
+        <div onClick={() => setFlipped(f => !f)}
+          style={{ cursor: 'pointer', background: flipped ? '#E6F1FB' : '#fff', border: '2px solid #dbe4ff', borderRadius: 10, padding: '14px 20px', textAlign: 'center', fontSize: 14, color: flipped ? '#0C447C' : '#333', minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s' }}
           dangerouslySetInnerHTML={{ __html: flipped ? (block.back || '<span style="color:#ccc">(back)</span>') : (block.front || '<span style="color:#ccc">(front)</span>') }}
         />
       </div>
