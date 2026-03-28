@@ -72,11 +72,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
         @media (max-width: 640px) {
           .db-grid { grid-template-columns: 1fr !important; }
           .db-stats { grid-template-columns: 1fr 1fr !important; }
-          .db-hero-inner { flex-wrap: wrap !important; }
-          .db-hero-text { min-width: 0 !important; }
-          .db-hero-right { width: 100% !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding-top: 12px !important; border-top: 1px solid #f3f4f6 !important; margin-top: 4px !important; }
-          .db-hero-ring-label { display: flex !important; align-items: center !important; gap: 8px !important; }
-          .db-hero-ring-label span { font-size: 13px !important; color: #666 !important; }
+          .db-hero-right { display: none !important; }
         }
       `}</style>
 
