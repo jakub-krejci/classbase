@@ -37,9 +37,42 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }: {
 }
 
 
+// ── In-page input() modal ──────────────────────────────────────────────────────
+function InputModal({ prompt, onConfirm, onCancel }: {
+  prompt: string; onConfirm: (val: string) => void; onCancel: () => void
+}) {
+  const [val, setVal] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { inputRef.current?.focus() }, [])
+  function submit() { onConfirm(val) }
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#1e1e2e', border: '1px solid #414459', borderRadius: 12, padding: 28, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,.6)' }}>
+        <div style={{ fontSize: 13, color: '#a6e3a1', fontFamily: 'ui-monospace,monospace', marginBottom: 4 }}>▶ input()</div>
+        {prompt && <div style={{ fontSize: 14, color: '#cdd6f4', fontFamily: 'ui-monospace,monospace', marginBottom: 14, lineHeight: 1.5 }}>{prompt}</div>}
+        <input ref={inputRef} value={val} onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onCancel() }}
+          placeholder="Type your input…"
+          style={{ width: '100%', padding: '10px 12px', background: '#181825', border: '1px solid #414459', borderRadius: 8, color: '#cdd6f4', fontFamily: 'ui-monospace,monospace', fontSize: 14, outline: 'none', boxSizing: 'border-box', caretColor: '#a6e3a1' }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button onClick={onCancel}
+            style={{ flex: 1, padding: '9px', background: '#313244', color: '#cdd6f4', border: '1px solid #414459', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>
+            Cancel (EOFError)
+          </button>
+          <button onClick={submit}
+            style={{ flex: 2, padding: '9px', background: '#a6e3a1', color: '#1a1b26', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}>
+            ↵ Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Coding editor (Pyodide-powered) with submit ───────────────────────────────
-function CodingEditor({ starterCode, savedCode, onSubmit }: {
+function CodingEditor({ starterCode, savedCode, onSubmit, suppressAntiCheat }: {
   starterCode: string; savedCode: string; onSubmit: (code: string) => void
+  suppressAntiCheat?: (suppressed: boolean) => void
 }) {
   const [code, setCode] = useState(savedCode || starterCode || '')
   const [output, setOutput] = useState<string | null>(null)
@@ -52,8 +85,18 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
   const [pkgStatus, setPkgStatus] = useState('')
   const [images, setImages] = useState<string[]>([])
   const [submitted, setSubmitted] = useState(!!savedCode)
+  const [inputModal, setInputModal] = useState<{ prompt: string; resolve: (v: string | null) => void } | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
+
+  // Register window.__cb_input so Python's input() can call our modal
+  useEffect(() => {
+    (window as any).__cb_input = (prompt: string) => new Promise<string | null>(resolve => {
+      suppressAntiCheat?.(true)
+      setInputModal({ prompt, resolve })
+    })
+    return () => { delete (window as any).__cb_input }
+  }, [suppressAntiCheat])
 
   function syncHighlight(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
   function syncHeight() { if (!taRef.current) return; taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' }
@@ -83,12 +126,27 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
 
   function handleSubmit() { onSubmit(code); setSubmitted(true) }
 
+  function resolveInput(val: string | null) {
+    if (inputModal) {
+      inputModal.resolve(val)
+      setInputModal(null)
+      suppressAntiCheat?.(false)
+    }
+  }
+
   const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace'
   const monoStyle: React.CSSProperties = { fontFamily: monoFont, fontSize, lineHeight: 1.7, padding: '14px 16px 14px 52px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', boxSizing: 'border-box', width: '100%' }
   const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
 
   return (
     <div style={{ background: '#1a1b26', borderRadius: 8, overflow: 'hidden', margin: '1.2em 0', borderLeft: '3px solid #a6e3a1', boxShadow: '0 2px 8px rgba(0,0,0,.07)' }}>
+      {inputModal && (
+        <InputModal
+          prompt={inputModal.prompt}
+          onConfirm={val => resolveInput(val)}
+          onCancel={() => resolveInput(null)}
+        />
+      )}
       {/* Header */}
       <div style={{ background: '#161825', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#f38ba8',flexShrink:0 }} />
@@ -218,6 +276,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   const [submitting, setSubmitting] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const inputSuppressedRef = useRef(false)
 
   // ── Fullscreen ───────────────────────────────────────────────────────────────
   function enterFullscreen() {
@@ -230,7 +289,9 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   }
 
   useEffect(() => {
-    function onFsChange() { if (!document.fullscreenElement) setIsFullscreen(false) }
+    function onFsChange() {
+      if (!document.fullscreenElement && !inputSuppressedRef.current) setIsFullscreen(false)
+    }
     document.addEventListener('fullscreenchange', onFsChange)
     return () => document.removeEventListener('fullscreenchange', onFsChange)
   }, [])
@@ -298,6 +359,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   }, [phase, warnings])
 
   async function issueWarning() {
+    if (inputSuppressedRef.current) return  // ignore blur/visibility during input() modal
     const newCount = warnings + 1
     setWarnings(newCount)
     setShowWarning(true)
@@ -629,6 +691,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             <CodingEditor
               starterCode={currentQ.starter_code ?? ''}
               savedCode={answers[currentQ.id]?.answer_text ?? ''}
+              suppressAntiCheat={(suppressed) => { inputSuppressedRef.current = suppressed }}
               onSubmit={(code) => {
                 setAnswers(p => ({ ...p, [currentQ.id]: { ...p[currentQ.id], answer_text: code, question_id: currentQ.id } }))
                 saveAnswer(currentQ.id, { answer_text: code })

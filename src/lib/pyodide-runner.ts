@@ -88,19 +88,31 @@ except ImportError:
 `
     try { await py.runPythonAsync(matplotlibShim) } catch {}
 
-    // Override input() to use browser prompt() — works synchronously from Python's perspective
+    // Override input() to use a custom in-page modal via window.__cb_input
+    // __cb_input(prompt) must be set by the editor to a function returning a Promise<string|null>
+    // Falls back to window.prompt if not set (lesson viewer)
     const inputShim = `
 import sys
-from js import prompt as _js_prompt
+from pyodide.ffi import run_sync
+from js import window as _win
 
 def input(msg=''):
-    result = _js_prompt(str(msg))
+    _cb = getattr(_win, '__cb_input', None)
+    if _cb is not None:
+        result = run_sync(_cb(str(msg)))
+    else:
+        from js import prompt as _p
+        result = _p(str(msg))
     if result is None:
-        raise EOFError('input() cancelled by user')
+        raise EOFError('input() cancelled')
     print(str(msg) + str(result))
     return str(result)
 
-__builtins__['input'] = input
+try:
+    __builtins__['input'] = input
+except TypeError:
+    import builtins
+    builtins.input = input
 `
     try { await py.runPythonAsync(inputShim) } catch {}
 
