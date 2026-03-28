@@ -70,24 +70,24 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', padding: '24px 16px' }}>
-      <div style={{ width: '100%', maxWidth: 400 }}>
+      <div style={{ width: '100%', maxWidth: 480 }}>
 
         {/* Logo + tagline */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <img
             src="/logo_hlavni.png"
             alt="ClassBase"
-            style={{ maxWidth: 200, width: '100%', height: 'auto', marginBottom: 16, objectFit: 'contain' }}
+            style={{ width: '100%', maxWidth: 320, height: 'auto', marginBottom: 20, objectFit: 'contain', display: 'block', margin: '0 auto 20px' }}
             onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#111', margin: '0 0 6px' }}>Vítejte v ClassBase</h1>
-          <p style={{ fontSize: 13, color: '#888', margin: 0, lineHeight: 1.5 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111', margin: '0 0 6px' }}>Vítejte v ClassBase</h1>
+          <p style={{ fontSize: 14, color: '#888', margin: 0, lineHeight: 1.5 }}>
             Moderní vzdělávací platforma pro žáky GJB a SPgŠ.
           </p>
         </div>
 
         {/* Card */}
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '28px 28px 24px', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '32px 36px 28px', boxShadow: '0 2px 16px rgba(0,0,0,.06)' }}>
 
           {/* ── LOGIN ── */}
           {view === 'login' && <>
