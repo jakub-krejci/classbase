@@ -302,13 +302,19 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   }, [])
 
   // ── Timer: compute from started_at — survives page refresh because started_at is in DB
-  const timeLimitSecs = test.time_limit_mins ? test.time_limit_mins * 60 : null
+  const timeMode = test.time_mode ?? 'none'
+  const timeLimitSecs = timeMode === 'total' && test.time_limit_mins ? test.time_limit_mins * 60 : null
   const [timeLeft, setTimeLeft] = useState<number | null>(() => {
     if (!timeLimitSecs || !initAttempt?.started_at) return timeLimitSecs
     const elapsed = Math.floor((Date.now() - new Date(initAttempt.started_at).getTime()) / 1000)
     return Math.max(0, timeLimitSecs - elapsed)
   })
   const timerRef = useRef<any>(null)
+
+  // Per-question timer
+  const [qTimeLeft, setQTimeLeft] = useState<number | null>(null)
+  const [lockedQuestions, setLockedQuestions] = useState<Set<string>>(new Set())
+  const qTimerRef = useRef<any>(null)
 
   useEffect(() => {
     if (phase !== 'playing' || timeLeft === null) return
@@ -321,6 +327,27 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     }, 1000)
     return () => clearInterval(timerRef.current)
   }, [phase])
+
+  // Per-question timer: reset when question changes
+  useEffect(() => {
+    if (phase !== 'playing' || timeMode !== 'per_question') return
+    clearInterval(qTimerRef.current)
+    const q = sortedQ[currentIdx]
+    if (!q?.time_limit_mins) { setQTimeLeft(null); return }
+    const secs = q.time_limit_mins * 60
+    setQTimeLeft(secs)
+    qTimerRef.current = setInterval(() => {
+      setQTimeLeft(r => {
+        if (r === null || r <= 1) {
+          clearInterval(qTimerRef.current)
+          setLockedQuestions(prev => new Set([...prev, q.id]))
+          return 0
+        }
+        return r - 1
+      })
+    }, 1000)
+    return () => clearInterval(qTimerRef.current)
+  }, [currentIdx, phase])
 
   const sortedQ = [...questions].sort((a, b) => a.position - b.position)
   const currentQ = sortedQ[currentIdx]
@@ -449,7 +476,27 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     setSubmitting(false)
   }
 
-  const answered = Object.keys(answers).length
+  // Check required questions before showing confirm
+  function handleSubmitClick() {
+    const missingRequired = sortedQ.filter(q => {
+      if (!q.is_required) return false
+      const ans = answers[q.id]
+      if (q.type === 'descriptive' || q.type === 'coding') return !(ans?.answer_text ?? '').trim()
+      return !(ans?.selected_option_ids ?? []).length
+    })
+    if (missingRequired.length > 0) {
+      alert(`Please answer all required questions before submitting.\n\nMissing: ${missingRequired.map((_: any, i: number) => 'Q' + (sortedQ.indexOf(missingRequired[i]) + 1)).join(', ')}`)
+      return
+    }
+    setShowConfirm(true)
+  }
+
+  const answered = sortedQ.filter(q => {
+    const ans = answers[q.id]
+    return q.type === 'descriptive' || q.type === 'coding'
+      ? (ans?.answer_text ?? '').trim() !== ''
+      : (ans?.selected_option_ids ?? []).length > 0
+  }).length
   const progress = sortedQ.length > 0 ? Math.round((answered / sortedQ.length) * 100) : 0
 
   // ── START ────────────────────────────────────────────────────────────────────
@@ -613,6 +660,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     const opts = (currentQ.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
     const selected: string[] = answers[currentQ.id]?.selected_option_ids ?? []
     const descText: string = answers[currentQ.id]?.answer_text ?? ''
+    const isQLocked = lockedQuestions.has(currentQ.id)
 
     return (
       <div style={isFullscreen ? {
@@ -648,6 +696,11 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
                 ⏱ {formatTime(timeLeft)}
               </span>
             )}
+            {qTimeLeft !== null && timeMode === 'per_question' && (
+              <span style={{ fontSize: 14, fontWeight: 700, color: qTimeLeft < 30 ? '#991b1b' : '#92400E', background: qTimeLeft < 30 ? '#fee2e2' : '#fffbeb', padding: '5px 14px', borderRadius: 20 }}>
+                Q⏱ {formatTime(qTimeLeft)}
+              </span>
+            )}
           </div>
         </div>
         <div style={{ background: '#f3f4f6', borderRadius: 4, height: 6, marginBottom: 20 }}>
@@ -670,15 +723,21 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             <span style={{ fontSize: 12, fontWeight: 700, color: '#185FA5', background: '#E6F1FB', padding: '3px 10px', borderRadius: 20 }}>Q{currentIdx + 1} / {sortedQ.length}</span>
             <span style={{ fontSize: 11, color: '#888' }}>{currentQ.points_correct} pt{currentQ.points_correct !== 1 ? 's' : ''}</span>
             {!currentQ.is_required && <span style={{ fontSize: 11, color: '#aaa' }}>optional</span>}
+            {isQLocked && <span style={{ fontSize: 11, fontWeight: 700, color: '#991b1b', background: '#fee2e2', padding: '2px 8px', borderRadius: 10 }}>🔒 Time expired</span>}
           </div>
+          {isQLocked && (
+            <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '16px 20px', marginBottom: 16, fontSize: 14, color: '#991b1b', textAlign: 'center' }}>
+              ⏰ Time expired for this question. Your answer has been locked.
+            </div>
+          )}
           <div style={{ fontSize: 16, lineHeight: 1.7, color: '#111', marginBottom: 24 }} dangerouslySetInnerHTML={{ __html: currentQ.body_html }} />
           {currentQ.type !== 'descriptive' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {opts.map((o: any) => {
                 const isSel = selected.includes(o.id)
                 return (
-                  <button key={o.id} onClick={() => setSelectedOptions(currentQ.id, o.id, currentQ.type)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `2px solid ${isSel ? '#185FA5' : '#e5e7eb'}`, borderRadius: 10, background: isSel ? '#E6F1FB' : '#fff', cursor: 'pointer', textAlign: 'left', fontSize: 14, color: '#111', transition: 'all .15s' }}>
+                  <button key={o.id} onClick={() => !isQLocked && setSelectedOptions(currentQ.id, o.id, currentQ.type)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `2px solid ${isSel ? '#185FA5' : '#e5e7eb'}`, borderRadius: 10, background: isSel ? '#E6F1FB' : '#fff', cursor: isQLocked ? 'not-allowed' : 'pointer', textAlign: 'left', fontSize: 14, color: '#111', transition: 'all .15s', opacity: isQLocked ? .7 : 1 }}>
                     <div style={{ width: 20, height: 20, borderRadius: currentQ.type === 'multiple' ? 4 : '50%', border: `2px solid ${isSel ? '#185FA5' : '#ccc'}`, background: isSel ? '#185FA5' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {isSel && <div style={{ width: 8, height: 8, borderRadius: currentQ.type === 'multiple' ? 2 : '50%', background: '#fff' }} />}
                     </div>
@@ -688,9 +747,10 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               })}
             </div>
           ) : (
-            <textarea value={descText} onChange={e => setDescriptiveAnswer(currentQ.id, e.target.value)}
+            <textarea value={descText} onChange={e => !isQLocked && setDescriptiveAnswer(currentQ.id, e.target.value)}
+              readOnly={isQLocked}
               placeholder="Write your answer here…"
-              style={{ width: '100%', minHeight: 140, padding: '12px 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.65, boxSizing: 'border-box' }} />
+              style={{ width: '100%', minHeight: 140, padding: '12px 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.65, boxSizing: 'border-box', opacity: isQLocked ? .7 : 1 }} />
           )}
           {currentQ.type === 'coding' && (
             <CodingEditor
@@ -716,7 +776,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               Next →
             </button>
           ) : (
-            <button onClick={() => setShowConfirm(true)} disabled={submitting}
+            <button onClick={handleSubmitClick} disabled={submitting}
               style={{ padding: '10px 24px', background: '#27500A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: submitting ? .6 : 1 }}>
               {submitting ? 'Submitting…' : '✓ Submit test'}
             </button>

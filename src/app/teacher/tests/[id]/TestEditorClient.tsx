@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Breadcrumb } from '@/components/ui'
 
 type QType = 'single' | 'multiple' | 'descriptive' | 'truefalse' | 'coding'
-type Tab = 'settings' | 'questions' | 'assign' | 'grading'
+type Tab = 'settings' | 'questions' | 'assign' | 'grading' | 'preview'
 
 const Q_LABELS: Record<QType, string> = {
   single: 'Single choice', multiple: 'Multiple choice',
@@ -221,6 +221,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
       title: test.title, description: test.description, category: test.category,
       status: test.status, start_page_html: test.start_page_html ?? '',
       time_limit_mins: test.time_limit_mins || null,
+      time_mode: test.time_mode ?? 'none',
       max_warnings: test.max_warnings,
       available_from: test.available_from || null,
       available_until: test.available_until || null,
@@ -407,7 +408,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: 24 }}>
-        {([['settings','⚙️ Settings'],['questions','❓ Questions'],['assign','👥 Assign'],['grading','📊 Grading']] as [Tab,string][]).map(([t, label]) => (
+        {([['settings','⚙️ Settings'],['questions','❓ Questions'],['assign','👥 Assign'],['grading','📊 Grading'],['preview','👁 Preview']] as [Tab,string][]).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} style={tab === t ? ATAB : TAB}>{label}</button>
         ))}
       </div>
@@ -439,11 +440,30 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>⏱ Time limit</div>
-                <label style={lbl}>Total test time (minutes) — blank = no limit</label>
-                <input type="number" min={1} value={test.time_limit_mins ?? ''}
-                  onChange={e => setTest((t: any) => ({ ...t, time_limit_mins: e.target.value ? +e.target.value : null }))}
-                  style={{ ...inp, marginBottom: 10 }} placeholder="e.g. 60" />
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>⏱ Time limit system</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                  {([['none','No time limit','Students can take as long as they need'],['total','Total test time','One countdown for the entire test'],['per_question','Per-question timers','Each question has its own countdown — expires = question locked']] as [string,string,string][]).map(([val, label, desc]) => (
+                    <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${(test.time_mode ?? 'none') === val ? '#185FA5' : '#e5e7eb'}`, background: (test.time_mode ?? 'none') === val ? '#E6F1FB' : '#fff' }}>
+                      <input type="radio" checked={(test.time_mode ?? 'none') === val} onChange={() => setTest((t: any) => ({ ...t, time_mode: val, time_limit_mins: val === 'none' ? null : t.time_limit_mins }))} style={{ marginTop: 2 }} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{label}</div>
+                        <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {(test.time_mode === 'total') && (
+                  <div>
+                    <label style={lbl}>Total time (minutes)</label>
+                    <input type="number" min={1} value={test.time_limit_mins ?? ''} placeholder="e.g. 60"
+                      onChange={e => setTest((t: any) => ({ ...t, time_limit_mins: e.target.value ? +e.target.value : null }))} style={inp} />
+                  </div>
+                )}
+                {(test.time_mode === 'per_question') && (
+                  <div style={{ fontSize: 12, color: '#888', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
+                    ⏱ Set time limits per question in the Questions tab. Questions without a time limit are unlimited.
+                  </div>
+                )}
               </div>
               <div style={CARD}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🛡 Anti-cheat</div>
@@ -638,6 +658,57 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* ── PREVIEW ── */}
+      {tab === 'preview' && (
+        <div>
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#92400E' }}>
+            👁 Preview — this is exactly how students will see the test. Answers are not saved.
+          </div>
+          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+            {test.start_page_html && (
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '28px 32px', marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 12, textTransform: 'uppercase' as const }}>Test start page</div>
+                <div dangerouslySetInnerHTML={{ __html: test.start_page_html }} style={{ fontSize: 14, lineHeight: 1.7 }} />
+              </div>
+            )}
+            {questions.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#aaa', border: '1px dashed #e5e7eb', borderRadius: 12 }}>No questions yet.</div>
+            )}
+            {questions.map((q, i) => {
+              const opts = (q.options ?? []).sort((a: any, b: any) => a.position - b.position)
+              return (
+                <div key={q.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '24px 28px', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#185FA5', background: '#E6F1FB', padding: '3px 10px', borderRadius: 20 }}>Q{i + 1} / {questions.length}</span>
+                    <span style={{ fontSize: 11, color: '#888' }}>{q.points_correct} pt{q.points_correct !== 1 ? 's' : ''}</span>
+                    {!q.is_required && <span style={{ fontSize: 11, color: '#aaa', background: '#f3f4f6', padding: '2px 7px', borderRadius: 10 }}>optional</span>}
+                    {q.time_limit_mins && <span style={{ fontSize: 11, color: '#92400E', background: '#fffbeb', padding: '2px 7px', borderRadius: 10 }}>⏱ {q.time_limit_mins} min</span>}
+                  </div>
+                  <div style={{ fontSize: 15, lineHeight: 1.7, color: '#111', marginBottom: 20 }} dangerouslySetInnerHTML={{ __html: q.body_html || '<em style="color:#bbb">No question text</em>' }} />
+                  {q.type !== 'descriptive' && q.type !== 'coding' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {opts.map((o: any) => (
+                        <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', border: '2px solid #e5e7eb', borderRadius: 10, fontSize: 14, color: '#111' }}>
+                          <div style={{ width: 18, height: 18, borderRadius: q.type === 'multiple' ? 4 : '50%', border: '2px solid #ccc', flexShrink: 0 }} />
+                          <span dangerouslySetInnerHTML={{ __html: o.body_html }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {q.type === 'descriptive' && (
+                    <div style={{ border: '1.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', minHeight: 80, color: '#bbb', fontSize: 14 }}>Student answer here…</div>
+                  )}
+                  {q.type === 'coding' && (
+                    <div style={{ background: '#1a1b26', borderRadius: 8, padding: '14px 16px', fontFamily: 'ui-monospace,monospace', fontSize: 13, minHeight: 80 }}>
+                      {q.starter_code ? <pre style={{ margin: 0, color: '#cdd6f4', whiteSpace: 'pre-wrap' }}>{q.starter_code}</pre> : <span style={{ color: '#6c7086' }}># Starter code here</span>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

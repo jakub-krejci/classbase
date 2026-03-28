@@ -305,10 +305,38 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
         <div style={{ position: 'sticky', top: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={CARD}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>📊 Grade summary</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, color: '#555', marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Auto-score</span><strong>{attempt.score ?? '—'} / {maxScore}</strong></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Descriptive pts</span><strong>{sortedQ.filter(q => q.type === 'descriptive').reduce((s, q) => s + (answers[q.id]?.teacher_points ?? 0), 0)}</strong></div>
-            </div>
+            {(() => {
+              let liveScore = 0
+              for (const q of sortedQ) {
+                const ans = answers[q.id]
+                if (ans?.teacher_points != null) {
+                  liveScore += ans.teacher_points
+                } else if (q.type !== 'descriptive' && q.type !== 'coding') {
+                  const opts = q.test_question_options ?? []
+                  const sel: string[] = ans?.selected_option_ids ?? []
+                  const correctIds = opts.filter((o: any) => o.is_correct).map((o: any) => o.id)
+                  if (q.type === 'single' || q.type === 'truefalse') {
+                    if (sel[0] === correctIds[0]) liveScore += q.points_correct
+                    else if (sel.length > 0) liveScore -= (q.points_incorrect ?? 0)
+                  } else if (q.type === 'multiple') {
+                    const allRight = correctIds.every((id: string) => sel.includes(id)) && sel.every((id: string) => correctIds.includes(id))
+                    if (allRight) liveScore += q.points_correct
+                    else if (sel.length > 0) liveScore -= (q.points_incorrect ?? 0)
+                  }
+                }
+              }
+              const descPts = sortedQ.filter(q => q.type === 'descriptive' || q.type === 'coding').reduce((s: number, q: any) => s + (answers[q.id]?.teacher_points ?? 0), 0)
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, color: '#555', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Auto-score</span><strong>{attempt.score ?? '—'} / {maxScore}</strong></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Manual (desc/code)</span><strong style={{ color: descPts > 0 ? '#185FA5' : '#aaa' }}>{descPts} pts</strong></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f3f4f6', paddingTop: 8 }}>
+                    <span style={{ fontWeight: 600 }}>Live total</span>
+                    <strong style={{ color: '#185FA5', fontSize: 15 }}>{liveScore} / {maxScore}</strong>
+                  </div>
+                </div>
+              )
+            })()}
             <label style={{ fontSize: 11, fontWeight: 600, color: '#666', display: 'block', marginBottom: 4 }}>FINAL SCORE (override)</label>
             <input type="number" min={0} max={maxScore} step={0.5}
               value={finalScore}
