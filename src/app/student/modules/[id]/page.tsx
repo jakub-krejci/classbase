@@ -41,6 +41,22 @@ export default async function StudentModuleDetailPage({ params }: { params: any 
     ? await admin.from('submissions').select('*').eq('student_id', (user as any).id).in('assignment_id', assignmentIds)
     : { data: [] }
 
+  // Classmates — other students in this module with public profiles
+  const { data: otherEnrollments } = await admin
+    .from('enrollments')
+    .select('student_id')
+    .eq('module_id', moduleId)
+    .neq('student_id', (user as any).id)
+    .limit(30)
+
+  const otherIds = (otherEnrollments ?? []).map((e: any) => e.student_id)
+  const { data: classmates } = otherIds.length
+    ? await admin.from('profiles')
+        .select('id, full_name, avatar_url, accent_color, custom_status, show_status, student_class')
+        .in('id', otherIds)
+        .eq('profile_visibility', true)
+    : { data: [] }
+
   return (
     <AppShell user={profile} role="student">
       <StudentModuleView
@@ -51,6 +67,7 @@ export default async function StudentModuleDetailPage({ params }: { params: any 
         bookmarkedIds={Array.from(bookmarkedIds) as string[]}
         submissions={(submissions ?? []) as any[]}
         studentId={(user as any).id}
+        classmates={(classmates ?? []) as any[]}
       />
     </AppShell>
   )

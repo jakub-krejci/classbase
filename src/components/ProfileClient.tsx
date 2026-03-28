@@ -28,7 +28,7 @@ const STATUS_SUGGESTIONS = [
   '✅ Vše hotovo!',
 ]
 
-const TABS_STUDENT = ['Profil', 'Vzhled', 'Zabezpečení', 'Účet'] as const
+const TABS_STUDENT = ['Profil', 'Vzhled', 'Soukromí', 'Zabezpečení', 'Účet'] as const
 const TABS_TEACHER = ['Profil', 'Zabezpečení', 'Účet'] as const
 
 function Avatar({ src, name, accent, size = 80 }: { src?: string | null; name: string; accent: string; size?: number }) {
@@ -118,6 +118,10 @@ export default function ProfileClient({ profile }: { profile: any }) {
   const [error,        setError]        = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting,     setDeleting]     = useState(false)
+  const [profileVis,   setProfileVis]   = useState<boolean>(profile?.profile_visibility ?? false)
+  const [showBio,      setShowBio]      = useState<boolean>(profile?.show_bio ?? false)
+  const [showStatus,   setShowStatus]   = useState<boolean>(profile?.show_status ?? true)
+  const [savingPrivacy,setSavingPrivacy] = useState(false)
   const avatarRef = useRef<HTMLInputElement>(null)
   const bannerRef = useRef<HTMLInputElement>(null)
 
@@ -205,6 +209,18 @@ export default function ProfileClient({ profile }: { profile: any }) {
     if (!res.ok) { const d = await res.json(); flash(d.error ?? 'Chyba při mazání účtu', true); setDeleting(false); setShowDeleteModal(false); return }
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  async function savePrivacy() {
+    setSavingPrivacy(true)
+    const { error: err } = await supabase.from('profiles').update({
+      profile_visibility: profileVis,
+      show_bio: showBio,
+      show_status: showStatus,
+      updated_at: new Date().toISOString(),
+    }).eq('id', profile.id)
+    if (err) flash(err.message, true); else flash('Nastavení soukromí uloženo!')
+    setSavingPrivacy(false)
   }
 
   return (
@@ -416,7 +432,82 @@ export default function ProfileClient({ profile }: { profile: any }) {
             </div>
           )}
 
-          {/* ── Zabezpečení ── */}
+
+          {/* ── Soukromí ── */}
+          {activeTab === 'Soukromí' && isStudent && (
+            <div>
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '24px 28px', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 6, paddingBottom: 12, borderBottom: '1px solid #f3f4f6' }}>Viditelnost profilu</div>
+                <div style={{ fontSize: 13, color: '#888', margin: '14px 0 20px', lineHeight: 1.6 }}>
+                  Kdy zapneš veřejný profil, spolužáci ve stejném modulu uvidí tvoje základní informace. Žádný pokrok ani výsledky testů se nesdílí.
+                </div>
+
+                {[
+                  {
+                    key: 'profileVis', val: profileVis, set: setProfileVis,
+                    label: 'Veřejný profil',
+                    desc: 'Spolužáci ve stejném modulu tě mohou najít a zobrazit tvůj profil',
+                    icon: '👤',
+                  },
+                  {
+                    key: 'showStatus', val: showStatus, set: setShowStatus,
+                    label: 'Zobrazit vlastní status',
+                    desc: 'Tvůj status (např. 📖 Čtu kapitolu 4) bude viditelný pro ostatní',
+                    icon: '💬',
+                  },
+                  {
+                    key: 'showBio', val: showBio, set: setShowBio,
+                    label: 'Zobrazit popis (bio)',
+                    desc: 'Tvůj krátký popis bude viditelný pro ostatní studenty',
+                    icon: '📝',
+                  },
+                ].map(({ key, val, set, label, desc, icon }) => (
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: '1px solid #f9fafb' }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 10, background: val ? accent + '15' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111', marginBottom: 2 }}>{label}</div>
+                      <div style={{ fontSize: 12, color: '#888' }}>{desc}</div>
+                    </div>
+                    <button onClick={() => set(!val)}
+                      style={{ width: 44, height: 24, borderRadius: 12, border: 'none', background: val ? accent : '#e5e7eb', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: val ? 23 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Preview link */}
+              {profileVis && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 18 }}>✓</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>Profil je veřejný</div>
+                    <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>Spolužáci ve stejných modulech tě mohou zobrazit</div>
+                  </div>
+                  <a href={`/student/profile/${profile.id}`} target="_blank"
+                    style={{ padding: '6px 12px', background: '#16a34a', color: '#fff', borderRadius: 7, textDecoration: 'none', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                    Zobrazit profil →
+                  </a>
+                </div>
+              )}
+
+              {!profileVis && (
+                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 18 }}>🔒</span>
+                  <div style={{ fontSize: 13, color: '#888' }}>Tvůj profil je soukromý — nikdo tě nemůže vyhledat</div>
+                </div>
+              )}
+
+              {error   && <div style={{ fontSize: 13, padding: '10px 14px', background: '#fef2f2', color: '#dc2626', borderRadius: 10, marginBottom: 12 }}>⚠ {error}</div>}
+              {success && <div style={{ fontSize: 13, padding: '10px 14px', background: '#f0fdf4', color: '#16a34a', borderRadius: 10, marginBottom: 12 }}>✓ {success}</div>}
+              <button onClick={savePrivacy} disabled={savingPrivacy}
+                style={{ padding: '11px 28px', background: accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: savingPrivacy ? 'not-allowed' : 'pointer', opacity: savingPrivacy ? .7 : 1 }}>
+                {savingPrivacy ? 'Ukládání…' : 'Uložit nastavení soukromí'}
+              </button>
+            </div>
+          )}
+
+          {/* ── Zabezpečení ── */
           {activeTab === 'Zabezpečení' && (
             <div>
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '24px 28px', marginBottom: 16 }}>

@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { Tag, BackLink, Breadcrumb, Pill } from '@/components/ui'
 import { useIsMobile } from '@/lib/useIsMobile'
 
-export default function StudentModuleView({ module, lessons, assignments, completedIds, bookmarkedIds, submissions, studentId }: {
-  module: any; lessons: any[]; assignments: any[]; completedIds: string[]; bookmarkedIds: string[]; submissions: any[]; studentId: string
+export default function StudentModuleView({ module, lessons, assignments, completedIds, bookmarkedIds, submissions, studentId, classmates = [] }: {
+  module: any; lessons: any[]; assignments: any[]; completedIds: string[]; bookmarkedIds: string[]; submissions: any[]; studentId: string; classmates?: any[]
 }) {
   const isMobile = useIsMobile()
   const [tab, setTab] = useState<'lessons' | 'assignments'>('lessons')
@@ -156,6 +156,34 @@ export default function StudentModuleView({ module, lessons, assignments, comple
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* ── Classmates ── */}
+      {classmates.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 12 }}>
+            👥 Spolužáci v tomto modulu ({classmates.length})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {classmates.map(c => {
+              const initials = (c.full_name ?? '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+              const accent = c.accent_color ?? 'var(--accent)'
+              return (
+                <a key={c.id} href={`/student/profile/${c.id}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 30, textDecoration: 'none', color: '#111', fontSize: 12, fontWeight: 500 }}>
+                  {c.avatar_url
+                    ? <img src={c.avatar_url} alt={c.full_name} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                    : <div style={{ width: 26, height: 26, borderRadius: '50%', background: accent + '20', color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{initials}</div>
+                  }
+                  <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.full_name}</span>
+                  {c.show_status && c.custom_status && (
+                    <span style={{ fontSize: 11, color: '#888', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.custom_status}</span>
+                  )}
+                </a>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
