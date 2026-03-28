@@ -7,3 +7,7 @@ alter table public.tests
 
 -- Allow multiple attempts per student (remove unique constraint if any)
 -- test_attempts already has no unique constraint, so multiple rows are fine
+
+-- Archive flag for tests
+alter table public.tests
+  add column if not exists archived boolean not null default false;

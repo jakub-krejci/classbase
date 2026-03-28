@@ -433,126 +433,128 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
 
       {/* ── SETTINGS ── */}
       {tab === 'settings' && (
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Basic info</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Row 1: Basic info (full width) */}
+          <div style={CARD}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Basic info</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <div>
                 <label style={lbl}>Test name</label>
-                <input value={test.title} onChange={e => setTest((t: any) => ({ ...t, title: e.target.value }))} style={{ ...inp, marginBottom: 12 }} placeholder="e.g. Chapter 3 Quiz" />
+                <input value={test.title} onChange={e => setTest((t: any) => ({ ...t, title: e.target.value }))} style={inp} placeholder="e.g. Chapter 3 Quiz" />
+              </div>
+              <div>
                 <label style={lbl}>Category / Subject</label>
-                <input value={test.category ?? ''} onChange={e => setTest((t: any) => ({ ...t, category: e.target.value }))} style={{ ...inp, marginBottom: 12 }} placeholder="e.g. Mathematics" />
-                <label style={lbl}>Description</label>
-                <textarea value={test.description ?? ''} onChange={e => setTest((t: any) => ({ ...t, description: e.target.value }))}
-                  style={{ ...inp, height: 80, resize: 'vertical' }} placeholder="Short description visible to students" />
+                <input value={test.category ?? ''} onChange={e => setTest((t: any) => ({ ...t, category: e.target.value }))} style={inp} placeholder="e.g. Mathematics" />
               </div>
-              <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>⏰ Availability window</div>
-                <label style={lbl}>Opens at (leave blank = immediate)</label>
-                <input type="datetime-local" value={test.available_from ? test.available_from.slice(0,16) : ''}
-                  onChange={e => setTest((t: any) => ({ ...t, available_from: e.target.value || null }))} style={{ ...inp, marginBottom: 12 }} />
-                <label style={lbl}>Closes at (leave blank = no deadline)</label>
-                <input type="datetime-local" value={test.available_until ? test.available_until.slice(0,16) : ''}
-                  onChange={e => setTest((t: any) => ({ ...t, available_until: e.target.value || null }))} style={inp} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>⏱ Time limit system</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                  {([['none','No time limit','Students can take as long as they need'],['total','Total test time','One countdown for the entire test'],['per_question','Per-question timers','Each question has its own countdown — expires = question locked']] as [string,string,string][]).map(([val, label, desc]) => (
-                    <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${(test.time_mode ?? 'none') === val ? '#185FA5' : '#e5e7eb'}`, background: (test.time_mode ?? 'none') === val ? '#E6F1FB' : '#fff' }}>
-                      <input type="radio" checked={(test.time_mode ?? 'none') === val} onChange={() => setTest((t: any) => ({ ...t, time_mode: val, time_limit_mins: val === 'none' ? null : t.time_limit_mins }))} style={{ marginTop: 2 }} />
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{label}</div>
-                        <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{desc}</div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                {(test.time_mode === 'total') && (
-                  <div>
-                    <label style={lbl}>Total time (minutes)</label>
-                    <input type="number" min={1} value={test.time_limit_mins ?? ''} placeholder="e.g. 60"
-                      onChange={e => setTest((t: any) => ({ ...t, time_limit_mins: e.target.value ? +e.target.value : null }))} style={inp} />
-                  </div>
-                )}
-                {(test.time_mode === 'per_question') && (
-                  <div style={{ fontSize: 12, color: '#888', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
-                    ⏱ Set time limits per question in the Questions tab. Questions without a time limit are unlimited.
-                  </div>
-                )}
-              </div>
-              <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🏷 Tags</div>
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Comma-separated tags for filtering: e.g. algebra, chapter-3, hard</div>
+              <div>
+                <label style={lbl}>Tags (comma-separated)</label>
                 <input type="text" value={(test.tags ?? []).join(', ')}
                   onChange={e => setTest((t: any) => ({ ...t, tags: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) }))}
-                  placeholder="e.g. algebra, chapter-3, midterm" style={inp} />
-                {(test.tags ?? []).length > 0 && (
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
-                    {(test.tags as string[]).map((tag: string) => (
-                      <span key={tag} style={{ padding: '2px 9px', background: '#E6F1FB', color: '#0C447C', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{tag}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🔁 Retake policy</div>
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Controls how many times a student can attempt this test.</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                  {([
-                    ['single',   'Single attempt',       'Students can only take the test once'],
-                    ['best',     'Best of N attempts',   'Students can retake up to N times; highest score counts'],
-                    ['practice', 'Practice mode',        'Unlimited attempts; scores are not recorded or sent to the teacher'],
-                  ] as [string, string, string][]).map(([val, label, desc]) => (
-                    <label key={val} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${(test.retake_mode ?? 'single') === val ? '#185FA5' : '#e5e7eb'}`, background: (test.retake_mode ?? 'single') === val ? '#E6F1FB' : '#fff' }}>
-                      <input type="radio" checked={(test.retake_mode ?? 'single') === val} onChange={() => setTest((t: any) => ({ ...t, retake_mode: val }))} style={{ marginTop: 2 }} />
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{label}</div>
-                        <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{desc}</div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                {(test.retake_mode === 'best') && (
-                  <div>
-                    <label style={lbl}>Maximum attempts</label>
-                    <input type="number" min={2} max={20} value={test.max_attempts ?? ''} placeholder="e.g. 3"
-                      onChange={e => setTest((t: any) => ({ ...t, max_attempts: e.target.value ? +e.target.value : null }))} style={inp} />
-                  </div>
-                )}
-              </div>
-              <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🔀 Randomisation</div>
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Each student gets a uniquely shuffled test, reducing copying.</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {([['randomise_questions', 'Shuffle question order', 'Each student sees questions in a different order'],
-                     ['randomise_options',   'Shuffle option order',   'Answer choices (A/B/C/D) are shuffled per student']] as [string, string, string][]).map(([key, label, desc]) => (
-                    <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${test[key] ? '#185FA5' : '#e5e7eb'}`, background: test[key] ? '#E6F1FB' : '#fff' }}>
-                      <input type="checkbox" checked={!!test[key]} onChange={e => setTest((t: any) => ({ ...t, [key]: e.target.checked }))} style={{ marginTop: 2 }} />
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{label}</div>
-                        <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{desc}</div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div style={CARD}>
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Students get a warning each time they switch tabs or leave the page.</div>
-                <label style={lbl}>Max warnings before test is locked</label>
-                <input type="number" min={1} max={20} value={test.max_warnings ?? 3}
-                  onChange={e => setTest((t: any) => ({ ...t, max_warnings: +e.target.value }))} style={{ ...inp, marginBottom: 12 }} />
-              </div>
-              <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>📄 Test start page</div>
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Instructions students see before starting.</div>
-                <RichInput value={test.start_page_html ?? ''} onChange={v => setTest((t: any) => ({ ...t, start_page_html: v }))}
-                  placeholder="Write instructions… (optional)" minHeight={100} />
+                  placeholder="e.g. algebra, chapter-3" style={inp} />
               </div>
             </div>
+            {(test.tags ?? []).length > 0 && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+                {(test.tags as string[]).map((tag: string) => (
+                  <span key={tag} style={{ padding: '2px 9px', background: '#E6F1FB', color: '#0C447C', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{tag}</span>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 12 }}>
+              <label style={lbl}>Description</label>
+              <textarea value={test.description ?? ''} onChange={e => setTest((t: any) => ({ ...t, description: e.target.value }))}
+                style={{ ...inp, height: 72, resize: 'vertical' }} placeholder="Short description visible to students" />
+            </div>
           </div>
+
+          {/* Row 2: Scheduling + Time + Retake (3 cols) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+            <div style={CARD}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>📅 Auto-scheduling</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>When set, test opens/closes automatically.</div>
+              <label style={lbl}>Opens at</label>
+              <input type="datetime-local" value={test.available_from ? test.available_from.slice(0,16) : ''}
+                onChange={e => setTest((t: any) => ({ ...t, available_from: e.target.value || null }))} style={{ ...inp, marginBottom: 12 }} />
+              <label style={lbl}>Closes at</label>
+              <input type="datetime-local" value={test.available_until ? test.available_until.slice(0,16) : ''}
+                onChange={e => setTest((t: any) => ({ ...t, available_until: e.target.value || null }))} style={inp} />
+            </div>
+
+            <div style={CARD}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>⏱ Time limit</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                {([['none','No time limit',''],['total','Total test time',''],['per_question','Per-question timers','']] as [string,string,string][]).map(([val, label]) => (
+                  <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${(test.time_mode ?? 'none') === val ? '#185FA5' : '#e5e7eb'}`, background: (test.time_mode ?? 'none') === val ? '#E6F1FB' : '#fff', fontSize: 13, fontWeight: (test.time_mode ?? 'none') === val ? 600 : 400, color: '#111' }}>
+                    <input type="radio" checked={(test.time_mode ?? 'none') === val} onChange={() => setTest((t: any) => ({ ...t, time_mode: val, time_limit_mins: val === 'none' ? null : t.time_limit_mins }))} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {test.time_mode === 'total' && (
+                <div>
+                  <label style={lbl}>Total time (minutes)</label>
+                  <input type="number" min={1} value={test.time_limit_mins ?? ''} placeholder="e.g. 60"
+                    onChange={e => setTest((t: any) => ({ ...t, time_limit_mins: e.target.value ? +e.target.value : null }))} style={inp} />
+                </div>
+              )}
+              {test.time_mode === 'per_question' && (
+                <div style={{ fontSize: 12, color: '#888', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
+                  Set time limits per question in the Questions tab.
+                </div>
+              )}
+            </div>
+
+            <div style={CARD}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🔁 Retake policy</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                {([['single','Single attempt'],['best','Best of N attempts'],['practice','Practice mode']] as [string,string][]).map(([val, label]) => (
+                  <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${(test.retake_mode ?? 'single') === val ? '#185FA5' : '#e5e7eb'}`, background: (test.retake_mode ?? 'single') === val ? '#E6F1FB' : '#fff', fontSize: 13, fontWeight: (test.retake_mode ?? 'single') === val ? 600 : 400, color: '#111' }}>
+                    <input type="radio" checked={(test.retake_mode ?? 'single') === val} onChange={() => setTest((t: any) => ({ ...t, retake_mode: val }))} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              {test.retake_mode === 'best' && (
+                <div>
+                  <label style={lbl}>Max attempts</label>
+                  <input type="number" min={2} max={20} value={test.max_attempts ?? ''} placeholder="e.g. 3"
+                    onChange={e => setTest((t: any) => ({ ...t, max_attempts: e.target.value ? +e.target.value : null }))} style={inp} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 3: Anti-cheat + Randomisation + Start page (3 cols) */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 20 }}>
+            <div style={CARD}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🛡 Anti-cheat</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Students get a warning each time they switch tabs or leave the page.</div>
+              <label style={lbl}>Max warnings before lock</label>
+              <input type="number" min={1} max={20} value={test.max_warnings ?? 3}
+                onChange={e => setTest((t: any) => ({ ...t, max_warnings: +e.target.value }))} style={inp} />
+            </div>
+
+            <div style={CARD}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🔀 Randomisation</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Each student gets a uniquely shuffled test.</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {([['randomise_questions', 'Shuffle question order'],['randomise_options', 'Shuffle option order']] as [string,string][]).map(([key, label]) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${test[key] ? '#185FA5' : '#e5e7eb'}`, background: test[key] ? '#E6F1FB' : '#fff', fontSize: 13, fontWeight: test[key] ? 600 : 400, color: '#111' }}>
+                    <input type="checkbox" checked={!!test[key]} onChange={e => setTest((t: any) => ({ ...t, [key]: e.target.checked }))} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={CARD}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>📄 Test start page</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Instructions students see before starting. Leave blank to skip.</div>
+              <RichInput value={test.start_page_html ?? ''} onChange={v => setTest((t: any) => ({ ...t, start_page_html: v }))}
+                placeholder="Write instructions… (optional)" minHeight={100} />
+            </div>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <SaveBtn onClick={saveSettings} saving={settingsSaving} saved={settingsSaved} label="Save settings" savedLabel="✓ Settings saved" />
           </div>

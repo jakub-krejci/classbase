@@ -14,18 +14,21 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
   const supabase = createClient()
   const [tests, setTests] = useState(initial)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [archiving, setArchiving] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [tagFilter, setTagFilter] = useState<string>('')
 
-  // Collect all unique tags across tests
+  // Collect all unique tags across active tests
   const allTags = useMemo(() => {
     const s = new Set<string>()
-    tests.forEach(t => (t.tags ?? []).forEach((tag: string) => s.add(tag)))
+    activeTests.forEach(t => (t.tags ?? []).forEach((tag: string) => s.add(tag)))
     return [...s].sort()
-  }, [tests])
+  }, [activeTests])
 
-  const filtered = useMemo(() => tests.filter(t => {
+  const activeTests = useMemo(() => tests.filter(t => showArchived ? !!t.archived : !t.archived), [tests, showArchived])
+  const filtered = useMemo(() => activeTests.filter(t => {
     if (statusFilter !== 'all' && t.status !== statusFilter) return false
     if (tagFilter && !(t.tags ?? []).includes(tagFilter)) return false
     if (search) {
@@ -38,6 +41,14 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
     }
     return true
   }), [tests, search, statusFilter, tagFilter])
+
+  async function toggleArchive(t: any) {
+    setArchiving(t.id)
+    const newVal = !t.archived
+    await supabase.from('tests').update({ archived: newVal }).eq('id', t.id)
+    setTests(p => p.map(x => x.id === t.id ? { ...x, archived: newVal } : x))
+    setArchiving(null)
+  }
 
   async function deleteTest(id: string) {
     if (!confirm('Delete this test and all its data?')) return
@@ -59,14 +70,24 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <PageHeader title="Tests" sub="Create and manage tests for your students" />
-        <a href="/teacher/tests/new"
-          style={{ padding: '10px 20px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
-          + New Test
-        </a>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {tests.some(t => t.archived) && (
+            <button onClick={() => setShowArchived(v => !v)}
+              style={{ padding: '9px 16px', background: showArchived ? '#185FA5' : '#f3f4f6', color: showArchived ? '#fff' : '#555', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              {showArchived ? '← Active tests' : `🗄 Archived (${tests.filter(t => t.archived).length})`}
+            </button>
+          )}
+          {!showArchived && (
+            <a href="/teacher/tests/new"
+              style={{ padding: '10px 20px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              + New Test
+            </a>
+          )}
+        </div>
       </div>
 
       {/* ── Search & filters ── */}
-      {tests.length > 0 && (
+      {activeTests.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
           <input type="text" placeholder="Search tests…" value={search} onChange={e => setSearch(e.target.value)}
             style={{ flex: '1 1 200px', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} />
@@ -97,9 +118,10 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
         </div>
       )}
 
-      {tests.length === 0 && <EmptyState message="No tests yet — create your first test to assess students" />}
+      {activeTests.length === 0 && !showArchived && <EmptyState message="No tests yet — create your first test to assess students" />}
+      {activeTests.length === 0 && showArchived && <EmptyState message="No archived tests." />}
 
-      {tests.length > 0 && filtered.length === 0 && (
+      {activeTests.length > 0 && filtered.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 20px', color: '#aaa', border: '1px dashed #e5e7eb', borderRadius: 14 }}>
           No tests match your search.
         </div>
@@ -158,6 +180,11 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
                 <button onClick={() => duplicate(t)}
                   style={{ padding: '7px 12px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, cursor: 'pointer', color: '#555' }} title="Duplicate">
                   ⎘
+                </button>
+                <button onClick={() => toggleArchive(t)} disabled={archiving === t.id}
+                  style={{ padding: '7px 12px', background: t.archived ? '#E6F1FB' : '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, cursor: 'pointer', color: t.archived ? '#185FA5' : '#888' }}
+                  title={t.archived ? 'Restore' : 'Archive'}>
+                  {archiving === t.id ? '…' : t.archived ? '↩' : '🗄'}
                 </button>
                 <button onClick={() => deleteTest(t.id)} disabled={deleting === t.id}
                   style={{ padding: '7px 12px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 7, fontSize: 12, cursor: 'pointer', color: '#991b1b' }}>

@@ -31,6 +31,8 @@ export default function QuestionBankClient({ questions: initQuestions, tests, te
   const [deleting, setDeleting] = useState<Record<string, boolean>>({})
   const [selectedTest, setSelectedTest] = useState(tests[0]?.id ?? '')
   const [expandedQ, setExpandedQ] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [deleteToast, setDeleteToast] = useState(false)
 
   const filtered = questions.filter(q => {
     const matchType = typeFilter === 'all' || q.type === typeFilter
@@ -63,15 +65,22 @@ export default function QuestionBankClient({ questions: initQuestions, tests, te
     setTimeout(() => setImported(p => ({ ...p, [q.id]: false })), 3000)
   }
 
-  async function deleteQuestion(id: string) {
-    if (!confirm('Delete this question from the bank?')) return
+  async function confirmDelete(id: string) {
     setDeleting(p => ({ ...p, [id]: true }))
     await supabase.from('question_bank').delete().eq('id', id)
     setQuestions(p => p.filter(q => q.id !== id))
+    setPendingDelete(null)
+    setDeleteToast(true)
+    setTimeout(() => setDeleteToast(false), 2500)
   }
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      {deleteToast && (
+        <div style={{ position: 'fixed', bottom: 32, right: 32, background: '#1a1b26', color: '#f38ba8', padding: '12px 22px', borderRadius: 12, fontSize: 14, fontWeight: 600, zIndex: 99999, boxShadow: '0 4px 24px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 18 }}>🗑️</span> Question deleted from bank
+        </div>
+      )}
       <Breadcrumb items={[{ label: 'Tests', href: '/teacher/tests' }, { label: 'Question Bank' }]} />
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div>
@@ -153,10 +162,22 @@ export default function QuestionBankClient({ questions: initQuestions, tests, te
                       style={{ padding: '7px 16px', background: imported[q.id] ? '#16a34a' : '#185FA5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: importing[q.id] ? .6 : 1 }}>
                       {importing[q.id] ? 'Importing…' : imported[q.id] ? '✓ Imported!' : '⊕ Import to test'}
                     </button>
-                    <button onClick={() => deleteQuestion(q.id)} disabled={deleting[q.id]}
-                      style={{ padding: '7px 14px', background: '#fff', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-                      {deleting[q.id] ? '…' : 'Delete'}
-                    </button>
+                    {pendingDelete === q.id ? (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '5px 10px' }}>
+                        <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>Delete?</span>
+                        <button onClick={() => confirmDelete(q.id)} disabled={deleting[q.id]}
+                          style={{ padding: '3px 10px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                          {deleting[q.id] ? '…' : 'Yes'}
+                        </button>
+                        <button onClick={() => setPendingDelete(null)}
+                          style={{ padding: '3px 8px', background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', color: '#888' }}>✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setPendingDelete(q.id)}
+                        style={{ padding: '7px 14px', background: '#fff', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import AppShell from '@/components/AppShell'
 import TestPlayer from './TestPlayer'
 
-export default async function StudentTestPage({ params }: { params: any }) {
+export default async function StudentTestPage({ params, searchParams }: { params: any; searchParams: any }) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -37,6 +37,9 @@ export default async function StudentTestPage({ params }: { params: any }) {
     .eq('test_id', params.id)
     .order('position')
 
+  // If retake=1 is in the URL, force a new attempt (ignore in_progress check)
+  const forceRetake = (await searchParams)?.retake === '1'
+
   // Fetch all attempts (for retake policy)
   const { data: allAttempts } = await admin.from('test_attempts')
     .select('*').eq('test_id', params.id).eq('student_id', user.id)
@@ -46,7 +49,7 @@ export default async function StudentTestPage({ params }: { params: any }) {
   const retakeMode = (test as any).retake_mode ?? 'single'
   const maxAttempts = (test as any).max_attempts ?? null
   const completedAttempts = (allAttempts ?? []).filter((a: any) => ['submitted','timed_out','locked'].includes(a.status))
-  const activeAttempt = (allAttempts ?? []).find((a: any) => a.status === 'in_progress') ?? null
+  const activeAttempt = forceRetake ? null : ((allAttempts ?? []).find((a: any) => a.status === 'in_progress') ?? null)
 
   // Can start a new attempt?
   const canRetake = retakeMode === 'practice' ||
