@@ -466,42 +466,32 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
         }}
         onClick={updateActiveFormats}
         onKeyDown={e => {
-          // Slash command — only trigger when block is empty or line is empty
+          // Slash command — ONLY trigger when the entire block is empty
           if (e.key === '/') {
-            const sel = window.getSelection()
-            if (sel && sel.rangeCount > 0) {
-              const range = sel.getRangeAt(0)
-              const node = range.startContainer
-              const text = node.textContent ?? ''
-              const offset = range.startOffset
-              const lineText = text.slice(0, offset).replace(/\u200B/g, '').trim()
-              const blockEmpty = (ref.current?.textContent ?? '').trim() === ''
-              if (lineText === '' || blockEmpty) {
-                e.preventDefault()
-                // Position menu relative to editor div, not cursor rect (which can be zero)
-                const editorEl = ref.current!
-                const editorRect = editorEl.getBoundingClientRect()
-                // Try cursor rect first, fall back to top-left of editor
-                const cursorRect = range.getBoundingClientRect()
-                const x = cursorRect.width > 0 ? cursorRect.left - editorRect.left : 14
-                const y = cursorRect.width > 0 ? cursorRect.bottom - editorRect.top + 4 : 40
-                savedSlashRange.current = range.cloneRange()
-                setSlashFilter('')
-                setSlashMenu({ x, y })
-                return
-              }
+            const blockEmpty = (ref.current?.textContent ?? '').replace(/\u200B/g, '').trim() === ''
+            if (blockEmpty) {
+              e.preventDefault()
+              const sel = window.getSelection()
+              const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null
+              const editorEl = ref.current!
+              const editorRect = editorEl.getBoundingClientRect()
+              const cursorRect = range ? range.getBoundingClientRect() : null
+              const x = (cursorRect && cursorRect.width > 0) ? cursorRect.left - editorRect.left : 14
+              const y = (cursorRect && cursorRect.height > 0) ? cursorRect.bottom - editorRect.top + 4 : 40
+              if (range) savedSlashRange.current = range.cloneRange()
+              setSlashFilter('')
+              setSlashMenu({ x, y })
+              return
             }
           }
           // Use ref (not state) to synchronously check if menu is open
           const menuOpen = !!slashMenuRef.current
-          // Close slash menu on Escape
-          if (e.key === 'Escape' && menuOpen) { e.preventDefault(); setSlashMenu(null); return }
-          // Filter slash menu — only intercept if menu is actually open
+          // Close slash menu on Escape or any typing when menu is open
           if (menuOpen) {
+            if (e.key === 'Escape') { e.preventDefault(); setSlashMenu(null); return }
             if (e.key === 'Backspace') { e.preventDefault(); setSlashFilter(f => f.slice(0, -1)); return }
-            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setSlashFilter(f => f + e.key); return }
-            // Enter/Tab select first item
             if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return }
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setSlashFilter(f => f + e.key); return }
           }
           if (e.key === 'Enter' && e.shiftKey) {
             let node: Node | null = window.getSelection()?.getRangeAt(0).startContainer ?? null
@@ -1117,7 +1107,7 @@ function FlashcardBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDup
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', margin: '4px 0', background: '#fafafa' }}>
       <div style={{ background: '#f3f4f6', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>🃏 Flashcard</span>
-        <span style={{ fontSize: 11, color: '#aaa' }}>— supports rich text, code snippets with ` backtick `</span>
+        <span style={{ fontSize: 11, color: '#aaa' }}>Type freely — bold, italic and formatting work here</span>
         <div style={{ flex: 1 }} />
         <button style={BC} onClick={onDuplicate}>⎘</button>
         <button style={BC} onClick={onMoveUp}>↑</button>
