@@ -72,39 +72,50 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
         @media (max-width: 640px) {
           .db-grid { grid-template-columns: 1fr !important; }
           .db-stats { grid-template-columns: 1fr 1fr !important; }
-          .db-hero { flex-direction: column !important; align-items: flex-start !important; }
+          .db-hero-inner { flex-wrap: wrap !important; }
+          .db-hero-text { min-width: 0 !important; }
+          .db-hero-right { width: 100% !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; padding-top: 12px !important; border-top: 1px solid #f3f4f6 !important; margin-top: 4px !important; }
+          .db-hero-ring-label { display: flex !important; align-items: center !important; gap: 8px !important; }
+          .db-hero-ring-label span { font-size: 13px !important; color: #666 !important; }
         }
       `}</style>
 
-      {/* ── Hero card — clean, accent strip on left ── */}
+      {/* ── Hero card ── */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 20, marginBottom: 24, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
         <div style={{ height: 6, background: accent }} />
-        <div className="db-hero" style={{ padding: '24px 28px', display: 'flex', alignItems: 'center', gap: 20 }}>
-          <Avatar url={profile.avatar_url} name={profile.full_name ?? 'S'} size={72} color={accent} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: '#aaa', marginBottom: 3 }}>{greeting} 👋</div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div className="db-hero-inner" style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* Avatar — always visible, never collapses */}
+          <Avatar url={profile.avatar_url} name={profile.full_name ?? 'S'} size={64} color={accent} />
+
+          {/* Name + meta — takes remaining space */}
+          <div className="db-hero-text" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: '#aaa', marginBottom: 2 }}>{greeting} 👋</div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile.full_name}
             </h1>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {profile.student_class && <span style={{ fontSize: 12, color: '#888' }}>🏫 {profile.student_class}</span>}
-              {profile.grade_level && <span style={{ fontSize: 12, color: '#888' }}>📚 {profile.grade_level}</span>}
-              {profile.pronouns && <span style={{ fontSize: 12, color: '#888' }}>({profile.pronouns})</span>}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {profile.student_class && <span style={{ fontSize: 11, color: '#888' }}>🏫 {profile.student_class}</span>}
+              {profile.grade_level && <span style={{ fontSize: 11, color: '#888' }}>📚 {profile.grade_level}</span>}
+              {profile.pronouns && <span style={{ fontSize: 11, color: '#888' }}>({profile.pronouns})</span>}
               {!profile.student_class && !profile.grade_level && (
-                <a href="/student/profile" style={{ fontSize: 12, color: accent, textDecoration: 'none' }}>+ Complete your profile</a>
+                <a href="/student/profile" style={{ fontSize: 11, color: accent, textDecoration: 'none' }}>+ Complete profile</a>
               )}
             </div>
           </div>
-          {totalLessons > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              <ProgressRing pct={overallPct} size={60} color={accent} />
-              <div style={{ fontSize: 10, color: '#aaa' }}>Overall</div>
-            </div>
-          )}
-          <a href="/student/profile"
-            style={{ padding: '7px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12, fontWeight: 500, color: '#555', textDecoration: 'none', flexShrink: 0 }}>
-            ✎ Edit profile
-          </a>
+
+          {/* Progress ring + edit — on mobile becomes a bottom row */}
+          <div className="db-hero-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            {totalLessons > 0 && (
+              <div className="db-hero-ring-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <ProgressRing pct={overallPct} size={54} color={accent} />
+                <span style={{ fontSize: 10, color: '#aaa' }}>Overall</span>
+              </div>
+            )}
+            <a href="/student/profile"
+              style={{ padding: '6px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 11, fontWeight: 500, color: '#555', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              ✎ Edit
+            </a>
+          </div>
         </div>
       </div>
 
