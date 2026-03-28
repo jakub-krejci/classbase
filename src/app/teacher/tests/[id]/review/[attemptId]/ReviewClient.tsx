@@ -1,9 +1,60 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Breadcrumb } from '@/components/ui'
-import { highlightPython } from '@/lib/highlight'
+import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
+
+// ── Inline code runner for teacher review ──────────────────────────────────────
+function CodeRunner({ code }: { code: string }) {
+  const [output, setOutput] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [pyReady, setPyReady] = useState(false)
+  const [pyLoading, setPyLoading] = useState(false)
+
+  useEffect(() => {
+    import('@/lib/pyodide-runner').then(m => {
+      setPyLoading(true)
+      m.loadPyodide().then(() => { setPyReady(true); setPyLoading(false) }).catch(() => setPyLoading(false))
+    })
+  }, [])
+
+  async function run() {
+    if (running || !pyReady) return
+    setRunning(true); setOutput(null); setError(null)
+    try {
+      const { runPython } = await import('@/lib/pyodide-runner')
+      const { output: out, error: err } = await runPython(code, () => {}, () => {})
+      setOutput(out || '(no output)')
+      if (err) setError(err)
+    } catch (e: any) { setError(e.message) }
+    setRunning(false)
+  }
+
+  const mono = 'ui-monospace,monospace'
+  return (
+    <div style={{ marginTop: 10, background: '#0d1117', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ background: '#161825', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 11, color: '#6c7086', fontFamily: mono, flex: 1 }}>
+          Run student code
+          {pyLoading && <span style={{ marginLeft: 6, color: '#f9e2af', fontSize: 10 }}>loading Python…</span>}
+          {pyReady && <span style={{ color: '#a6e3a1', marginLeft: 6 }}>●</span>}
+        </span>
+        <button onClick={run} disabled={!pyReady || running}
+          style={{ padding: '3px 12px', background: pyReady ? '#a6e3a1' : '#414459', color: pyReady ? '#1a1b26' : '#6c7086', border: 'none', borderRadius: 5, fontSize: 12, fontWeight: 700, cursor: pyReady ? 'pointer' : 'not-allowed', fontFamily: mono }}>
+          {running ? '⏳ Running…' : '▶ Run'}
+        </button>
+      </div>
+      {(output !== null || error !== null) && (
+        <div style={{ padding: '10px 14px' }}>
+          {output && <pre style={{ margin: 0, color: '#a6e3a1', fontFamily: mono, fontSize: 13, whiteSpace: 'pre-wrap' }}>{output}</pre>}
+          {error && <pre style={{ margin: 0, color: '#f38ba8', fontFamily: mono, fontSize: 12, marginTop: output ? 6 : 0, whiteSpace: 'pre-wrap' }}>{error}</pre>}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ReviewClient({ test, attempt, questions, answers: initAnswers }: {
   test: any; attempt: any; questions: any[]; answers: any[]
@@ -99,6 +150,7 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
 
   return (
     <div>
+      <style>{PYTHON_CSS}</style>
       <Breadcrumb items={[
         { label: 'Tests', href: '/teacher/tests' },
         { label: test.title, href: `/teacher/tests/${test.id}` },
@@ -203,16 +255,19 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
                 {q.type === 'coding' && (
                   <div style={{ marginBottom: 16 }}>
                     {q.starter_code && (
-                      <div style={{ marginBottom: 8 }}>
+                      <div style={{ marginBottom: 12 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4 }}>STARTER CODE</div>
-                        <pre style={{ margin: 0, background: '#1e1e2e', borderRadius: 6, padding: '10px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: .65 }}
+                        <pre style={{ margin: 0, background: '#1a1b26', borderRadius: 6, padding: '10px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#cdd6f4' }}
                           dangerouslySetInnerHTML={{ __html: highlightPython(q.starter_code) }} />
                       </div>
                     )}
                     <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4 }}>STUDENT&apos;S SUBMITTED CODE</div>
                     {ans?.answer_text
-                      ? <pre style={{ margin: 0, background: '#1a1b26', color: '#cdd6f4', borderRadius: 8, padding: '12px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-all', minHeight: 60 }}
-                          dangerouslySetInnerHTML={{ __html: highlightPython(ans.answer_text) }} />
+                      ? <>
+                          <pre style={{ margin: 0, background: '#1a1b26', color: '#cdd6f4', borderRadius: 8, padding: '12px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-all', minHeight: 60 }}
+                            dangerouslySetInnerHTML={{ __html: highlightPython(ans.answer_text) }} />
+                          <CodeRunner code={ans.answer_text} />
+                        </>
                       : <div style={{ background: '#1a1b26', borderRadius: 8, padding: '12px 14px', color: '#6c7086', fontFamily: 'ui-monospace,monospace', fontSize: 13 }}>No code submitted</div>
                     }
                   </div>

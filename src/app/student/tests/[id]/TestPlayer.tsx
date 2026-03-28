@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { highlightPython } from '@/lib/highlight'
+import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
 
 type Phase = 'start' | 'playing' | 'submitted' | 'locked' | 'timed_out'
 
@@ -94,8 +94,8 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#f38ba8',flexShrink:0 }} />
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#f9e2af',flexShrink:0 }} />
         <div style={{ width:9,height:9,borderRadius:'50%',background:'#a6e3a1',flexShrink:0 }} />
-        <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em', flex: 1, marginLeft: 4 }}>
-          ▶ Try It — Python
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#45475a', flex: 1, marginLeft: 4 }}>
+          Python
           {pyLoading && <span style={{ color: '#45475a', marginLeft: 6, fontSize: 9 }}>loading…</span>}
           {pyReady && <span style={{ color: '#a6e3a1', marginLeft: 6 }}>●</span>}
         </span>
@@ -217,9 +217,23 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   const [showWarning, setShowWarning] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // ── Timer: compute from started_at, not from time_limit_mins ────────────────
-  // This survives page refresh because started_at is in DB
+  // ── Fullscreen ───────────────────────────────────────────────────────────────
+  function enterFullscreen() {
+    document.documentElement.requestFullscreen?.().catch(() => {})
+    setIsFullscreen(true)
+  }
+  function exitFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    setIsFullscreen(false)
+  }
+
+  useEffect(() => {
+    function onFsChange() { if (!document.fullscreenElement) setIsFullscreen(false) }
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])vives page refresh because started_at is in DB
   const timeLimitSecs = test.time_limit_mins ? test.time_limit_mins * 60 : null
   const [timeLeft, setTimeLeft] = useState<number | null>(() => {
     if (!timeLimitSecs || !initAttempt?.started_at) return timeLimitSecs
@@ -260,6 +274,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             const elapsed = Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000)
             setTimeLeft(Math.max(0, timeLimitSecs - elapsed))
           }
+          enterFullscreen()
           setPhase('playing')
         }
       })
@@ -291,6 +306,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
 
   async function lockAttempt(status: 'locked' | 'timed_out') {
     if (attempt) await supabase.from('test_attempts').update({ status, locked_at: new Date().toISOString() }).eq('id', attempt.id)
+    exitFullscreen()
     setPhase(status)
   }
   async function handleTimedOut() { await lockAttempt('timed_out') }
@@ -303,6 +319,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     }).select().single()
     setAttempt(att)
     if (timeLimitSecs) setTimeLeft(timeLimitSecs)
+    enterFullscreen()
     setPhase('playing')
   }
 
@@ -357,6 +374,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     await supabase.from('test_attempts').update({
       status: 'submitted', submitted_at: new Date().toISOString(), score, max_score: maxScore,
     }).eq('id', attempt.id)
+    exitFullscreen()
     setAttempt((a: any) => ({ ...a, status: 'submitted', score, max_score: maxScore }))
     setPhase('submitted')
     setSubmitting(false)
@@ -405,6 +423,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     const att = attempt
     return (
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <style>{PYTHON_CSS}</style>
         <div style={{ background: 'linear-gradient(135deg,#EAF3DE,#d1fae5)', border: '1px solid #86efac', borderRadius: 16, padding: '28px 32px', marginBottom: 28, textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
           <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>Test submitted!</h2>
@@ -527,7 +546,12 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     const descText: string = answers[currentQ.id]?.answer_text ?? ''
 
     return (
-      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+      <div style={isFullscreen ? {
+        position: 'fixed', inset: 0, background: '#f9fafb', zIndex: 9990,
+        overflowY: 'auto', padding: '24px 32px',
+      } : { maxWidth: 800, margin: '0 auto' }}>
+        <style>{PYTHON_CSS}</style>
+        <div style={{ maxWidth: 800, margin: '0 auto' }}>
         {showConfirm && (
           <ConfirmModal
             title="Submit your test?"
@@ -627,6 +651,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               {submitting ? 'Submitting…' : '✓ Submit test'}
             </button>
           )}
+        </div>
         </div>
       </div>
     )
