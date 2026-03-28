@@ -42,7 +42,7 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
       </div>
 
       {tests.length === 0 && (
-        <EmptyState icon="📝" title="No tests yet" sub="Create your first test to assess students" />
+        <EmptyState message="No tests yet — create your first test to assess students" />
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 16 }}>
