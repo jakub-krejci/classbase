@@ -11,6 +11,35 @@ function formatTime(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
+// ── Required questions warning modal ─────────────────────────────────────────
+function RequiredWarningModal({ missing, onClose, onGoTo }: {
+  missing: string[]; onClose: () => void; onGoTo: (label: string) => void
+}) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 32, maxWidth: 420, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
+        <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 12 }}>⚠️</div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 8px', textAlign: 'center' }}>Required questions unanswered</h2>
+        <p style={{ fontSize: 14, color: '#555', margin: '0 0 20px', textAlign: 'center', lineHeight: 1.6 }}>
+          Please answer all required questions before submitting.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 24 }}>
+          {missing.map(label => (
+            <button key={label} onClick={() => { onGoTo(label); onClose() }}
+              style={{ padding: '6px 14px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose}
+          style={{ width: '100%', padding: '11px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          Go back and answer
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Confirm modal (replaces browser confirm()) ────────────────────────────────
 function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }: {
   title: string; body: string; confirmLabel: string; onConfirm: () => void; onCancel: () => void
@@ -328,25 +357,56 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     return () => clearInterval(timerRef.current)
   }, [phase])
 
-  // Per-question timer: reset when question changes
+  // Per-question timer — persists across navigation
+  // qStartRef: when did we start timing this question (Date.now())
+  // qElapsedRef: how many seconds already consumed before this visit
+  const qStartRef = useRef<number>(0)
+  const qElapsedRef = useRef<Record<string, number>>({})  // questionId -> seconds used
+
   useEffect(() => {
     if (phase !== 'playing' || timeMode !== 'per_question') return
     clearInterval(qTimerRef.current)
     const q = sortedQ[currentIdx]
+
+    // If question is already locked, just show 0 and do nothing
+    if (lockedQuestions.has(q?.id)) { setQTimeLeft(0); return }
+
     if (!q?.time_limit_mins) { setQTimeLeft(null); return }
-    const secs = q.time_limit_mins * 60
-    setQTimeLeft(secs)
+
+    const totalSecs = q.time_limit_mins * 60
+    const alreadyUsed = qElapsedRef.current[q.id] ?? 0
+    const remaining = Math.max(0, totalSecs - alreadyUsed)
+
+    if (remaining <= 0) {
+      setLockedQuestions(prev => new Set([...prev, q.id]))
+      setQTimeLeft(0)
+      return
+    }
+
+    qStartRef.current = Date.now()
+    setQTimeLeft(remaining)
+
     qTimerRef.current = setInterval(() => {
       setQTimeLeft(r => {
         if (r === null || r <= 1) {
           clearInterval(qTimerRef.current)
+          // Record total elapsed
+          qElapsedRef.current[q.id] = totalSecs
           setLockedQuestions(prev => new Set([...prev, q.id]))
           return 0
         }
         return r - 1
       })
     }, 1000)
-    return () => clearInterval(qTimerRef.current)
+
+    return () => {
+      clearInterval(qTimerRef.current)
+      // Save how much time was used during this visit
+      if (q?.id && !lockedQuestions.has(q.id)) {
+        const usedThisVisit = Math.floor((Date.now() - qStartRef.current) / 1000)
+        qElapsedRef.current[q.id] = (qElapsedRef.current[q.id] ?? 0) + usedThisVisit
+      }
+    }
   }, [currentIdx, phase])
 
   const sortedQ = [...questions].sort((a, b) => a.position - b.position)
@@ -476,16 +536,19 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     setSubmitting(false)
   }
 
-  // Check required questions before showing confirm
+  // Check required questions before showing confirm (skip locked questions)
+  const [showRequiredWarning, setShowRequiredWarning] = useState<string[]>([])
+
   function handleSubmitClick() {
     const missingRequired = sortedQ.filter(q => {
       if (!q.is_required) return false
+      if (lockedQuestions.has(q.id)) return false  // can't answer, don't block
       const ans = answers[q.id]
       if (q.type === 'descriptive' || q.type === 'coding') return !(ans?.answer_text ?? '').trim()
       return !(ans?.selected_option_ids ?? []).length
     })
     if (missingRequired.length > 0) {
-      alert(`Please answer all required questions before submitting.\n\nMissing: ${missingRequired.map((_: any, i: number) => 'Q' + (sortedQ.indexOf(missingRequired[i]) + 1)).join(', ')}`)
+      setShowRequiredWarning(missingRequired.map((q: any) => 'Q' + (sortedQ.indexOf(q) + 1)))
       return
     }
     setShowConfirm(true)
@@ -669,6 +732,16 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
       } : { maxWidth: 800, margin: '0 auto' }}>
         <style>{PYTHON_CSS}</style>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        {showRequiredWarning.length > 0 && (
+          <RequiredWarningModal
+            missing={showRequiredWarning}
+            onClose={() => setShowRequiredWarning([])}
+            onGoTo={(label) => {
+              const idx = parseInt(label.replace('Q', '')) - 1
+              setCurrentIdx(idx)
+            }}
+          />
+        )}
         {showConfirm && (
           <ConfirmModal
             title="Submit your test?"
@@ -710,10 +783,16 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
           {sortedQ.map((q, i) => {
             const ans = answers[q.id]
             const done = q.type === 'descriptive' || q.type === 'coding' ? (ans?.answer_text ?? '').trim() !== '' : (ans?.selected_option_ids ?? []).length > 0
+            const locked = lockedQuestions.has(q.id)
+            const isActive = i === currentIdx
+            const border = isActive ? '#185FA5' : locked ? '#f97316' : done ? '#22c55e' : '#e5e7eb'
+            const bg = isActive ? '#185FA5' : locked ? '#fff7ed' : done ? '#EAF3DE' : '#fff'
+            const color = isActive ? '#fff' : locked ? '#c2410c' : done ? '#27500A' : '#888'
             return (
-              <button key={q.id} onClick={() => setCurrentIdx(i)}
-                style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${i === currentIdx ? '#185FA5' : done ? '#22c55e' : '#e5e7eb'}`, background: i === currentIdx ? '#185FA5' : done ? '#EAF3DE' : '#fff', color: i === currentIdx ? '#fff' : done ? '#27500A' : '#888', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              <button key={q.id} onClick={() => setCurrentIdx(i)} title={locked ? 'Time expired' : undefined}
+                style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${border}`, background: bg, color, fontSize: 12, fontWeight: 700, cursor: 'pointer', position: 'relative' }}>
                 {i + 1}
+                {locked && <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 9, lineHeight: 1 }}>⏰</span>}
               </button>
             )
           })}
