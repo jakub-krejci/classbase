@@ -113,7 +113,7 @@ export default function TeacherDashboard({ profile, modules, tests, pendingAttem
               : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {pendingAttempts.map((a: any) => (
                     <a key={a.id} href={`/teacher/tests/${a.test_id}/review/${a.id}`}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', background: '#fff', border: '1px solid #fde68a', borderRadius: 10, textDecoration: 'none', color: 'inherit', background: '#fffbeb' } as any}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ width: 32, height: 32, borderRadius: 8, background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>✏️</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
