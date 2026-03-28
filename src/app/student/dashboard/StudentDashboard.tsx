@@ -85,9 +85,9 @@ function ProgressRing({ pct, size = 48 }: { pct: number; size?: number }) {
   )
 }
 
-export default function StudentDashboard({ profile, enrollments, completedLessonIds, tests, attempts, bookmarks }: {
+export default function StudentDashboard({ profile, enrollments, completedLessonIds, tests, attempts }: {
   profile: any; enrollments: any[]; completedLessonIds: string[]
-  tests: any[]; attempts: any[]; bookmarks: any[]
+  tests: any[]; attempts: any[]
 }) {
   const completedSet = new Set(completedLessonIds)
   const firstName = profile.full_name?.split(' ')[0] ?? 'Student'
