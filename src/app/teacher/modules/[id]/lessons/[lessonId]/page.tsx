@@ -141,8 +141,11 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
   const [showAnnotationModal, setShowAnnotationModal] = useState(false)
   const [annotationText, setAnnotationText] = useState('')
   const savedColorRange = useRef<Range | null>(null)
-
-  // Sync content into div on first render / when block changes externally
+  // Slash command state
+  const slashMenuRef = useRef<{x:number;y:number;above:boolean} | null>(null)
+  const [slashMenu, setSlashMenuRaw] = useState<{x:number;y:number;above:boolean} | null>(null)
+  function setSlashMenu(v: {x:number;y:number;above:boolean} | null) { slashMenuRef.current = v; setSlashMenuRaw(v) }
+  const [slashFilter, setSlashFilter] = useState('')
   useEffect(() => {
     if (ref.current) {
       if (ref.current.innerHTML !== block.content) {
@@ -461,6 +464,36 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
         }}
         onClick={updateActiveFormats}
         onKeyDown={e => {
+          // Slash command — only when block is completely empty
+          if (e.key === '/') {
+            const blockEmpty = (ref.current?.textContent ?? '').replace(/\u200B/g, '').trim() === ''
+            if (blockEmpty) {
+              e.preventDefault()
+              const sel = window.getSelection()
+              const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null
+              const cursorRect = range ? range.getBoundingClientRect() : null
+              const editorRect = ref.current!.getBoundingClientRect()
+              // Use viewport coordinates (fixed positioning) — works at any scroll position
+              const MENU_H = 320 // approx menu height
+              const spaceBelow = window.innerHeight - (cursorRect?.bottom ?? editorRect.bottom)
+              const above = spaceBelow < MENU_H
+              const x = cursorRect && cursorRect.width > 0 ? cursorRect.left : editorRect.left + 14
+              const y = above
+                ? (cursorRect && cursorRect.height > 0 ? cursorRect.top : editorRect.top) - 4
+                : (cursorRect && cursorRect.height > 0 ? cursorRect.bottom : editorRect.bottom) + 4
+              setSlashFilter('')
+              setSlashMenu({ x, y, above })
+              return
+            }
+          }
+          // Synchronously check menu open via ref
+          const menuOpen = !!slashMenuRef.current
+          if (menuOpen) {
+            if (e.key === 'Escape') { e.preventDefault(); setSlashMenu(null); return }
+            if (e.key === 'Backspace') { e.preventDefault(); setSlashFilter(f => f.slice(0, -1)); return }
+            if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return }
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setSlashFilter(f => f + e.key); return }
+          }
           if (e.key === 'Enter' && e.shiftKey) {
             let node: Node | null = window.getSelection()?.getRangeAt(0).startContainer ?? null
             while (node && (node as HTMLElement).tagName !== 'BLOCKQUOTE') node = node.parentElement
@@ -499,6 +532,69 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
           onClose={() => setShowTableModal(false)}
         />
       )}
+
+      {/* ── Slash command menu ── */}
+      {slashMenu && (() => {
+        const ITEMS: { icon: string; label: string; desc: string; type: BlockType | 'callout_tip' | 'callout_warning' | 'callout_info' | 'callout_example' | 'annotation' }[] = [
+          { icon: '📝', label: 'Text',       desc: 'Plain text block',          type: 'html' },
+          { icon: '💻', label: 'Code',       desc: 'Syntax-highlighted code',   type: 'code' },
+          { icon: '▶️',  label: 'Try-it',    desc: 'Interactive Python',        type: 'tryit' },
+          { icon: '∑',  label: 'Math',       desc: 'LaTeX equation',            type: 'math' },
+          { icon: '🔗', label: 'Embed',      desc: 'YouTube, Vimeo, CodePen…',  type: 'embed' },
+          { icon: '🃏', label: 'Flashcard',  desc: 'Flippable study card',      type: 'flashcard' },
+          { icon: '💡', label: 'Tip',        desc: 'Green tip callout',         type: 'callout_tip' },
+          { icon: '⚠️', label: 'Warning',    desc: 'Yellow warning callout',    type: 'callout_warning' },
+          { icon: 'ℹ️', label: 'Info',       desc: 'Blue info callout',         type: 'callout_info' },
+          { icon: '✅', label: 'Example',    desc: 'Purple example callout',    type: 'callout_example' },
+          { icon: '📌', label: 'Annotation', desc: 'Hover side note on text',   type: 'annotation' },
+        ]
+        const filtered = ITEMS.filter(it => !slashFilter || it.label.toLowerCase().startsWith(slashFilter.toLowerCase()))
+        const menuStyle: React.CSSProperties = {
+          position: 'fixed',
+          left: slashMenu.x,
+          zIndex: 9999,
+          background: '#fff',
+          border: '1px solid #e5e7eb',
+          borderRadius: 10,
+          boxShadow: '0 8px 32px rgba(0,0,0,.15)',
+          minWidth: 230,
+          overflow: 'hidden',
+          ...(slashMenu.above
+            ? { bottom: window.innerHeight - slashMenu.y }
+            : { top: slashMenu.y }),
+        }
+        return (
+          <div style={menuStyle} onMouseDown={e => e.preventDefault()}>
+            <div style={{ padding: '6px 10px', fontSize: 10, color: '#aaa', borderBottom: '1px solid #f3f4f6', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>BLOCKS {slashFilter && <span style={{ color: '#185FA5' }}>/ {slashFilter}</span>}</span>
+              <span style={{ cursor: 'pointer', color: '#ccc', fontSize: 14 }} onClick={() => setSlashMenu(null)}>✕</span>
+            </div>
+            {filtered.length === 0 && <div style={{ padding: '12px', fontSize: 13, color: '#aaa', textAlign: 'center' }}>No match</div>}
+            {filtered.map(item => (
+              <div key={item.label} onClick={() => {
+                setSlashMenu(null)
+                if (item.type === 'annotation') {
+                  setShowAnnotationModal(true)
+                } else if ((item.type as string).startsWith('callout_')) {
+                  const variant = (item.type as string).replace('callout_', '') as CalloutVariant
+                  onAddAfter('callout', variant)
+                } else {
+                  onAddAfter(item.type as BlockType)
+                }
+              }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', cursor: 'pointer', fontSize: 13 }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f5f9ff')}
+                onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                <span style={{ fontSize: 17, width: 24, textAlign: 'center', flexShrink: 0 }}>{item.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 500, color: '#111' }}>{item.label}</div>
+                  <div style={{ fontSize: 11, color: '#888' }}>{item.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* ── Annotation modal ── */}
       {showAnnotationModal && (
