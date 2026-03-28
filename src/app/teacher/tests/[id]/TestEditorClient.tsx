@@ -593,12 +593,20 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                           <td style={{ padding: '10px 10px', fontWeight: 600, color: '#185FA5' }}>{a.score != null ? `${a.score} / ${a.max_score}` : '—'}</td>
                           <td style={{ padding: '10px 10px', color: a.warning_count > 0 ? '#991b1b' : '#888', fontWeight: a.warning_count > 0 ? 700 : 400 }}>{a.warning_count}</td>
                           <td style={{ padding: '10px 10px' }}>
-                            {(a.status === 'locked' || a.status === 'timed_out') && (
-                              <button onClick={() => unlockAttempt(a.id)}
-                                style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, background: '#E6F1FB', color: '#0C447C', border: '1px solid #93c5fd', borderRadius: 6, cursor: 'pointer' }}>
-                                🔓 Unlock
-                              </button>
-                            )}
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              {a.status === 'submitted' && (
+                                <a href={`/teacher/tests/${test.id}/review/${a.id}`}
+                                  style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', textDecoration: 'none' }}>
+                                  ✏️ Review
+                                </a>
+                              )}
+                              {(a.status === 'locked' || a.status === 'timed_out') && (
+                                <button onClick={() => unlockAttempt(a.id)}
+                                  style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, background: '#E6F1FB', color: '#0C447C', border: '1px solid #93c5fd', borderRadius: 6, cursor: 'pointer' }}>
+                                  🔓 Unlock
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )

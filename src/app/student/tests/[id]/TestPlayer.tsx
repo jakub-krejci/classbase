@@ -5,27 +5,34 @@ import { createClient } from '@/lib/supabase/client'
 
 type Phase = 'start' | 'playing' | 'submitted' | 'locked' | 'timed_out'
 
-function useTimer(seconds: number | null, onExpire: () => void) {
-  const [remaining, setRemaining] = useState(seconds)
-  const ref = useRef<any>(null)
-  useEffect(() => {
-    if (seconds === null) return
-    setRemaining(seconds)
-    ref.current = setInterval(() => {
-      setRemaining(r => {
-        if (r === null || r <= 1) { clearInterval(ref.current); onExpire(); return 0 }
-        return r - 1
-      })
-    }, 1000)
-    return () => clearInterval(ref.current)
-  }, [seconds])
-  return remaining
-}
-
-function formatTime(s: number | null) {
-  if (s === null) return ''
+function formatTime(s: number) {
   const m = Math.floor(s / 60), sec = s % 60
   return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+// ── Confirm modal (replaces browser confirm()) ────────────────────────────────
+function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }: {
+  title: string; body: string; confirmLabel: string; onConfirm: () => void; onCancel: () => void
+}) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 32, maxWidth: 420, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
+        <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 16 }}>📋</div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 10px', textAlign: 'center' }}>{title}</h2>
+        <p style={{ fontSize: 14, color: '#555', lineHeight: 1.7, margin: '0 0 24px', textAlign: 'center' }}>{body}</p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onCancel}
+            style={{ flex: 1, padding: '11px', border: '1px solid #e5e7eb', borderRadius: 10, background: '#f9fafb', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            style={{ flex: 1, padding: '11px', border: 'none', borderRadius: 10, background: '#27500A', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function TestPlayer({ test, questions, attempt: initAttempt, answers: initAnswers, studentId }: {
@@ -49,20 +56,34 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   const [warnings, setWarnings] = useState(initAttempt?.warning_count ?? 0)
   const [showWarning, setShowWarning] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [qTimeLeft, setQTimeLeft] = useState<Record<string, number>>({})
-  const savingRef = useRef(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+
+  // ── Timer: compute from started_at, not from time_limit_mins ────────────────
+  // This survives page refresh because started_at is in DB
+  const timeLimitSecs = test.time_limit_mins ? test.time_limit_mins * 60 : null
+  const [timeLeft, setTimeLeft] = useState<number | null>(() => {
+    if (!timeLimitSecs || !initAttempt?.started_at) return timeLimitSecs
+    const elapsed = Math.floor((Date.now() - new Date(initAttempt.started_at).getTime()) / 1000)
+    return Math.max(0, timeLimitSecs - elapsed)
+  })
+  const timerRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (phase !== 'playing' || timeLeft === null) return
+    if (timeLeft <= 0) { handleTimedOut(); return }
+    timerRef.current = setInterval(() => {
+      setTimeLeft(r => {
+        if (r === null || r <= 1) { clearInterval(timerRef.current); handleTimedOut(); return 0 }
+        return r - 1
+      })
+    }, 1000)
+    return () => clearInterval(timerRef.current)
+  }, [phase])
 
   const sortedQ = [...questions].sort((a, b) => a.position - b.position)
   const currentQ = sortedQ[currentIdx]
   const maxWarnings = test.max_warnings ?? 3
-  const timeLimitSecs = test.time_limit_mins ? test.time_limit_mins * 60 : null
 
-  // ── Global timer ────────────────────────────────────────────────────────────
-  const timeLeft = useTimer(phase === 'playing' ? timeLimitSecs : null, () => {
-    handleTimedOut()
-  })
-
-  // ── Anti-cheat: detect tab switch / visibility change ───────────────────────
   // ── Realtime: detect teacher unlock ─────────────────────────────────────────
   useEffect(() => {
     if (!attempt) return
@@ -73,7 +94,12 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
       }, (payload: any) => {
         const updated = payload.new
         if (updated.status === 'in_progress' && (phase === 'locked' || phase === 'timed_out')) {
-          setWarnings(updated.warning_count ?? 0)
+          setWarnings(0)
+          // Recalculate timer from new started_at if timer exists
+          if (timeLimitSecs) {
+            const elapsed = Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000)
+            setTimeLeft(Math.max(0, timeLimitSecs - elapsed))
+          }
           setPhase('playing')
         }
       })
@@ -81,11 +107,10 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     return () => { supabase.removeChannel(ch) }
   }, [attempt?.id, phase])
 
+  // ── Anti-cheat ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'playing') return
-    function onVisChange() {
-      if (document.hidden) issueWarning()
-    }
+    function onVisChange() { if (document.hidden) issueWarning() }
     function onBlur() { issueWarning() }
     document.addEventListener('visibilitychange', onVisChange)
     window.addEventListener('blur', onBlur)
@@ -101,32 +126,31 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     setShowWarning(true)
     setTimeout(() => setShowWarning(false), 4000)
     if (attempt) await supabase.from('test_attempts').update({ warning_count: newCount }).eq('id', attempt.id)
-    if (newCount >= maxWarnings) {
-      await lockAttempt('locked')
-    }
+    if (newCount >= maxWarnings) await lockAttempt('locked')
   }
 
   async function lockAttempt(status: 'locked' | 'timed_out') {
     if (attempt) await supabase.from('test_attempts').update({ status, locked_at: new Date().toISOString() }).eq('id', attempt.id)
     setPhase(status)
   }
-
   async function handleTimedOut() { await lockAttempt('timed_out') }
 
-  // ── Start test ──────────────────────────────────────────────────────────────
+  // ── Start ────────────────────────────────────────────────────────────────────
   async function startTest() {
+    const now = new Date().toISOString()
     const { data: att } = await supabase.from('test_attempts').insert({
-      test_id: test.id, student_id: studentId, status: 'in_progress',
+      test_id: test.id, student_id: studentId, status: 'in_progress', started_at: now,
     }).select().single()
     setAttempt(att)
+    if (timeLimitSecs) setTimeLeft(timeLimitSecs)
     setPhase('playing')
   }
 
-  // ── Save answer ─────────────────────────────────────────────────────────────
+  // ── Save answer ──────────────────────────────────────────────────────────────
   const saveAnswer = useCallback(async (questionId: string, ans: any) => {
-    if (!attempt && !savingRef.current) return
+    if (!attempt) return
     const existing = answers[questionId]
-    if (existing) {
+    if (existing?.id) {
       await supabase.from('test_answers').update(ans).eq('id', existing.id)
     } else {
       const { data } = await supabase.from('test_answers').insert({ attempt_id: attempt.id, question_id: questionId, ...ans }).select().single()
@@ -136,35 +160,28 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
 
   function setSelectedOptions(qId: string, optId: string, type: string) {
     const cur = answers[qId]?.selected_option_ids ?? []
-    let next: string[]
-    if (type === 'single' || type === 'truefalse') {
-      next = [optId]
-    } else {
-      next = cur.includes(optId) ? cur.filter((x: string) => x !== optId) : [...cur, optId]
-    }
-    const updated = { ...answers[qId], selected_option_ids: next, question_id: qId }
-    setAnswers(p => ({ ...p, [qId]: updated }))
+    const next = (type === 'single' || type === 'truefalse') ? [optId]
+      : cur.includes(optId) ? cur.filter((x: string) => x !== optId) : [...cur, optId]
+    setAnswers(p => ({ ...p, [qId]: { ...p[qId], selected_option_ids: next, question_id: qId } }))
     saveAnswer(qId, { selected_option_ids: next })
   }
 
   function setDescriptiveAnswer(qId: string, text: string) {
-    const updated = { ...answers[qId], answer_text: text, question_id: qId }
-    setAnswers(p => ({ ...p, [qId]: updated }))
+    setAnswers(p => ({ ...p, [qId]: { ...p[qId], answer_text: text, question_id: qId } }))
     saveAnswer(qId, { answer_text: text })
   }
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
-  async function submitTest() {
-    if (!confirm('Submit your test? You cannot change answers after submitting.')) return
+  // ── Submit ───────────────────────────────────────────────────────────────────
+  async function doSubmit() {
+    setShowConfirm(false)
     setSubmitting(true)
-    // Auto-grade objective questions
     let score = 0, maxScore = 0
     for (const q of sortedQ) {
       if (q.type === 'descriptive') { maxScore += q.points_correct; continue }
       maxScore += q.points_correct
       const ans = answers[q.id]
       const selected: string[] = ans?.selected_option_ids ?? []
-      const opts = (q.test_question_options ?? [])
+      const opts = q.test_question_options ?? []
       if (q.type === 'single' || q.type === 'truefalse') {
         const correct = opts.find((o: any) => o.is_correct)?.id
         if (selected[0] === correct) score += q.points_correct
@@ -176,9 +193,11 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
         else if (selected.length > 0) score -= (q.points_incorrect ?? 0)
       }
     }
+    clearInterval(timerRef.current)
     await supabase.from('test_attempts').update({
       status: 'submitted', submitted_at: new Date().toISOString(), score, max_score: maxScore,
     }).eq('id', attempt.id)
+    setAttempt((a: any) => ({ ...a, status: 'submitted', score, max_score: maxScore }))
     setPhase('submitted')
     setSubmitting(false)
   }
@@ -186,7 +205,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   const answered = Object.keys(answers).length
   const progress = sortedQ.length > 0 ? Math.round((answered / sortedQ.length) * 100) : 0
 
-  // ── START PAGE ──────────────────────────────────────────────────────────────
+  // ── START ────────────────────────────────────────────────────────────────────
   if (phase === 'start') {
     return (
       <div style={{ maxWidth: 640, margin: '0 auto', paddingTop: 40 }}>
@@ -202,12 +221,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               <div style={{ marginBottom: 24, fontSize: 14, color: '#555', lineHeight: 1.7 }}>{test.description}</div>
             ) : null}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 28 }}>
-              {[
-                ['📝', 'Questions', sortedQ.length.toString()],
-                ['⏱', 'Time limit', test.time_limit_mins ? `${test.time_limit_mins} min` : 'No limit'],
-                ['🛡', 'Anti-cheat', `${maxWarnings} warning${maxWarnings !== 1 ? 's' : ''} max`],
-                ['⚠️', 'Availability', test.available_until ? `Until ${new Date(test.available_until).toLocaleDateString('en-GB')}` : 'Open'],
-              ].map(([icon, label, val]) => (
+              {[['📝', 'Questions', sortedQ.length.toString()], ['⏱', 'Time limit', test.time_limit_mins ? `${test.time_limit_mins} min` : 'No limit'], ['🛡', 'Anti-cheat', `${maxWarnings} warning${maxWarnings !== 1 ? 's' : ''} max`], ['⚠️', 'Availability', test.available_until ? `Until ${new Date(test.available_until).toLocaleDateString('en-GB')}` : 'Open']].map(([icon, label, val]) => (
                 <div key={label} style={{ background: '#f9fafb', borderRadius: 10, padding: '14px 16px' }}>
                   <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>{icon} {label}</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>{val}</div>
@@ -215,11 +229,9 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               ))}
             </div>
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 24, fontSize: 13, color: '#92400E', lineHeight: 1.6 }}>
-              ⚠️ Do not switch tabs or leave this page during the test. Each detected attempt will be logged as a warning.
-              After {maxWarnings} warning{maxWarnings !== 1 ? 's' : ''} your test will be automatically locked.
+              ⚠️ Do not switch tabs or leave this page. Each detected attempt is logged as a warning. After {maxWarnings} warning{maxWarnings !== 1 ? 's' : ''} your test will be locked.
             </div>
-            <button onClick={startTest}
-              style={{ width: '100%', padding: '14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', letterSpacing: '.01em' }}>
+            <button onClick={startTest} style={{ width: '100%', padding: '14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
               ▶ Start Test
             </button>
           </div>
@@ -228,66 +240,156 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     )
   }
 
-  // ── SUBMITTED / LOCKED / TIMED_OUT ─────────────────────────────────────────
-  if (phase === 'submitted' || phase === 'locked' || phase === 'timed_out') {
-    const icons = { submitted: '✅', locked: '🔒', timed_out: '⏰' }
-    const titles = { submitted: 'Test submitted!', locked: 'Test locked', timed_out: 'Time expired' }
+  // ── SUBMITTED ────────────────────────────────────────────────────────────────
+  if (phase === 'submitted') {
+    const att = attempt
+    return (
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ background: 'linear-gradient(135deg,#EAF3DE,#d1fae5)', border: '1px solid #86efac', borderRadius: 16, padding: '28px 32px', marginBottom: 28, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>Test submitted!</h2>
+          <p style={{ color: '#4b5563', fontSize: 14, margin: 0 }}>Your answers have been recorded. Your teacher will review and finalize your score.</p>
+          {att?.score != null && (
+            <div style={{ marginTop: 16, fontSize: 18, fontWeight: 700, color: '#185FA5' }}>
+              Auto-score: {att.score} / {att.max_score} pts
+            </div>
+          )}
+          {att?.final_score != null && (
+            <div style={{ marginTop: 8, fontSize: 18, fontWeight: 700, color: '#27500A' }}>
+              Final score: {att.final_score} / {att.max_score} pts
+            </div>
+          )}
+          {att?.teacher_feedback && (
+            <div style={{ marginTop: 16, background: '#fff', borderRadius: 10, padding: '14px 18px', fontSize: 13, color: '#333', lineHeight: 1.7, textAlign: 'left' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6, textTransform: 'uppercase' }}>Teacher feedback</div>
+              {att.teacher_feedback}
+            </div>
+          )}
+        </div>
+
+        {/* Answer review */}
+        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Your answers</h3>
+        {sortedQ.map((q, i) => {
+          const ans = answers[q.id]
+          const opts = (q.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
+          const selected: string[] = ans?.selected_option_ids ?? []
+          const correctIds = opts.filter((o: any) => o.is_correct).map((o: any) => o.id)
+          const isObjective = q.type !== 'descriptive'
+          const isCorrect = isObjective && selected.length > 0 && (
+            q.type === 'multiple'
+              ? correctIds.every((id: string) => selected.includes(id)) && selected.every((id: string) => correctIds.includes(id))
+              : selected[0] === correctIds[0]
+          )
+          const hasAnswer = q.type === 'descriptive' ? (ans?.answer_text ?? '').trim() !== '' : selected.length > 0
+          const border = !hasAnswer ? '#e5e7eb' : isObjective ? (isCorrect ? '#86efac' : '#fca5a5') : '#93c5fd'
+          const bg = !hasAnswer ? '#f9fafb' : isObjective ? (isCorrect ? '#f0fdf4' : '#fff1f2') : '#eff6ff'
+
+          return (
+            <div key={q.id} style={{ border: `1.5px solid ${border}`, background: bg, borderRadius: 12, padding: '20px 24px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, color: '#185FA5', fontSize: 13 }}>Q{i + 1}</span>
+                {isObjective && hasAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: isCorrect ? '#16a34a' : '#dc2626' }}>{isCorrect ? '✓ Correct' : '✗ Incorrect'}</span>}
+                {!hasAnswer && <span style={{ fontSize: 12, color: '#888' }}>— Not answered</span>}
+                {q.type === 'descriptive' && hasAnswer && <span style={{ fontSize: 12, color: '#1d4ed8' }}>📝 Descriptive — awaiting grade</span>}
+                {ans?.teacher_note && <span style={{ fontSize: 12, color: '#7c3aed', marginLeft: 'auto' }}>📌 Teacher note</span>}
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.6, color: '#111', marginBottom: 14 }} dangerouslySetInnerHTML={{ __html: q.body_html }} />
+              {isObjective && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {opts.map((o: any) => {
+                    const isSel = selected.includes(o.id)
+                    const isCorr = o.is_correct
+                    const bg2 = isSel && isCorr ? '#dcfce7' : isSel && !isCorr ? '#fee2e2' : !isSel && isCorr ? '#fef9c3' : '#f9fafb'
+                    const border2 = isSel && isCorr ? '#86efac' : isSel && !isCorr ? '#fca5a5' : !isSel && isCorr ? '#fde68a' : '#e5e7eb'
+                    return (
+                      <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: bg2, border: `1.5px solid ${border2}`, borderRadius: 8, fontSize: 13 }}>
+                        <span>{isSel ? (isCorr ? '✓' : '✗') : isCorr ? '○' : '·'}</span>
+                        <span dangerouslySetInnerHTML={{ __html: o.body_html }} />
+                        {isCorr && !isSel && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#ca8a04', fontWeight: 600 }}>Correct answer</span>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {q.type === 'descriptive' && (
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#333', lineHeight: 1.65 }}>
+                  {ans?.answer_text || <span style={{ color: '#aaa' }}>No answer provided</span>}
+                </div>
+              )}
+              {ans?.teacher_note && (
+                <div style={{ marginTop: 10, background: '#f3f0ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#5b21b6' }}>
+                  💬 {ans.teacher_note}
+                </div>
+              )}
+              {ans?.teacher_points != null && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#27500A', fontWeight: 600 }}>Points awarded: {ans.teacher_points}</div>
+              )}
+            </div>
+          )
+        })}
+        <a href="/student/tests" style={{ display: 'inline-block', marginTop: 8, padding: '10px 20px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>← Back to tests</a>
+      </div>
+    )
+  }
+
+  // ── LOCKED / TIMED_OUT ───────────────────────────────────────────────────────
+  if (phase === 'locked' || phase === 'timed_out') {
+    const icons = { locked: '🔒', timed_out: '⏰' }
+    const titles = { locked: 'Test locked', timed_out: 'Time expired' }
     const msgs = {
-      submitted: 'Your answers have been recorded. Your teacher will review and finalize your score.',
-      locked: `Your test was locked after ${warnings} warning${warnings !== 1 ? 's' : ''} for potential academic dishonesty.`,
-      timed_out: 'The time limit was reached. Your answers up to this point have been saved.',
+      locked: `Your test was locked after ${warnings} warning${warnings !== 1 ? 's' : ''} for potential academic dishonesty. Contact your teacher to unlock.`,
+      timed_out: 'The time limit was reached. Your answers have been saved.',
     }
     return (
       <div style={{ maxWidth: 500, margin: '60px auto', textAlign: 'center' }}>
         <div style={{ fontSize: 60, marginBottom: 16 }}>{icons[phase]}</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 12px' }}>{titles[phase]}</h2>
         <p style={{ color: '#666', fontSize: 14, lineHeight: 1.7, margin: '0 0 24px' }}>{msgs[phase]}</p>
-        <a href="/student/tests" style={{ padding: '10px 24px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
-          ← Back to tests
-        </a>
+        <a href="/student/tests" style={{ padding: '10px 24px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>← Back to tests</a>
       </div>
     )
   }
 
-  // ── PLAYING ─────────────────────────────────────────────────────────────────
+  // ── PLAYING ──────────────────────────────────────────────────────────────────
   if (phase === 'playing' && currentQ) {
     const opts = (currentQ.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
     const selected: string[] = answers[currentQ.id]?.selected_option_ids ?? []
     const descText: string = answers[currentQ.id]?.answer_text ?? ''
-    const isAnswered = currentQ.type === 'descriptive' ? descText.trim() !== '' : selected.length > 0
 
     return (
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
-        {/* Warning banner */}
+        {showConfirm && (
+          <ConfirmModal
+            title="Submit your test?"
+            body={`You've answered ${answered} of ${sortedQ.length} questions. You cannot change your answers after submitting.`}
+            confirmLabel="✓ Submit test"
+            onConfirm={doSubmit}
+            onCancel={() => setShowConfirm(false)}
+          />
+        )}
         {showWarning && (
-          <div style={{ position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', background: '#991b1b', color: '#fff', padding: '12px 24px', borderRadius: 10, zIndex: 9999, fontWeight: 600, fontSize: 14, boxShadow: '0 4px 20px rgba(0,0,0,.3)', animation: 'fadeIn .2s' }}>
+          <div style={{ position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', background: '#991b1b', color: '#fff', padding: '12px 24px', borderRadius: 10, zIndex: 9998, fontWeight: 600, fontSize: 14, boxShadow: '0 4px 20px rgba(0,0,0,.3)' }}>
             ⚠️ Warning {warnings}/{maxWarnings} — Tab switch detected!{warnings >= maxWarnings ? ' Test locked.' : ''}
           </div>
         )}
-
-        {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>{test.title}</div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {warnings > 0 && (
               <span style={{ fontSize: 12, color: '#991b1b', fontWeight: 600, background: '#fee2e2', padding: '3px 10px', borderRadius: 20 }}>
-                ⚠️ {warnings} warning{warnings !== 1 ? 's' : ''}
+                ⚠️ {warnings}/{maxWarnings} warnings
               </span>
             )}
-            {timeLimitSecs !== null && timeLeft !== null && (
+            {timeLeft !== null && (
               <span style={{ fontSize: 14, fontWeight: 700, color: timeLeft < 120 ? '#991b1b' : '#185FA5', background: timeLeft < 120 ? '#fee2e2' : '#E6F1FB', padding: '5px 14px', borderRadius: 20 }}>
                 ⏱ {formatTime(timeLeft)}
               </span>
             )}
           </div>
         </div>
-
-        {/* Progress bar */}
-        <div style={{ background: '#f3f4f6', borderRadius: 4, height: 6, marginBottom: 24 }}>
+        <div style={{ background: '#f3f4f6', borderRadius: 4, height: 6, marginBottom: 20 }}>
           <div style={{ background: '#185FA5', height: '100%', width: progress + '%', borderRadius: 4, transition: 'width .3s' }} />
         </div>
-
-        {/* Question nav pills */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
           {sortedQ.map((q, i) => {
             const ans = answers[q.id]
@@ -300,45 +402,34 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             )
           })}
         </div>
-
-        {/* Question card */}
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '28px 32px', marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#185FA5', background: '#E6F1FB', padding: '3px 10px', borderRadius: 20 }}>Q{currentIdx + 1} / {sortedQ.length}</span>
             <span style={{ fontSize: 11, color: '#888' }}>{currentQ.points_correct} pt{currentQ.points_correct !== 1 ? 's' : ''}</span>
             {!currentQ.is_required && <span style={{ fontSize: 11, color: '#aaa' }}>optional</span>}
           </div>
-
-          <div style={{ fontSize: 16, lineHeight: 1.7, color: '#111', marginBottom: 24 }}
-            dangerouslySetInnerHTML={{ __html: currentQ.body_html }} />
-
-          {/* Options */}
-          {currentQ.type !== 'descriptive' && (
+          <div style={{ fontSize: 16, lineHeight: 1.7, color: '#111', marginBottom: 24 }} dangerouslySetInnerHTML={{ __html: currentQ.body_html }} />
+          {currentQ.type !== 'descriptive' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {opts.map((o: any) => {
-                const isSelected = selected.includes(o.id)
+                const isSel = selected.includes(o.id)
                 return (
                   <button key={o.id} onClick={() => setSelectedOptions(currentQ.id, o.id, currentQ.type)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `2px solid ${isSelected ? '#185FA5' : '#e5e7eb'}`, borderRadius: 10, background: isSelected ? '#E6F1FB' : '#fff', cursor: 'pointer', textAlign: 'left', fontSize: 14, color: '#111', transition: 'all .15s' }}>
-                    <div style={{ width: 20, height: 20, borderRadius: currentQ.type === 'multiple' ? 4 : '50%', border: `2px solid ${isSelected ? '#185FA5' : '#ccc'}`, background: isSelected ? '#185FA5' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {isSelected && <div style={{ width: 8, height: 8, borderRadius: currentQ.type === 'multiple' ? 2 : '50%', background: '#fff' }} />}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `2px solid ${isSel ? '#185FA5' : '#e5e7eb'}`, borderRadius: 10, background: isSel ? '#E6F1FB' : '#fff', cursor: 'pointer', textAlign: 'left', fontSize: 14, color: '#111', transition: 'all .15s' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: currentQ.type === 'multiple' ? 4 : '50%', border: `2px solid ${isSel ? '#185FA5' : '#ccc'}`, background: isSel ? '#185FA5' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isSel && <div style={{ width: 8, height: 8, borderRadius: currentQ.type === 'multiple' ? 2 : '50%', background: '#fff' }} />}
                     </div>
                     <span dangerouslySetInnerHTML={{ __html: o.body_html }} />
                   </button>
                 )
               })}
             </div>
-          )}
-
-          {/* Descriptive */}
-          {currentQ.type === 'descriptive' && (
+          ) : (
             <textarea value={descText} onChange={e => setDescriptiveAnswer(currentQ.id, e.target.value)}
               placeholder="Write your answer here…"
               style={{ width: '100%', minHeight: 140, padding: '12px 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.65, boxSizing: 'border-box' }} />
           )}
         </div>
-
-        {/* Navigation */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <button onClick={() => setCurrentIdx(i => Math.max(0, i - 1))} disabled={currentIdx === 0}
             style={{ padding: '10px 20px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: currentIdx === 0 ? 'not-allowed' : 'pointer', fontSize: 13, color: '#555', opacity: currentIdx === 0 ? .4 : 1 }}>
@@ -351,7 +442,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               Next →
             </button>
           ) : (
-            <button onClick={submitTest} disabled={submitting}
+            <button onClick={() => setShowConfirm(true)} disabled={submitting}
               style={{ padding: '10px 24px', background: '#27500A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: submitting ? .6 : 1 }}>
               {submitting ? 'Submitting…' : '✓ Submit test'}
             </button>
