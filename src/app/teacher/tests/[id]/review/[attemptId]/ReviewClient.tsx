@@ -76,14 +76,18 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
     await saveGrades()
     // Send notification
     const fs = finalScore !== '' ? parseFloat(finalScore) : attempt.score
-    const { error: err } = await supabase.from('notifications').insert({
-      user_id: attempt.student_id,
-      type: 'announcement',
-      title: `Test graded: ${test.title}`,
-      body: `Your test has been reviewed. Final score: ${fs} / ${attempt.max_score}.${feedback ? ' Your teacher left feedback.' : ''}`,
-      read: false,
+    const res = await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: attempt.student_id,
+        type: 'announcement',
+        title: `Test graded: ${test.title}`,
+        body: `Your test has been reviewed. Final score: ${fs} / ${attempt.max_score}.${feedback ? ' Your teacher left feedback.' : ''}`,
+      }),
     })
-    if (err) { setError('Notification failed: ' + err.message); setSending(false); return }
+    const result = await res.json()
+    if (!res.ok) { setError('Notification failed: ' + result.error); setSending(false); return }
     setSending(false); setSent(true); setTimeout(() => setSent(false), 4000)
   }
 
