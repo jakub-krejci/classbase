@@ -61,8 +61,14 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
                 </a>
               )}
               {st === 'submitted' && (
-                <div style={{ padding: '9px 0', background: '#E6F1FB', color: '#0C447C', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-                  ✓ Submitted
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1, padding: '9px 0', background: '#E6F1FB', color: '#0C447C', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+                    ✓ Submitted
+                  </div>
+                  <a href={`/student/tests/${t.id}`}
+                    style={{ padding: '9px 14px', background: '#f3f4f6', color: '#444', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none', border: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                    👁 My answers
+                  </a>
                 </div>
               )}
             </div>

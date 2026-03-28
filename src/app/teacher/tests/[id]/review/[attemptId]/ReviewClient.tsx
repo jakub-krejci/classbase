@@ -39,14 +39,13 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
       }).eq('id', ans.id)
       if (err) { setError('Save failed: ' + err.message); setSaving(false); return }
     }
-    // Compute final score: sum teacher_points for descriptive, auto for rest
+    // Compute final score: use teacher_points if set, otherwise auto-grade
     let computed = 0
     for (const q of sortedQ) {
       const ans = answers[q.id]
-      if (q.type === 'descriptive') {
-        computed += ans?.teacher_points ?? 0
-      } else {
-        // Use the already auto-computed score from auto-grade — re-derive here
+      if (ans?.teacher_points != null) {
+        computed += ans.teacher_points
+      } else if (q.type !== 'descriptive') {
         const opts = q.test_question_options ?? []
         const selected: string[] = ans?.selected_option_ids ?? []
         const correctIds = opts.filter((o: any) => o.is_correct).map((o: any) => o.id)
@@ -59,6 +58,7 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
           else if (selected.length > 0) computed -= (q.points_incorrect ?? 0)
         }
       }
+      // descriptive with no teacher_points stays 0
     }
     const fs = finalScore !== '' ? parseFloat(finalScore) : computed
     const { error: err2 } = await supabase.from('test_attempts').update({
@@ -80,7 +80,7 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
       user_id: attempt.student_id,
       type: 'announcement',
       title: `Test graded: ${test.title}`,
-      message: `Your test has been reviewed. Final score: ${fs} / ${attempt.max_score}. ${feedback ? 'Teacher left feedback.' : ''}`,
+      body: `Your test has been reviewed. Final score: ${fs} / ${attempt.max_score}.${feedback ? ' Your teacher left feedback.' : ''}`,
       read: false,
     })
     if (err) { setError('Notification failed: ' + err.message); setSending(false); return }
@@ -197,16 +197,19 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
 
                 {/* Teacher grading row */}
                 <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  {q.type === 'descriptive' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <label style={{ fontSize: 12, color: '#666', whiteSpace: 'nowrap' }}>Points (max {q.points_correct}):</label>
-                      <input type="number" min={0} max={q.points_correct} step={0.5}
-                        value={ans?.teacher_points ?? ''}
-                        onChange={e => patchAnswer(q.id, { teacher_points: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                        placeholder="—"
-                        style={{ width: 68, padding: '4px 8px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, outline: 'none', textAlign: 'center' }} />
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label style={{ fontSize: 12, color: '#666', whiteSpace: 'nowrap' }}>
+                      Points (max {q.points_correct}):
+                    </label>
+                    <input type="number" min={0} max={q.points_correct} step={0.5}
+                      value={ans?.teacher_points ?? ''}
+                      onChange={e => patchAnswer(q.id, { teacher_points: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                      placeholder={isObjective ? (autoCorrect ? q.points_correct.toString() : '0') : '—'}
+                      style={{ width: 68, padding: '4px 8px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, outline: 'none', textAlign: 'center' }} />
+                    {isObjective && ans?.teacher_points == null && (
+                      <span style={{ fontSize: 11, color: '#aaa' }}>auto: {autoCorrect ? q.points_correct : 0}</span>
+                    )}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <input
                       value={ans?.teacher_note ?? ''}
