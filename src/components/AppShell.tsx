@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { DarkContext } from '@/lib/darkMode'
 import ChatWidget from './ChatWidget'
+import GlobalSearch from './GlobalSearch'
 
 const LOGO_SMALL = '/logo_male.png'
 
@@ -131,6 +132,13 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
         </a>
         <span style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: roleColor.bg, color: roleColor.text, whiteSpace: 'nowrap' }}>{role}</span>
         <div style={{ flex: 1 }} />
+
+        {/* Search — students only */}
+        {role === 'student' && (
+          <div className="cb-desktop-nav" style={{ marginRight: 8 }}>
+            <GlobalSearch />
+          </div>
+        )}
 
         {/* Desktop nav */}
         <div className="cb-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

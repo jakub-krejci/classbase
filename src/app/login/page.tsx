@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [view, setView] = useState<View>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [fullName, setFullName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -29,6 +30,7 @@ export default function LoginPage() {
     reset(); setLoading(true)
     if (!fullName.trim()) { setError('Zadejte prosím své celé jméno.'); setLoading(false); return }
     if (password.length < 6) { setError('Heslo musí mít alespoň 6 znaků.'); setLoading(false); return }
+    if (password !== passwordConfirm) { setError('Hesla se neshodují.'); setLoading(false); return }
     const { error } = await supabase.auth.signUp({
       email, password,
       options: { data: { full_name: fullName, role: 'student' }, emailRedirectTo: `${location.origin}/auth/callback` },
@@ -158,8 +160,18 @@ export default function LoginPage() {
             <label style={lbl}>E-mail</label>
             <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="vas@email.cz" style={inp} />
             <label style={lbl}>Heslo</label>
-            <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="••••••••"
-              onKeyDown={e => e.key === 'Enter' && handleRegister()} style={{ ...inp, marginBottom: 14 }} />
+            <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="••••••••" style={inp} />
+            <label style={lbl}>Heslo znovu</label>
+            <input value={passwordConfirm} onChange={e => setPasswordConfirm(e.target.value)} type="password" placeholder="••••••••"
+              onKeyDown={e => e.key === 'Enter' && handleRegister()}
+              style={{ ...inp, marginBottom: 4, borderColor: passwordConfirm && password !== passwordConfirm ? '#fca5a5' : passwordConfirm && password === passwordConfirm ? '#86efac' : '#e5e7eb' }} />
+            {passwordConfirm && password !== passwordConfirm && (
+              <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 10 }}>Hesla se neshodují</div>
+            )}
+            {passwordConfirm && password === passwordConfirm && (
+              <div style={{ fontSize: 11, color: '#16a34a', marginBottom: 10 }}>✓ Hesla se shodují</div>
+            )}
+            {!passwordConfirm && <div style={{ marginBottom: 10 }} />}
 
             {error && <div style={{ fontSize: 12, padding: '8px 11px', background: '#fef2f2', color: '#dc2626', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
             {success && <div style={{ fontSize: 12, padding: '8px 11px', background: '#f0fdf4', color: '#16a34a', borderRadius: 8, marginBottom: 12 }}>{success}</div>}
