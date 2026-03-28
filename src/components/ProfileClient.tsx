@@ -383,7 +383,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => bannerRef.current?.click()} disabled={uploadingBanner}
-                    style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: uploadingBanner ? .6 : 1 }}>
+                    style={{ padding: '8px 16px', background: accent, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: uploadingBanner ? .6 : 1 }}>
                     {uploadingBanner ? 'Nahrávání…' : bannerUrl ? '🖼 Změnit banner' : '🖼 Nahrát banner'}
                   </button>
                   {bannerUrl && <button onClick={removeBanner} style={{ padding: '8px 14px', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Odebrat</button>}
@@ -525,7 +525,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
               {error   && <div style={{ fontSize: 13, padding: '10px 14px', background: '#fef2f2', color: '#dc2626', borderRadius: 10, marginBottom: 12 }}>⚠ {error}</div>}
               {success && <div style={{ fontSize: 13, padding: '10px 14px', background: '#f0fdf4', color: '#16a34a', borderRadius: 10, marginBottom: 12 }}>✓ {success}</div>}
               <button onClick={changePassword} disabled={saving || !newPass || newPass !== confirmPass}
-                style={{ padding: '11px 28px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving || !newPass || newPass !== confirmPass ? .4 : 1, marginBottom: 24 }}>
+                style={{ padding: '11px 28px', background: accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving || !newPass || newPass !== confirmPass ? .4 : 1, marginBottom: 24 }}>
                 {saving ? 'Ukládání…' : 'Změnit heslo'}
               </button>
 
