@@ -22,6 +22,10 @@ export default async function TestEditorPage({ params }: { params: any }) {
   const { data: groups } = await admin.from('groups').select('id,name').eq('teacher_id', user.id)
   const { data: students } = await admin.from('profiles').select('id,full_name,email').eq('role','student')
   const { data: assignments } = await admin.from('test_assignments').select('*').eq('test_id', params.id)
+  const { data: attempts } = await admin.from('test_attempts')
+    .select('*, profiles(full_name, email)')
+    .eq('test_id', params.id)
+    .order('started_at', { ascending: false })
 
   return (
     <AppShell user={pd} role="teacher" wide>
@@ -31,6 +35,7 @@ export default async function TestEditorPage({ params }: { params: any }) {
         groups={(groups ?? []) as any[]}
         students={(students ?? []) as any[]}
         assignments={(assignments ?? []) as any[]}
+        attempts={(attempts ?? []) as any[]}
       />
     </AppShell>
   )

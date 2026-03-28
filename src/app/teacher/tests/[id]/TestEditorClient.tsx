@@ -172,8 +172,8 @@ function SaveBtn({ onClick, saving, saved, label = 'Save', savedLabel = '✓ Sav
 }
 
 // ── Main editor ────────────────────────────────────────────────────────────────
-export default function TestEditorClient({ test: initial, questions: initQ, groups, students, assignments: initAssign }: {
-  test: any; questions: any[]; groups: any[]; students: any[]; assignments: any[]
+export default function TestEditorClient({ test: initial, questions: initQ, groups, students, assignments: initAssign, attempts: initAttempts }: {
+  test: any; questions: any[]; groups: any[]; students: any[]; assignments: any[]; attempts: any[]
 }) {
   const supabase = createClient()
   const [tab, setTab] = useState<Tab>('settings')
@@ -182,11 +182,20 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
     initQ.map(q => ({ ...q, _dbId: q.id, options: (q.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position) }))
   )
   const [assignments, setAssignments] = useState(initAssign)
+  const [attempts, setAttempts] = useState(initAttempts)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [qSaving, setQSaving] = useState(false)
   const [qSaved, setQSaved] = useState(false)
   const [error, setError] = useState('')
+
+  async function unlockAttempt(attemptId: string) {
+    const { error: err } = await supabase.from('test_attempts')
+      .update({ status: 'in_progress', locked_at: null, warning_count: 0 })
+      .eq('id', attemptId)
+    if (err) { setError('Unlock failed: ' + err.message); return }
+    setAttempts((p: any[]) => p.map(a => a.id === attemptId ? { ...a, status: 'in_progress', locked_at: null, warning_count: 0 } : a))
+  }
 
   // ── Save settings ──────────────────────────────────────────────────────────
   async function saveSettings() {
@@ -329,23 +338,45 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
         {/* Status quick actions */}
         <div style={{ display: 'flex', gap: 6 }}>
           {test.status !== 'published' && (
-            <button onClick={() => setTest((t: any) => ({ ...t, status: 'published' }))}
+            <button onClick={async () => {
+              const updated = { ...test, status: 'published' }
+              setTest(updated)
+              setSettingsSaving(true)
+              const { error: err } = await supabase.from('tests').update({ status: 'published', updated_at: new Date().toISOString() }).eq('id', test.id)
+              setSettingsSaving(false)
+              if (err) setError('Publish failed: ' + err.message)
+              else { setSettingsSaved(true); setTimeout(() => setSettingsSaved(false), 3000) }
+            }}
               style={{ padding: '8px 16px', background: '#EAF3DE', color: '#27500A', border: '1px solid #86efac', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               📢 Publish
             </button>
           )}
           {test.status === 'published' && (
-            <button onClick={() => setTest((t: any) => ({ ...t, status: 'closed' }))}
+            <button onClick={async () => {
+              const updated = { ...test, status: 'closed' }
+              setTest(updated)
+              setSettingsSaving(true)
+              const { error: err } = await supabase.from('tests').update({ status: 'closed', updated_at: new Date().toISOString() }).eq('id', test.id)
+              setSettingsSaving(false)
+              if (err) setError('Close failed: ' + err.message)
+            }}
               style={{ padding: '8px 16px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               🔒 Close test
             </button>
           )}
           {test.status === 'closed' && (
-            <button onClick={() => setTest((t: any) => ({ ...t, status: 'draft' }))}
+            <button onClick={async () => {
+              const updated = { ...test, status: 'draft' }
+              setTest(updated)
+              const { error: err } = await supabase.from('tests').update({ status: 'draft', updated_at: new Date().toISOString() }).eq('id', test.id)
+              if (err) setError('Reopen failed: ' + err.message)
+            }}
               style={{ padding: '8px 16px', background: '#f3f4f6', color: '#555', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               ↩ Reopen as draft
             </button>
           )}
+          {settingsSaving && <span style={{ fontSize: 12, color: '#888', alignSelf: 'center' }}>Saving…</span>}
+          {settingsSaved && <span style={{ fontSize: 12, color: '#27500A', alignSelf: 'center' }}>✓ Saved</span>}
         </div>
       </div>
 
@@ -492,9 +523,9 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
         </div>
       )}
 
-      {/* ── GRADING ── */}
       {tab === 'grading' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <div style={CARD}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>📊 Test summary</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -508,7 +539,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
           </div>
           <div style={CARD}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Questions</div>
-            <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 260, overflowY: 'auto' }}>
               {questions.length === 0 && <div style={{ color: '#aaa', fontSize: 13 }}>No questions yet.</div>}
               {questions.map((q, i) => (
                 <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f9fafb', fontSize: 13 }}>
@@ -520,6 +551,59 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                 </div>
               ))}
             </div>
+          </div>
+          </div>
+
+          {/* Attempts table */}
+          <div style={CARD}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>👥 Student attempts ({attempts.length})</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Locked attempts can be unlocked — warning count resets to 0.</div>
+            {attempts.length === 0 && <div style={{ fontSize: 13, color: '#aaa', textAlign: 'center', padding: '20px 0' }}>No students have started this test yet.</div>}
+            {attempts.length > 0 && (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
+                      {['Student', 'Status', 'Started', 'Submitted', 'Score', 'Warnings', 'Action'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attempts.map((a: any) => {
+                      const ST: Record<string,{bg:string;color:string;label:string}> = {
+                        in_progress: { bg: '#FEF3C7', color: '#92400E', label: 'In progress' },
+                        submitted:   { bg: '#EAF3DE', color: '#27500A', label: 'Submitted' },
+                        locked:      { bg: '#fee2e2', color: '#991b1b', label: 'Locked ⚠️' },
+                        timed_out:   { bg: '#f3f4f6', color: '#555',    label: 'Timed out' },
+                      }
+                      const st = ST[a.status] ?? ST.in_progress
+                      const name = a.profiles?.full_name ?? a.profiles?.email ?? a.student_id.slice(0, 8)
+                      return (
+                        <tr key={a.id} style={{ borderBottom: '1px solid #f9fafb' }}>
+                          <td style={{ padding: '10px 10px', fontWeight: 500 }}>{name}</td>
+                          <td style={{ padding: '10px 10px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: st.bg, color: st.color }}>{st.label}</span>
+                          </td>
+                          <td style={{ padding: '10px 10px', color: '#666' }}>{new Date(a.started_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                          <td style={{ padding: '10px 10px', color: '#666' }}>{a.submitted_at ? new Date(a.submitted_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                          <td style={{ padding: '10px 10px', fontWeight: 600, color: '#185FA5' }}>{a.score != null ? `${a.score} / ${a.max_score}` : '—'}</td>
+                          <td style={{ padding: '10px 10px', color: a.warning_count > 0 ? '#991b1b' : '#888', fontWeight: a.warning_count > 0 ? 700 : 400 }}>{a.warning_count}</td>
+                          <td style={{ padding: '10px 10px' }}>
+                            {(a.status === 'locked' || a.status === 'timed_out') && (
+                              <button onClick={() => unlockAttempt(a.id)}
+                                style={{ padding: '4px 12px', fontSize: 12, fontWeight: 600, background: '#E6F1FB', color: '#0C447C', border: '1px solid #93c5fd', borderRadius: 6, cursor: 'pointer' }}>
+                                🔓 Unlock
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
