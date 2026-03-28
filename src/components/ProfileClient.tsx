@@ -507,7 +507,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
             </div>
           )}
 
-          {/* ── Zabezpečení ── */
+          {/* ── Zabezpečení ── */}
           {activeTab === 'Zabezpečení' && (
             <div>
               <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '24px 28px', marginBottom: 16 }}>
