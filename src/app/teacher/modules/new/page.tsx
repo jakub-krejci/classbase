@@ -81,7 +81,7 @@ export default function NewModulePage() {
 
         {error && <div style={{ fontSize: 12, padding: '7px 10px', background: '#FCEBEB', color: '#791F1F', borderRadius: 8, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn variant="primary" onClick={save} style={{ opacity: saving ? .6 : 1 }}>{saving ? 'Creating…' : 'Create module'}</Btn>
+          <Btn variant="primary" onClick={save} style={{ opacity: saving ? .6 : 1 }}>{saving ? 'Vytváření…' : 'Create module'}</Btn>
           <Btn href="/teacher/modules">Cancel</Btn>
         </div>
       </Card>

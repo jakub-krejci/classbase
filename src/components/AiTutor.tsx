@@ -192,7 +192,7 @@ Keep responses concise but complete. If a question is unrelated to the lesson, g
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          title="Ask AI Tutor"
+          title="Zeptat se AI Tutora"
           style={{
             position: 'fixed', bottom: 20, right: isMobile ? 82 : 82, zIndex: 999,
             width: 52, height: 52, borderRadius: '50%',

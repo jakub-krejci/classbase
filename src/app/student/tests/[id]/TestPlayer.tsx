@@ -614,10 +614,10 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               <div style={{ marginBottom: 24, fontSize: 14, color: '#555', lineHeight: 1.7 }}>{test.description}</div>
             ) : null}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 28 }}>
-              {[['📝', 'Questions', sortedQ.length.toString()],
-                ['⏱', 'Time limit', test.time_limit_mins ? `${test.time_limit_mins} min` : 'No limit'],
-                ['🛡', 'Anti-cheat', `${maxWarnings} warning${maxWarnings !== 1 ? 's' : ''} max`],
-                ['🔁', 'Attempts', test.retake_mode === 'practice' ? 'Practice (unlimited)' : test.retake_mode === 'best' ? `${completedCount} / ${test.max_attempts ?? '∞'} used` : completedCount > 0 ? 'Already submitted' : '1 attempt'],
+              {[['📝', 'Otázky', sortedQ.length.toString()],
+                ['⏱', 'Časový limit', test.time_limit_mins ? `${test.time_limit_mins} min` : 'Bez limitu'],
+                ['🛡', 'Ochrana', `${maxWarnings} varování max`],
+                ['🔁', 'Pokusy', test.retake_mode === 'practice' ? 'Cvičný (neomezeno)' : test.retake_mode === 'best' ? `${completedCount} / ${test.max_attempts ?? '∞'} used` : completedCount > 0 ? 'Již odevzdáno' : '1 pokus'],
               ].map(([icon, label, val]) => (
                 <div key={label} style={{ background: '#f9fafb', borderRadius: 10, padding: '14px 16px' }}>
                   <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>{icon} {label}</div>
@@ -635,7 +635,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             </div>
             {canRetake ? (
               <button onClick={startTest} style={{ width: '100%', padding: '14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-                {completedCount > 0 ? `▶ Retake Test (attempt ${completedCount + 1})` : '▶ Start Test'}
+                {completedCount > 0 ? `▶ Retake Test (attempt ${completedCount + 1})` : '▶ Spustit test'}
               </button>
             ) : (
               <div style={{ width: '100%', padding: '14px', background: '#f3f4f6', color: '#888', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 15, fontWeight: 600, textAlign: 'center' }}>
@@ -754,7 +754,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   // ── LOCKED / TIMED_OUT ───────────────────────────────────────────────────────
   if (phase === 'locked' || phase === 'timed_out') {
     const icons = { locked: '🔒', timed_out: '⏰' }
-    const titles = { locked: 'Test locked', timed_out: 'Time expired' }
+    const titles = { locked: 'Test zamčen', timed_out: 'Time expired' }
     const msgs = {
       locked: `Your test was locked after ${warnings} warning${warnings !== 1 ? 's' : ''} for potential academic dishonesty. Contact your teacher to unlock.`,
       timed_out: 'The time limit was reached. Your answers have been saved.',

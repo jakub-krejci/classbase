@@ -86,7 +86,7 @@ export default function GroupsClient({ groups: initialGroups, students, modules,
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Btn variant="primary" onClick={saveGroup} style={{ opacity: saving ? .6 : 1 }}>{saving ? 'Saving…' : 'Create group'}</Btn>
+            <Btn variant="primary" onClick={saveGroup} style={{ opacity: saving ? .6 : 1 }}>{saving ? 'Saving…' : 'Vytvořit skupinu'}</Btn>
             <Btn onClick={() => { setCreating(false); setName(''); setDesc(''); setSelected([]) }}>Cancel</Btn>
           </div>
         </Card>

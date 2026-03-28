@@ -8,8 +8,8 @@ type QType = 'single' | 'multiple' | 'descriptive' | 'truefalse' | 'coding'
 type Tab = 'settings' | 'questions' | 'assign' | 'grading' | 'preview' | 'stats'
 
 const Q_LABELS: Record<QType, string> = {
-  single: 'Single choice', multiple: 'Multiple choice',
-  descriptive: 'Descriptive', truefalse: 'True / False', coding: 'Coding',
+  single: 'Jeden výběr', multiple: 'Více výběrů',
+  descriptive: 'Popisná', truefalse: 'Pravda / Nepravda', coding: 'Kódování',
 }
 const Q_ICONS: Record<QType, string> = { single: '◉', multiple: '☑', descriptive: '✏️', truefalse: '⇄', coding: '💻' }
 
@@ -426,7 +426,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: 24 }}>
-        {([['settings','⚙️ Settings'],['questions','❓ Questions'],['assign','👥 Assign'],['grading','📊 Grading'],['stats','📈 Statistics'],['preview','👁 Preview']] as [Tab,string][]).map(([t, label]) => (
+        {([['settings','⚙️ Nastavení'],['questions','❓ Otázky'],['assign','👥 Přiřadit'],['grading','📊 Hodnocení'],['stats','📈 Statistiky'],['preview','👁 Náhled']] as [Tab,string][]).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} style={tab === t ? ATAB : TAB}>{label}</button>
         ))}
       </div>
@@ -440,17 +440,17 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               <div>
                 <label style={lbl}>Test name</label>
-                <input value={test.title} onChange={e => setTest((t: any) => ({ ...t, title: e.target.value }))} style={inp} placeholder="e.g. Chapter 3 Quiz" />
+                <input value={test.title} onChange={e => setTest((t: any) => ({ ...t, title: e.target.value }))} style={inp} placeholder="např. Kvíz — kapitola 3" />
               </div>
               <div>
                 <label style={lbl}>Category / Subject</label>
-                <input value={test.category ?? ''} onChange={e => setTest((t: any) => ({ ...t, category: e.target.value }))} style={inp} placeholder="e.g. Mathematics" />
+                <input value={test.category ?? ''} onChange={e => setTest((t: any) => ({ ...t, category: e.target.value }))} style={inp} placeholder="např. Matematika" />
               </div>
               <div>
                 <label style={lbl}>Tags (comma-separated)</label>
                 <input type="text" value={(test.tags ?? []).join(', ')}
                   onChange={e => setTest((t: any) => ({ ...t, tags: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) }))}
-                  placeholder="e.g. algebra, chapter-3" style={inp} />
+                  placeholder="např. algebra, kapitola-3" style={inp} />
               </div>
             </div>
             {(test.tags ?? []).length > 0 && (
@@ -463,7 +463,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
             <div style={{ marginTop: 12 }}>
               <label style={lbl}>Description</label>
               <textarea value={test.description ?? ''} onChange={e => setTest((t: any) => ({ ...t, description: e.target.value }))}
-                style={{ ...inp, height: 72, resize: 'vertical' }} placeholder="Short description visible to students" />
+                style={{ ...inp, height: 72, resize: 'vertical' }} placeholder="Krátký popis viditelný pro studenty" />
             </div>
           </div>
 
@@ -493,7 +493,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
               {test.time_mode === 'total' && (
                 <div>
                   <label style={lbl}>Total time (minutes)</label>
-                  <input type="number" min={1} value={test.time_limit_mins ?? ''} placeholder="e.g. 60"
+                  <input type="number" min={1} value={test.time_limit_mins ?? ''} placeholder="např. 60"
                     onChange={e => setTest((t: any) => ({ ...t, time_limit_mins: e.target.value ? +e.target.value : null }))} style={inp} />
                 </div>
               )}
@@ -517,7 +517,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
               {test.retake_mode === 'best' && (
                 <div>
                   <label style={lbl}>Max attempts</label>
-                  <input type="number" min={2} max={20} value={test.max_attempts ?? ''} placeholder="e.g. 3"
+                  <input type="number" min={2} max={20} value={test.max_attempts ?? ''} placeholder="např. 3"
                     onChange={e => setTest((t: any) => ({ ...t, max_attempts: e.target.value ? +e.target.value : null }))} style={inp} />
                 </div>
               )}
@@ -556,7 +556,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <SaveBtn onClick={saveSettings} saving={settingsSaving} saved={settingsSaved} label="Save settings" savedLabel="✓ Settings saved" />
+            <SaveBtn onClick={saveSettings} saving={settingsSaving} saved={settingsSaved} label="Uložit nastavení" savedLabel="✓ Nastavení uloženo" />
           </div>
         </div>
       )}
@@ -706,7 +706,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
-                      {['Student', 'Status', 'Started', 'Submitted', 'Score', 'Warnings', 'Action'].map(h => (
+                      {['Student', 'Stav', 'Started', 'Submitted', 'Score', 'Warnings', 'Action'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
                       ))}
                     </tr>
@@ -833,7 +833,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
-                      {['Q', 'Question', 'Type', 'Avg score', '% Correct', 'Unanswered'].map(h => (
+                      {['Q', 'Question', 'Typ', 'Průměrné skóre', '% Correct', 'Unanswered'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' as const }}>{h}</th>
                       ))}
                     </tr>

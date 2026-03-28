@@ -53,13 +53,13 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
   }
 
   const STATUS_INFO: Record<string, { label: string; bg: string; color: string }> = {
-    available:   { label: 'Available',   bg: '#EAF3DE', color: '#27500A' },
-    in_progress: { label: 'In progress', bg: '#FEF3C7', color: '#92400E' },
-    submitted:   { label: 'Submitted',   bg: '#E6F1FB', color: '#0C447C' },
-    locked:      { label: 'Locked',      bg: '#fee2e2', color: '#991b1b' },
-    timed_out:   { label: 'Timed out',   bg: '#f3f4f6', color: '#555'    },
-    expired:     { label: 'Expired',     bg: '#f3f4f6', color: '#888'    },
-    upcoming:    { label: 'Upcoming',    bg: '#f0f4ff', color: '#3730a3' },
+    available:   { label: 'Dostupný',   bg: '#EAF3DE', color: '#27500A' },
+    in_progress: { label: 'Probíhá', bg: '#FEF3C7', color: '#92400E' },
+    submitted:   { label: 'Odevzdáno',   bg: '#E6F1FB', color: '#0C447C' },
+    locked:      { label: 'Zamčeno',      bg: '#fee2e2', color: '#991b1b' },
+    timed_out:   { label: 'Čas vypršel',   bg: '#f3f4f6', color: '#555'    },
+    expired:     { label: 'Prošlé',     bg: '#f3f4f6', color: '#888'    },
+    upcoming:    { label: 'Nadcházející',    bg: '#f0f4ff', color: '#3730a3' },
   }
 
   const visibleTests = tests.filter(t => showHidden ? hidden.has(t.id) : !hidden.has(t.id))
@@ -68,7 +68,7 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 10, flexWrap: 'wrap' }}>
-        <PageHeader title="My Tests" sub="Tests assigned to you by your teachers" />
+        <PageHeader title="Moje testy" sub="Testy přiřazené tvými učiteli" />
         <div style={{ display: 'flex', gap: 8 }}>
           {hiddenCount > 0 && (
             <button onClick={() => setShowHidden(v => !v)}
@@ -136,7 +136,7 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
               {canStart && (
                 <a href={`/student/tests/${t.id}`}
                   style={{ display: 'block', padding: '9px 0', background: st === 'in_progress' ? '#FEF3C7' : '#185FA5', color: st === 'in_progress' ? '#92400E' : '#fff', textAlign: 'center', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
-                  {st === 'in_progress' ? '▶ Continue test' : '▶ Start test'}
+                  {st === 'in_progress' ? '▶ Pokračovat v testu' : '▶ Spustit test'}
                 </a>
               )}
 
@@ -148,13 +148,13 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
                     <div style={{ fontSize: 12, color: latest?.reviewed_at ? '#27500A' : '#888', background: latest?.reviewed_at ? '#EAF3DE' : '#f9fafb', borderRadius: 8, padding: '6px 12px', textAlign: 'center', fontWeight: 500 }}>
                       {latest?.reviewed_at
                         ? <>✓ Graded — <strong>{latest.final_score ?? latest.score ?? '?'} / {latest.max_score ?? '?'} pts</strong></>
-                        : '⏳ Not yet graded'}
+                        : '⏳ Zatím neohodnoceno'}
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: 8 }}>
                     {/* Status badge */}
                     <div style={{ flex: canRetakeNow ? 0 : 1, padding: '9px 12px', background: st === 'timed_out' ? '#f3f4f6' : '#E6F1FB', color: st === 'timed_out' ? '#555' : '#0C447C', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {st === 'timed_out' ? '⏰ Time expired' : '✓ Submitted'}
+                      {st === 'timed_out' ? '⏰ Čas vypršel' : '✓ Odevzdáno'}
                     </div>
                     {/* My answers */}
                     <a href={`/student/tests/${t.id}`}

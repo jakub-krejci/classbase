@@ -1275,7 +1275,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
             </div>
           </div>
           {/* Collapsed strip — ToC level lines */}
-          <div className="cb-sidebar-strip" title="Table of contents">
+          <div className="cb-sidebar-strip" title="Obsah">
             {tocItems.slice(0, 16).map(item => (
               <div key={item.id} className={`cb-strip-line h${item.level}`}
                 style={{ background: tocActiveId === item.id ? '#185FA5' : '#c7d3ff' }} />

@@ -153,7 +153,7 @@ export default function EditAssignmentPage() {
 
         {error && <div style={{ fontSize: 12, padding: '7px 10px', background: '#FCEBEB', color: '#791F1F', borderRadius: 8, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn variant="primary" onClick={save} style={{ opacity: saving ? .6 : 1 }}>{saving ? 'Saving…' : 'Save changes'}</Btn>
+          <Btn variant="primary" onClick={save} style={{ opacity: saving ? .6 : 1 }}>{saving ? 'Ukládání…' : 'Uložit změny'}</Btn>
           <Btn href={'/teacher/modules/' + moduleId}>Cancel</Btn>
         </div>
       </Card>

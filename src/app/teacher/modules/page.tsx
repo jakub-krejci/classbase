@@ -44,7 +44,7 @@ export default async function TeacherModulesPage() {
       <PageHeader title="My modules" sub={`Welcome back, ${profile?.full_name ?? ''}`}
         action={<Btn href="/teacher/modules/new" variant="primary">+ New module</Btn>} />
       <StatGrid stats={[
-        { label: 'Active modules', value: activeModules.length },
+        { label: 'Aktivní moduly', value: activeModules.length },
         { label: 'Lessons', value: activeLessonCount },
         { label: 'Enrollments', value: activeEnrCount },
       ]} />

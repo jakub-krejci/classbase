@@ -5,14 +5,14 @@ import { createClient } from '@/lib/supabase/client'
 import { PageHeader } from '@/components/ui'
 
 const ACCENT_COLORS = [
-  { label: 'Ocean',    value: '#185FA5' },
+  { label: 'Oceán',    value: '#185FA5' },
   { label: 'Violet',  value: '#6c47ff' },
-  { label: 'Forest',  value: '#16a34a' },
-  { label: 'Amber',   value: '#d97706' },
-  { label: 'Rose',    value: '#e06c75' },
-  { label: 'Teal',    value: '#0d9488' },
-  { label: 'Slate',   value: '#475569' },
-  { label: 'Fuchsia', value: '#a21caf' },
+  { label: 'Les',  value: '#16a34a' },
+  { label: 'Jantarová',   value: '#d97706' },
+  { label: 'Růžová',    value: '#e06c75' },
+  { label: 'Tyrkysová',    value: '#0d9488' },
+  { label: 'Břidlicová',   value: '#475569' },
+  { label: 'Fuchsiová', value: '#a21caf' },
 ]
 
 function AvatarUpload({ url, name, accent, onUpload }: {
@@ -28,7 +28,7 @@ function AvatarUpload({ url, name, accent, onUpload }: {
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 2 * 1024 * 1024) { setError('File must be under 2 MB'); return }
+    if (file.size > 2 * 1024 * 1024) { setError('Soubor musí být menší než 2 MB'); return }
     setUploading(true); setError('')
     const ext = file.name.split('.').pop()
     const path = `avatars/${crypto.randomUUID()}.${ext}`
@@ -56,7 +56,7 @@ function AvatarUpload({ url, name, accent, onUpload }: {
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
       </div>
       <div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#111', marginBottom: 4 }}>{name || 'Your name'}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#111', marginBottom: 4 }}>{name || 'Tvoje jméno'}</div>
         <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>JPG, PNG or GIF · max 2 MB</div>
         <button onClick={() => fileRef.current?.click()} disabled={uploading}
           style={{ padding: '5px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, cursor: 'pointer', color: '#444' }}>
@@ -132,7 +132,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
 
   return (
     <div style={{ maxWidth: 560 }}>
-      <PageHeader title="Profile settings" sub="Manage your account and personalise your experience" />
+      <PageHeader title="Nastavení profilu" sub="Spravuj svůj účet a přizpůsob si prostředí" />
 
       {/* ── Avatar ── */}
       <div style={CARD}>
@@ -148,7 +148,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
         <label style={lbl}>Email</label>
         <input style={{ ...inp, background: '#f9fafb', color: '#888', cursor: 'not-allowed' }} value={profile?.email ?? ''} readOnly />
         <label style={lbl}>Bio (optional)</label>
-        <textarea style={{ ...inp, height: 72, resize: 'vertical' }} value={bio} onChange={e => setBio(e.target.value)} placeholder="A few words about yourself…" />
+        <textarea style={{ ...inp, height: 72, resize: 'vertical' }} value={bio} onChange={e => setBio(e.target.value)} placeholder="Pár slov o sobě…" />
       </div>
 
       {/* ── Student-only fields ── */}
@@ -158,16 +158,16 @@ export default function ProfileClient({ profile }: { profile: any }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 0 }}>
             <div>
               <label style={lbl}>Class / Group</label>
-              <input style={{ ...inp, marginBottom: 0 }} value={studentClass} onChange={e => setStudentClass(e.target.value)} placeholder="e.g. 3B, Alpha" />
+              <input style={{ ...inp, marginBottom: 0 }} value={studentClass} onChange={e => setStudentClass(e.target.value)} placeholder="např. 3B, Alfa" />
             </div>
             <div>
               <label style={lbl}>Grade / Year</label>
-              <input style={{ ...inp, marginBottom: 0 }} value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} placeholder="e.g. Grade 10, Year 2" />
+              <input style={{ ...inp, marginBottom: 0 }} value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} placeholder="např. 10. ročník" />
             </div>
           </div>
           <div style={{ marginTop: 14 }}>
             <label style={lbl}>Pronouns (optional)</label>
-            <input style={inp} value={pronouns} onChange={e => setPronouns(e.target.value)} placeholder="e.g. she/her, he/him, they/them" />
+            <input style={inp} value={pronouns} onChange={e => setPronouns(e.target.value)} placeholder="např. ona, on, oni" />
           </div>
         </div>
       )}
@@ -177,7 +177,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
         <div style={CARD}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Teacher details</div>
           <label style={lbl}>Subject specialty</label>
-          <input style={inp} value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Physics & Natural Sciences" />
+          <input style={inp} value={subject} onChange={e => setSubject(e.target.value)} placeholder="např. Fyzika a přírodní vědy" />
         </div>
       )}
 

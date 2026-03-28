@@ -5,9 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { PageHeader, EmptyState } from '@/components/ui'
 
 const STATUS_STYLES: Record<string, { bg: string; color: string; label: string }> = {
-  draft:     { bg: '#f3f4f6', color: '#555',    label: 'Draft' },
-  published: { bg: '#EAF3DE', color: '#27500A', label: 'Published' },
-  closed:    { bg: '#fee2e2', color: '#991b1b',  label: 'Closed' },
+  draft:     { bg: '#f3f4f6', color: '#555',    label: 'Koncept' },
+  published: { bg: '#EAF3DE', color: '#27500A', label: 'Zveřejněný' },
+  closed:    { bg: '#fee2e2', color: '#991b1b',  label: 'Uzavřený' },
 }
 
 export default function TestsClient({ tests: initial, teacherId }: { tests: any[]; teacherId: string }) {
@@ -70,12 +70,12 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <PageHeader title="Tests" sub="Create and manage tests for your students" />
+        <PageHeader title="Testy" sub="Vytvářej a spravuj testy pro studenty" />
         <div style={{ display: 'flex', gap: 8 }}>
           {tests.some(t => t.archived) && (
             <button onClick={() => setShowArchived(v => !v)}
               style={{ padding: '9px 16px', background: showArchived ? '#185FA5' : '#f3f4f6', color: showArchived ? '#fff' : '#555', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-              {showArchived ? '← Active tests' : `🗄 Archived (${tests.filter(t => t.archived).length})`}
+              {showArchived ? '← Aktivní testy' : `🗄 Archived (${tests.filter(t => t.archived).length})`}
             </button>
           )}
           {!showArchived && (
@@ -119,8 +119,8 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
         </div>
       )}
 
-      {activeTests.length === 0 && !showArchived && <EmptyState message="No tests yet — create your first test to assess students" />}
-      {activeTests.length === 0 && showArchived && <EmptyState message="No archived tests." />}
+      {activeTests.length === 0 && !showArchived && <EmptyState message="Zatím žádné testy — vytvořte svůj první test" />}
+      {activeTests.length === 0 && showArchived && <EmptyState message="Žádné archivované testy." />}
 
       {activeTests.length > 0 && filtered.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 20px', color: '#aaa', border: '1px dashed #e5e7eb', borderRadius: 14 }}>
@@ -179,12 +179,12 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
                   Edit
                 </a>
                 <button onClick={() => duplicate(t)}
-                  style={{ padding: '7px 12px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, cursor: 'pointer', color: '#555' }} title="Duplicate">
+                  style={{ padding: '7px 12px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, cursor: 'pointer', color: '#555' }} title="Duplikovat">
                   ⎘
                 </button>
                 <button onClick={() => toggleArchive(t)} disabled={archiving === t.id}
                   style={{ padding: '7px 12px', background: t.archived ? '#E6F1FB' : '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 12, cursor: 'pointer', color: t.archived ? '#185FA5' : '#888' }}
-                  title={t.archived ? 'Restore' : 'Archive'}>
+                  title={t.archived ? 'Obnovit' : 'Archivovat'}>
                   {archiving === t.id ? '…' : t.archived ? '↩' : '🗄'}
                 </button>
                 <button onClick={() => deleteTest(t.id)} disabled={deleting === t.id}

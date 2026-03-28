@@ -89,18 +89,18 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   function closeNotifPanel() { setNotifOpen(false) }
 
   const teacherNav = [
-    { label: 'Modules', href: '/teacher/modules' },
-    { label: 'Grade', href: '/teacher/grade' },
-    { label: 'Tests', href: '/teacher/tests' },
-    { label: '📚 Bank', href: '/teacher/question-bank' },
-    { label: 'Groups', href: '/teacher/groups' },
+    { label: 'Moduly', href: '/teacher/modules' },
+    { label: 'Hodnocení', href: '/teacher/grade' },
+    { label: 'Testy', href: '/teacher/tests' },
+    { label: '📚 Banka', href: '/teacher/question-bank' },
+    { label: 'Skupiny', href: '/teacher/groups' },
   ]
   const studentNav = [
-    { label: '🏠 Home', href: '/student/dashboard' },
-    { label: 'Modules', href: '/student/modules' },
-    { label: 'Tests', href: '/student/tests' },
-    { label: 'Progress', href: '/student/progress' },
-    { label: 'Bookmarks', href: '/student/bookmarks' },
+    { label: '🏠 Domů', href: '/student/dashboard' },
+    { label: 'Moduly', href: '/student/modules' },
+    { label: 'Testy', href: '/student/tests' },
+    { label: 'Pokrok', href: '/student/progress' },
+    { label: 'Záložky', href: '/student/bookmarks' },
   ]
   const nav = role === 'teacher' ? teacherNav : studentNav
   const profileHref = role === 'teacher' ? '/teacher/profile' : '/student/profile'

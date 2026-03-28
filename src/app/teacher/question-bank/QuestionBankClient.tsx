@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Breadcrumb, PageHeader } from '@/components/ui'
 
 const Q_LABELS: Record<string, string> = {
-  single: 'Single choice', multiple: 'Multiple choice',
-  descriptive: 'Descriptive', truefalse: 'True / False', coding: 'Coding',
+  single: 'Jeden výběr', multiple: 'Více výběrů',
+  descriptive: 'Popisná', truefalse: 'Pravda / Nepravda', coding: 'Kódování',
 }
 const TYPE_COLORS: Record<string, string> = {
   single: '#E6F1FB', multiple: '#f5f3ff', descriptive: '#fff7ed',
@@ -81,7 +81,7 @@ export default function QuestionBankClient({ questions: initQuestions, tests, te
           <span style={{ fontSize: 18 }}>🗑️</span> Question deleted from bank
         </div>
       )}
-      <Breadcrumb items={[{ label: 'Tests', href: '/teacher/tests' }, { label: 'Question Bank' }]} />
+      <Breadcrumb items={[{ label: 'Testy', href: '/teacher/tests' }, { label: 'Banka otázek' }]} />
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>📚 Question Bank</h1>
@@ -106,7 +106,7 @@ export default function QuestionBankClient({ questions: initQuestions, tests, te
         {['all', 'single', 'multiple', 'truefalse', 'descriptive', 'coding'].map(t => (
           <button key={t} onClick={() => setTypeFilter(t)}
             style={{ padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${typeFilter === t ? '#185FA5' : '#e5e7eb'}`, background: typeFilter === t ? '#185FA5' : '#fff', color: typeFilter === t ? '#fff' : '#555', fontSize: 12, fontWeight: 500, cursor: 'pointer', textTransform: 'capitalize' as const }}>
-            {t === 'all' ? 'All types' : Q_LABELS[t] ?? t}
+            {t === 'all' ? 'Všechny typy' : Q_LABELS[t] ?? t}
           </button>
         ))}
       </div>
@@ -160,14 +160,14 @@ export default function QuestionBankClient({ questions: initQuestions, tests, te
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => importToTest(q)} disabled={importing[q.id] || !selectedTest}
                       style={{ padding: '7px 16px', background: imported[q.id] ? '#16a34a' : '#185FA5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: importing[q.id] ? .6 : 1 }}>
-                      {importing[q.id] ? 'Importing…' : imported[q.id] ? '✓ Imported!' : '⊕ Import to test'}
+                      {importing[q.id] ? 'Importování…' : imported[q.id] ? '✓ Importováno!' : '⊕ Importovat do testu'}
                     </button>
                     {pendingDelete === q.id ? (
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '5px 10px' }}>
                         <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>Delete?</span>
                         <button onClick={() => confirmDelete(q.id)} disabled={deleting[q.id]}
                           style={{ padding: '3px 10px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                          {deleting[q.id] ? '…' : 'Yes'}
+                          {deleting[q.id] ? '…' : 'Ano'}
                         </button>
                         <button onClick={() => setPendingDelete(null)}
                           style={{ padding: '3px 8px', background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', color: '#888' }}>✕</button>

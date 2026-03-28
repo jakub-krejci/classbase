@@ -24,7 +24,7 @@ export default function AssignmentView({ assignment, moduleId, studentId, existi
     const isGraded = sub.status === 'graded'
     return (
       <div>
-        <BackLink href={'/student/modules/' + moduleId} label="Back to module" />
+        <BackLink href={'/student/modules/' + moduleId} label="Zpět na modul" />
         <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>{assignment.title}</h1>
         <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>{assignment.type} · Already submitted</div>
         <div style={{ padding: '10px 14px', background: '#EAF3DE', color: '#27500A', borderRadius: 10, fontSize: 13, marginBottom: 12 }}>
@@ -86,7 +86,7 @@ export default function AssignmentView({ assignment, moduleId, studentId, existi
 
   return (
     <div>
-      <BackLink href={'/student/modules/' + moduleId} label="Back to module" />
+      <BackLink href={'/student/modules/' + moduleId} label="Zpět na modul" />
       <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>{assignment.title}</h1>
       <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
         {assignment.type}
@@ -108,7 +108,7 @@ export default function AssignmentView({ assignment, moduleId, studentId, existi
               )}
               <label style={{ fontSize: 11, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Your answer</label>
               <textarea value={hwText} onChange={e => setHwText(e.target.value)}
-                style={{ ...inp, height: 120, resize: 'vertical', marginBottom: 12 }} placeholder="Write your answer here…" />
+                style={{ ...inp, height: 120, resize: 'vertical', marginBottom: 12 }} placeholder="Zde napiš svou odpověď…" />
               <label style={{ fontSize: 11, fontWeight: 500, color: '#666', display: 'block', marginBottom: 4 }}>Attach file (optional)</label>
               <div onClick={() => fileRef.current?.click()}
                 style={{ padding: '14px', border: '1px dashed #e5e7eb', borderRadius: 8, textAlign: 'center', fontSize: 13, color: fileName ? '#27500A' : '#888', background: fileName ? '#EAF3DE' : '#f9fafb', cursor: 'pointer', marginBottom: 14 }}>

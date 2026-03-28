@@ -63,7 +63,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
   const pendingTests = tests.filter(t => !attempts.find(a => a.test_id === t.id && ['submitted','timed_out'].includes(a.status)))
 
   const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const greeting = hour < 12 ? 'Dobré ráno' : hour < 17 ? 'Dobré odpoledne' : 'Dobrý večer'
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -118,11 +118,11 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
       {/* ── Stat chips ── */}
       <div className="db-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
         {[
-          { icon: '📚', label: 'Modules', value: enrollments.length, href: '/student/modules', color: accent },
-          { icon: '✅', label: 'Lessons done', value: `${completedLessons}/${totalLessons}`, href: '/student/progress', color: '#16a34a' },
-          { icon: '🏆', label: 'Completed', value: completedModules, href: '/student/progress', color: '#6c47ff' },
-          ...(avgScore !== null ? [{ icon: '📊', label: 'Avg score', value: `${avgScore}%`, href: '/student/tests/history', color: avgScore >= 70 ? '#16a34a' : '#d97706' }] : []),
-          ...(pendingTests.length > 0 ? [{ icon: '⏳', label: 'Tests pending', value: pendingTests.length, href: '/student/tests', color: '#d97706' }] : []),
+          { icon: '📚', label: 'Moduly', value: enrollments.length, href: '/student/modules', color: accent },
+          { icon: '✅', label: 'Splněné lekce', value: `${completedLessons}/${totalLessons}`, href: '/student/progress', color: '#16a34a' },
+          { icon: '🏆', label: 'Dokončeno', value: completedModules, href: '/student/progress', color: '#6c47ff' },
+          ...(avgScore !== null ? [{ icon: '📊', label: 'Průměr', value: `${avgScore}%`, href: '/student/tests/history', color: avgScore >= 70 ? '#16a34a' : '#d97706' }] : []),
+          ...(pendingTests.length > 0 ? [{ icon: '⏳', label: 'Čekající testy', value: pendingTests.length, href: '/student/tests', color: '#d97706' }] : []),
         ].map(({ icon, label, value, href, color }) => (
           <a key={label} href={href} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, textDecoration: 'none', color: 'inherit' }}>
             <div style={{ width: 38, height: 38, borderRadius: 10, background: color + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{icon}</div>
@@ -207,10 +207,10 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
             <h2 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 12px' }}>🔗 Quick links</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
-                { icon: '📖', label: 'Bookmarks', href: '/student/bookmarks' },
-                { icon: '📈', label: 'Progress', href: '/student/progress' },
-                { icon: '📊', label: 'Test History', href: '/student/tests/history' },
-                { icon: '👤', label: 'My Profile', href: '/student/profile' },
+                { icon: '📖', label: 'Záložky', href: '/student/bookmarks' },
+                { icon: '📈', label: 'Pokrok', href: '/student/progress' },
+                { icon: '📊', label: 'Historie testů', href: '/student/tests/history' },
+                { icon: '👤', label: 'Můj profil', href: '/student/profile' },
               ].map(({ icon, label, href }) => (
                 <a key={href} href={href}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, textDecoration: 'none', color: '#333', fontSize: 13, fontWeight: 500 }}>

@@ -6,8 +6,8 @@ import { Breadcrumb } from '@/components/ui'
 import { highlightPython, PYTHON_CSS } from '@/lib/highlight'
 
 const Q_LABELS: Record<string, string> = {
-  single: 'Single choice', multiple: 'Multiple choice',
-  descriptive: 'Descriptive', truefalse: 'True / False', coding: 'Coding',
+  single: 'Jeden výběr', multiple: 'Více výběrů',
+  descriptive: 'Popisná', truefalse: 'Pravda / Nepravda', coding: 'Kódování',
 }
 
 // Per-student editable card — isolated component so hooks are legal
@@ -98,7 +98,7 @@ function StudentAnswerCard({ att, currentQ, opts, correctIds, answer, onSave }: 
         <span style={{ fontSize: 11, color: '#aaa' }}>/ {currentQ.points_correct}</span>
         <button onClick={handleSave} disabled={saving}
           style={{ marginLeft: 'auto', padding: '4px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: saving ? .6 : 1 }}>
-          {saving ? '…' : 'Save'}
+          {saving ? '…' : 'Uložit'}
         </button>
       </div>
       <input type="text" placeholder="Teacher note (optional)…" value={localNote} onChange={e => setLocalNote(e.target.value)}
@@ -160,9 +160,9 @@ export default function BulkGradeClient({ test, questions, attempts, answers, in
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <style>{PYTHON_CSS}</style>
       <Breadcrumb items={[
-        { label: 'Tests', href: '/teacher/tests' },
+        { label: 'Testy', href: '/teacher/tests' },
         { label: test.title, href: `/teacher/tests/${test.id}` },
-        { label: 'Bulk Grade' },
+        { label: 'Hromadné hodnocení' },
       ]} />
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>

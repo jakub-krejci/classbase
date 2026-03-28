@@ -28,7 +28,7 @@ export default function GradeClient({ submissions }: { submissions: any[] }) {
 
   return (
     <div>
-      <PageHeader title="Grading" sub="Review open-ended answers and homework submissions" />
+      <PageHeader title="Hodnocení" sub="Review open-ended answers and homework submissions" />
       {submissions.length === 0 ? (
         <EmptyState message="No submissions pending review. Open-ended answers and homework appear here after students submit." />
       ) : (

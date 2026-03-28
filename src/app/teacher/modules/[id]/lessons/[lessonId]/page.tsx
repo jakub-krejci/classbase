@@ -437,7 +437,7 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
             <button style={{...TB,fontSize:10,color:'#888'}} title="Duplicate block" onMouseDown={e=>{e.preventDefault();onDuplicate()}}>⎘</button>
             <button style={{...TB,fontSize:11,color:'#888'}} title="Move block up" onMouseDown={e=>{e.preventDefault();onMoveUp()}}>↑</button>
             <button style={{...TB,fontSize:11,color:'#888'}} title="Move block down" onMouseDown={e=>{e.preventDefault();onMoveDown()}}>↓</button>
-            {canDelete && <button style={{...TB,fontSize:11,color:'#A32D2D'}} title="Delete block" onMouseDown={e=>{e.preventDefault();onDelete()}}>✕</button>}
+            {canDelete && <button style={{...TB,fontSize:11,color:'#A32D2D'}} title="Smazat blok" onMouseDown={e=>{e.preventDefault();onDelete()}}>✕</button>}
           </div>
         </div>
       </div>

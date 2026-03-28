@@ -102,15 +102,15 @@ export default function TestHistoryClient({ attempts, answers }: {
           else if (older - recent > 5) trend = 'down'
         }
         const trendInfo = {
-          up:     { icon: '↑', label: 'Improving', color: '#16a34a', bg: '#f0fdf4' },
-          down:   { icon: '↓', label: 'Declining',  color: '#dc2626', bg: '#fef2f2' },
-          stable: { icon: '→', label: 'Stable',     color: '#2563eb', bg: '#eff6ff' },
+          up:     { icon: '↑', label: 'Zlepšování', color: '#16a34a', bg: '#f0fdf4' },
+          down:   { icon: '↓', label: 'Zhoršování',  color: '#dc2626', bg: '#fef2f2' },
+          stable: { icon: '→', label: 'Stabilní',     color: '#2563eb', bg: '#eff6ff' },
         }[trend]
         const stats = [
-          { label: 'Average score', value: `${avg}%`, color: avg >= 80 ? '#16a34a' : avg >= 50 ? '#d97706' : '#dc2626' },
-          { label: 'Best score',    value: `${best}%`, color: '#16a34a' },
-          { label: 'Latest score',  value: `${latest}%`, color: latest >= 80 ? '#16a34a' : latest >= 50 ? '#d97706' : '#dc2626' },
-          { label: 'Total attempts', value: `${attempts.length}`, color: '#185FA5' },
+          { label: 'Průměrné skóre', value: `${avg}%`, color: avg >= 80 ? '#16a34a' : avg >= 50 ? '#d97706' : '#dc2626' },
+          { label: 'Nejlepší skóre',    value: `${best}%`, color: '#16a34a' },
+          { label: 'Poslední skóre',  value: `${latest}%`, color: latest >= 80 ? '#16a34a' : latest >= 50 ? '#d97706' : '#dc2626' },
+          { label: 'Celkem pokusů', value: `${attempts.length}`, color: '#185FA5' },
         ]
         return (
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
@@ -191,7 +191,7 @@ export default function TestHistoryClient({ attempts, answers }: {
                 {[
                   ['Status', selectedAttempt.status === 'timed_out' ? '⏰ Timed out' : '✓ Submitted'],
                   ['Score', `${selectedAttempt.final_score ?? selectedAttempt.score ?? '—'} / ${selectedAttempt.max_score ?? '—'}`],
-                  ['Graded', selectedAttempt.reviewed_at ? '✓ Yes' : '⏳ Pending'],
+                  ['Graded', selectedAttempt.reviewed_at ? '✓ Ano' : '⏳ Čeká'],
                   ['Time', formatDuration(selectedAttempt.time_spent_secs)],
                 ].map(([label, val]) => (
                   <div key={label} style={{ background: '#f9fafb', borderRadius: 10, padding: '10px 14px', minWidth: 90 }}>
@@ -214,7 +214,7 @@ export default function TestHistoryClient({ attempts, answers }: {
               {(['overview', 'questions'] as const).map(t => (
                 <button key={t} onClick={() => setView(t)}
                   style={{ padding: '7px 16px', borderRadius: 8, border: `1.5px solid ${view === t ? '#185FA5' : '#e5e7eb'}`, background: view === t ? '#185FA5' : '#fff', color: view === t ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}>
-                  {t === 'overview' ? '📈 Overview' : '❓ Questions'}
+                  {t === 'overview' ? '📈 Přehled' : '❓ Otázky'}
                 </button>
               ))}
             </div>
@@ -251,8 +251,8 @@ export default function TestHistoryClient({ attempts, answers }: {
                   const strongest = scored.slice(-3).reverse()
                   return (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                      {[{ label: '⚠️ Needs work', items: weakest, bg: '#fff7f7', border: '#fecaca', text: '#991b1b' },
-                        { label: '✨ Strong areas', items: strongest, bg: '#f0fdf4', border: '#bbf7d0', text: '#166534' }].map(({ label, items, bg, border, text }) => (
+                      {[{ label: '⚠️ Potřebuje procvičit', items: weakest, bg: '#fff7f7', border: '#fecaca', text: '#991b1b' },
+                        { label: '✨ Silné oblasti', items: strongest, bg: '#f0fdf4', border: '#bbf7d0', text: '#166534' }].map(({ label, items, bg, border, text }) => (
                         <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 12, padding: '16px 18px' }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: text, marginBottom: 10 }}>{label}</div>
                           {(items as any[]).map((s: any, i: number) => (

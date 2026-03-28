@@ -153,7 +153,7 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
     <div>
       <style>{PYTHON_CSS}</style>
       <Breadcrumb items={[
-        { label: 'Tests', href: '/teacher/tests' },
+        { label: 'Testy', href: '/teacher/tests' },
         { label: test.title, href: `/teacher/tests/${test.id}` },
         { label: `Review — ${studentName}` },
       ]} />
@@ -172,7 +172,7 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={saveGrades} disabled={saving}
             style={{ padding: '9px 20px', background: saving ? '#aaa' : saved ? '#27500A' : '#185FA5', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save grades'}
+            {saving ? 'Ukládání…' : saved ? '✓ Saved' : 'Save grades'}
           </button>
           <button onClick={sendToStudent} disabled={sending}
             style={{ padding: '9px 20px', background: sent ? '#27500A' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
