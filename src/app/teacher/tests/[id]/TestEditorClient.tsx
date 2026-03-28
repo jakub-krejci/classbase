@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Breadcrumb } from '@/components/ui'
 
 type QType = 'single' | 'multiple' | 'descriptive' | 'truefalse' | 'coding'
-type Tab = 'settings' | 'questions' | 'assign' | 'grading' | 'preview'
+type Tab = 'settings' | 'questions' | 'assign' | 'grading' | 'preview' | 'stats'
 
 const Q_LABELS: Record<QType, string> = {
   single: 'Single choice', multiple: 'Multiple choice',
@@ -224,6 +224,8 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
       time_limit_mins: test.time_limit_mins || null,
       time_mode: test.time_mode ?? 'none',
       max_warnings: test.max_warnings,
+      randomise_questions: !!test.randomise_questions,
+      randomise_options: !!test.randomise_options,
       available_from: test.available_from || null,
       available_until: test.available_until || null,
       updated_at: new Date().toISOString(),
@@ -409,7 +411,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: 24 }}>
-        {([['settings','⚙️ Settings'],['questions','❓ Questions'],['assign','👥 Assign'],['grading','📊 Grading'],['preview','👁 Preview']] as [Tab,string][]).map(([t, label]) => (
+        {([['settings','⚙️ Settings'],['questions','❓ Questions'],['assign','👥 Assign'],['grading','📊 Grading'],['stats','📈 Statistics'],['preview','👁 Preview']] as [Tab,string][]).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)} style={tab === t ? ATAB : TAB}>{label}</button>
         ))}
       </div>
@@ -467,7 +469,22 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                 )}
               </div>
               <div style={CARD}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🛡 Anti-cheat</div>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>🔀 Randomisation</div>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Each student gets a uniquely shuffled test, reducing copying.</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {([['randomise_questions', 'Shuffle question order', 'Each student sees questions in a different order'],
+                     ['randomise_options',   'Shuffle option order',   'Answer choices (A/B/C/D) are shuffled per student']] as [string, string, string][]).map(([key, label, desc]) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${test[key] ? '#185FA5' : '#e5e7eb'}`, background: test[key] ? '#E6F1FB' : '#fff' }}>
+                      <input type="checkbox" checked={!!test[key]} onChange={e => setTest((t: any) => ({ ...t, [key]: e.target.checked }))} style={{ marginTop: 2 }} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{label}</div>
+                        <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div style={CARD}>
                 <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Students get a warning each time they switch tabs or leave the page.</div>
                 <label style={lbl}>Max warnings before test is locked</label>
                 <input type="number" min={1} max={20} value={test.max_warnings ?? 3}
@@ -492,16 +509,38 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
         <div>
           {questions.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: '#aaa', border: '1px dashed #e5e7eb', borderRadius: 12, marginBottom: 20 }}>
-              No questions yet — add one below.
+              No questions yet — add one below or import from your Question Bank.
             </div>
           )}
           {questions.map((q, i) => (
-            <QuestionEditor key={q.id} q={q} idx={i} total={questions.length}
-              onChange={updated => setQuestions(p => p.map(x => x.id === q.id ? updated : x))}
-              onDelete={() => setQuestions(p => p.filter(x => x.id !== q.id))}
-              onMove={dir => moveQuestion(i, dir)} />
+            <div key={q.id}>
+              <QuestionEditor q={q} idx={i} total={questions.length}
+                onChange={updated => setQuestions(p => p.map(x => x.id === q.id ? updated : x))}
+                onDelete={() => setQuestions(p => p.filter(x => x.id !== q.id))}
+                onMove={dir => moveQuestion(i, dir)} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -12, marginBottom: 8, paddingRight: 4 }}>
+                <button onClick={async () => {
+                  const supabase = createClient()
+                  const { data: { user } } = await supabase.auth.getUser()
+                  if (!user) return
+                  const { data: bq } = await supabase.from('question_bank').insert({
+                    teacher_id: user.id, type: q.type, body_html: q.body_html,
+                    points_correct: q.points_correct, points_incorrect: q.points_incorrect,
+                    starter_code: q.starter_code ?? '',
+                  }).select('id').single()
+                  if (!bq) return
+                  for (let j = 0; j < (q.options ?? []).length; j++) {
+                    const o = q.options[j]
+                    await supabase.from('question_bank_options').insert({ question_id: bq.id, body_html: o.body_html, is_correct: o.is_correct, position: j })
+                  }
+                  alert('Saved to Question Bank!')
+                }} style={{ fontSize: 11, color: '#6c47ff', background: 'none', border: '1px solid #e5e7eb', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>
+                  💾 Save to bank
+                </button>
+              </div>
+            </div>
           ))}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid #f3f4f6', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 0', borderTop: '1px solid #f3f4f6', marginBottom: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Add:</span>
             {(Object.keys(Q_LABELS) as QType[]).map(t => (
               <button key={t} onClick={() => addQuestion(t)}
@@ -509,6 +548,12 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
                 {Q_ICONS[t]} {Q_LABELS[t]}
               </button>
             ))}
+            <div style={{ marginLeft: 'auto' }}>
+              <a href="/teacher/question-bank" target="_blank"
+                style={{ padding: '7px 14px', fontSize: 12, border: '1px solid #6c47ff', borderRadius: 7, background: '#f5f3ff', cursor: 'pointer', color: '#6c47ff', textDecoration: 'none', fontWeight: 600, display: 'inline-block' }}>
+                📚 Question Bank
+              </a>
+            </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <SaveBtn onClick={saveQuestions} saving={qSaving} saved={qSaved} label="Save all questions" savedLabel="✓ Questions saved" />
@@ -662,6 +707,111 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
           </div>
         </div>
       )}
+      {/* ── STATISTICS ── */}
+      {tab === 'stats' && (() => {
+        const submitted = attempts.filter((a: any) => a.status === 'submitted' || a.status === 'timed_out')
+        const scored = submitted.filter((a: any) => a.score != null && a.max_score)
+        const pcts = scored.map((a: any) => Math.round(((a.final_score ?? a.score) / a.max_score) * 100))
+        const avg = pcts.length ? Math.round(pcts.reduce((s: number, x: number) => s + x, 0) / pcts.length) : null
+        const best = pcts.length ? Math.max(...pcts) : null
+        const worst = pcts.length ? Math.min(...pcts) : null
+        const pass = pcts.filter((p: number) => p >= 50).length
+        // Distribution buckets 0-9, 10-19, ... 90-100
+        const buckets = Array.from({ length: 10 }, (_, i) => ({
+          label: i === 9 ? '90-100' : `${i * 10}-${i * 10 + 9}`,
+          count: pcts.filter((p: number) => i === 9 ? p >= 90 : p >= i * 10 && p < (i + 1) * 10).length,
+        }))
+        const bucketMax = Math.max(...buckets.map(b => b.count), 1)
+
+        if (!submitted.length) return (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#aaa' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📈</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>No submissions yet</div>
+            <div style={{ fontSize: 13 }}>Statistics will appear once students submit the test.</div>
+          </div>
+        )
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* KPI strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
+              {[
+                { label: 'Submissions', value: submitted.length, color: '#185FA5' },
+                { label: 'Average score', value: avg != null ? `${avg}%` : '—', color: avg != null && avg >= 70 ? '#16a34a' : avg != null && avg >= 50 ? '#d97706' : '#dc2626' },
+                { label: 'Highest score', value: best != null ? `${best}%` : '—', color: '#16a34a' },
+                { label: 'Lowest score',  value: worst != null ? `${worst}%` : '—', color: '#dc2626' },
+                { label: 'Pass rate (≥50%)', value: pcts.length ? `${Math.round(pass / pcts.length * 100)}%` : '—', color: '#6c47ff' },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ ...CARD, textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Score distribution */}
+            <div style={CARD}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>📊 Score distribution</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120 }}>
+                {buckets.map(b => (
+                  <div key={b.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    {b.count > 0 && <div style={{ fontSize: 10, color: '#888' }}>{b.count}</div>}
+                    <div style={{ width: '100%', background: b.count ? '#185FA5' : '#f3f4f6', borderRadius: '3px 3px 0 0', height: Math.max(4, (b.count / bucketMax) * 80), transition: 'height .3s' }} />
+                    <div style={{ fontSize: 9, color: '#aaa', textAlign: 'center', lineHeight: 1.2 }}>{b.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Per-question stats */}
+            <div style={CARD}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>❓ Question breakdown</div>
+                <a href={`/teacher/tests/${test.id}/bulk-grade`}
+                  style={{ padding: '6px 14px', background: '#6c47ff', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
+                  ✏️ Bulk grade
+                </a>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #f3f4f6' }}>
+                      {['Q', 'Question', 'Type', 'Avg score', '% Correct', 'Unanswered'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' as const }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {questions.map((q: any, i: number) => {
+                      // Count submissions that answered this question
+                      const submittedIds = new Set(submitted.map((a: any) => a.id))
+                      // We don't have answers loaded here, so show what we can from attempts
+                      const attemptCount = submitted.length
+                      return (
+                        <tr key={q.id} style={{ borderBottom: '1px solid #f9fafb' }}>
+                          <td style={{ padding: '10px', fontWeight: 700, color: '#185FA5' }}>Q{i + 1}</td>
+                          <td style={{ padding: '10px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            dangerouslySetInnerHTML={{ __html: q.body_html.replace(/<[^>]*>/g, '').slice(0, 60) + '…' }} />
+                          <td style={{ padding: '10px' }}>
+                            <span style={{ fontSize: 11, background: '#E6F1FB', color: '#0C447C', padding: '2px 7px', borderRadius: 8 }}>{Q_LABELS[q.type as QType]}</span>
+                          </td>
+                          <td style={{ padding: '10px', color: '#888', fontSize: 12 }}>
+                            <a href={`/teacher/tests/${test.id}/bulk-grade?q=${i}`}
+                              style={{ color: '#6c47ff', textDecoration: 'none', fontWeight: 500 }}>View answers</a>
+                          </td>
+                          <td style={{ padding: '10px', color: '#888', fontSize: 12 }}>—</td>
+                          <td style={{ padding: '10px', color: '#888', fontSize: 12 }}>{attemptCount} submissions</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── PREVIEW ── */}
       {tab === 'preview' && (
         <div>

@@ -418,7 +418,23 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     }
   }, [currentIdx, phase])
 
-  const sortedQ = [...questions].sort((a, b) => a.position - b.position)
+  // Seeded shuffle — deterministic per attempt so the same student always gets the same order
+  function seededShuffle<T>(arr: T[], seed: string): T[] {
+    const out = [...arr]
+    let h = 0
+    for (let i = 0; i < seed.length; i++) h = Math.imul(31, h) + seed.charCodeAt(i) | 0
+    for (let i = out.length - 1; i > 0; i--) {
+      h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) | 0
+      const j = Math.abs(h) % (i + 1);
+      [out[i], out[j]] = [out[j], out[i]]
+    }
+    return out
+  }
+
+  const baseQ = [...questions].sort((a, b) => a.position - b.position)
+  const sortedQ = test.randomise_questions && attempt?.id
+    ? seededShuffle(baseQ, attempt.id)
+    : baseQ
   const currentQ = sortedQ[currentIdx]
   const maxWarnings = test.max_warnings ?? 3
 
@@ -739,7 +755,10 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
 
   // ── PLAYING ──────────────────────────────────────────────────────────────────
   if (phase === 'playing' && currentQ) {
-    const opts = (currentQ.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
+    const baseOpts = (currentQ.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
+    const opts = test.randomise_options && attempt?.id && currentQ.type !== 'truefalse'
+      ? seededShuffle(baseOpts, attempt.id + currentQ.id)
+      : baseOpts
     const selected: string[] = answers[currentQ.id]?.selected_option_ids ?? []
     const descText: string = answers[currentQ.id]?.answer_text ?? ''
     const isQLocked = lockedQuestions.has(currentQ.id)

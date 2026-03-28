@@ -92,6 +92,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
     { label: 'Modules', href: '/teacher/modules' },
     { label: 'Grade', href: '/teacher/grade' },
     { label: 'Tests', href: '/teacher/tests' },
+    { label: '📚 Bank', href: '/teacher/question-bank' },
     { label: 'Groups', href: '/teacher/groups' },
   ]
   const studentNav = [
