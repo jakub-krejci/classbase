@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Breadcrumb } from '@/components/ui'
+import { highlightPython } from '@/lib/highlight'
 
 export default function ReviewClient({ test, attempt, questions, answers: initAnswers }: {
   test: any; attempt: any; questions: any[]; answers: any[]
@@ -204,13 +205,16 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
                     {q.starter_code && (
                       <div style={{ marginBottom: 8 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4 }}>STARTER CODE</div>
-                        <pre style={{ margin: 0, background: '#1e1e2e', color: '#6c7086', borderRadius: 6, padding: '10px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: .7 }}>{q.starter_code}</pre>
+                        <pre style={{ margin: 0, background: '#1e1e2e', borderRadius: 6, padding: '10px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: .65 }}
+                          dangerouslySetInnerHTML={{ __html: highlightPython(q.starter_code) }} />
                       </div>
                     )}
                     <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4 }}>STUDENT&apos;S SUBMITTED CODE</div>
-                    <pre style={{ margin: 0, background: '#1a1b26', color: '#cdd6f4', borderRadius: 8, padding: '12px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-all', minHeight: 60 }}>
-                      {ans?.answer_text || <span style={{ color: '#6c7086' }}>No code submitted</span>}
-                    </pre>
+                    {ans?.answer_text
+                      ? <pre style={{ margin: 0, background: '#1a1b26', color: '#cdd6f4', borderRadius: 8, padding: '12px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-all', minHeight: 60 }}
+                          dangerouslySetInnerHTML={{ __html: highlightPython(ans.answer_text) }} />
+                      : <div style={{ background: '#1a1b26', borderRadius: 8, padding: '12px 14px', color: '#6c7086', fontFamily: 'ui-monospace,monospace', fontSize: 13 }}>No code submitted</div>
+                    }
                   </div>
                 )}
 

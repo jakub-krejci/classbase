@@ -52,15 +52,22 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
   const preRef = useRef<HTMLPreElement>(null)
 
   const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace'
+  const monoStyle: React.CSSProperties = {
+    fontFamily: monoFont, fontSize: 14, lineHeight: 1.7,
+    padding: '12px 14px', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+    margin: 0, boxSizing: 'border-box', width: '100%', minHeight: 140,
+  }
 
   function syncHighlight(val: string) {
     if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n'
   }
   function syncHeight() {
-    if (!taRef.current) return
+    if (!taRef.current || !preRef.current) return
     taRef.current.style.height = 'auto'
     taRef.current.style.height = taRef.current.scrollHeight + 'px'
+    preRef.current.style.height = taRef.current.style.height
   }
+
   useEffect(() => { syncHighlight(code); syncHeight() }, [])
 
   useEffect(() => {
@@ -82,19 +89,21 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
     setRunning(false)
   }
 
-  function handleSubmit() {
-    onSubmit(code)
-    setSubmitted(true)
+  function handleChange(val: string) {
+    setCode(val)
+    syncHighlight(val)
+    requestAnimationFrame(syncHeight)
+    setSubmitted(false)
   }
+
+  function handleSubmit() { onSubmit(code); setSubmitted(true) }
 
   return (
     <div style={{ borderRadius: 10, overflow: 'hidden', border: '2px solid #a6e3a1', marginBottom: 8 }}>
-      {/* Editor header */}
+      {/* Header */}
       <div style={{ background: '#161825', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ display: 'flex', gap: 5 }}>
-          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#f38ba8' }} />
-          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#f9e2af' }} />
-          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#a6e3a1' }} />
+          {['#f38ba8','#f9e2af','#a6e3a1'].map(c => <div key={c} style={{ width: 9, height: 9, borderRadius: '50%', background: c }} />)}
         </div>
         <span style={{ fontSize: 11, color: '#6c7086', fontFamily: monoFont }}>Python</span>
         <div style={{ flex: 1 }} />
@@ -104,17 +113,28 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
           {running ? 'Running…' : '▶ Run'}
         </button>
       </div>
-      {/* Code area */}
+
+      {/* Code area — pre overlay + transparent textarea stacked */}
       <div style={{ position: 'relative', background: '#1a1b26' }}>
-        <pre ref={preRef} aria-hidden style={{ margin: 0, ...{ fontFamily: monoFont, fontSize: 14, lineHeight: 1.7, padding: '12px 14px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', boxSizing: 'border-box', width: '100%', minHeight: 120 } }} />
+        {/* Syntax-highlighted display layer */}
+        <pre ref={preRef} aria-hidden
+          style={{ ...monoStyle, position: 'relative', display: 'block', color: '#cdd6f4', background: '#1a1b26', pointerEvents: 'none', userSelect: 'none' }} />
+        {/* Editable input layer — sits exactly on top, text transparent so highlight shows */}
         <textarea ref={taRef} value={code}
-          onChange={e => { setCode(e.target.value); syncHighlight(e.target.value); syncHeight(); setSubmitted(false) }}
+          onChange={e => handleChange(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Tab') { e.preventDefault(); const s = e.currentTarget.selectionStart, en = e.currentTarget.selectionEnd; const v = code.slice(0, s) + '  ' + code.slice(en); setCode(v); syncHighlight(v); requestAnimationFrame(() => { if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s + 2 } }) }
+            if (e.key === 'Tab') {
+              e.preventDefault()
+              const s = e.currentTarget.selectionStart, en = e.currentTarget.selectionEnd
+              const v = code.slice(0, s) + '  ' + code.slice(en)
+              handleChange(v)
+              requestAnimationFrame(() => { if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s + 2 } })
+            }
           }}
           spellCheck={false}
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', resize: 'none', background: 'transparent', color: 'transparent', caretColor: '#cdd6f4', border: 'none', outline: 'none', fontFamily: monoFont, fontSize: 14, lineHeight: 1.7, padding: '12px 14px', boxSizing: 'border-box', overflow: 'hidden' }} />
+          style={{ ...monoStyle, position: 'absolute', top: 0, left: 0, height: '100%', resize: 'none', background: 'transparent', color: 'transparent', caretColor: '#cdd6f4', border: 'none', outline: 'none', overflow: 'hidden' }} />
       </div>
+
       {/* Output */}
       {(output !== null || err) && (
         <div style={{ background: '#11111b', padding: '10px 14px', fontFamily: monoFont, fontSize: 13, lineHeight: 1.6 }}>
@@ -122,7 +142,8 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
           {err && <pre style={{ margin: 0, color: '#f38ba8', whiteSpace: 'pre-wrap' }}>{err}</pre>}
         </div>
       )}
-      {/* Submit row */}
+
+      {/* Submit */}
       <div style={{ background: '#1e1e2e', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <span style={{ fontSize: 12, color: submitted ? '#a6e3a1' : '#6c7086' }}>
           {submitted ? '✓ Answer saved — you can still edit and re-submit' : 'Run your code to test it, then submit when ready'}
@@ -420,9 +441,11 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               {q.type === 'coding' && (
                 <div style={{ background: '#1a1b26', borderRadius: 8, overflow: 'hidden' }}>
                   <div style={{ background: '#161825', padding: '5px 12px', fontSize: 11, color: '#6c7086', fontFamily: 'ui-monospace,monospace' }}>💻 Submitted code</div>
-                  <pre style={{ margin: 0, padding: '12px 14px', color: '#cdd6f4', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    {ans?.answer_text || <span style={{ color: '#6c7086' }}>No code submitted</span>}
-                  </pre>
+                  {ans?.answer_text
+                    ? <pre style={{ margin: 0, padding: '12px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
+                        dangerouslySetInnerHTML={{ __html: highlightPython(ans.answer_text) }} />
+                    : <div style={{ padding: '12px 14px', color: '#6c7086', fontFamily: 'ui-monospace,monospace', fontSize: 13 }}>No code submitted</div>
+                  }
                 </div>
               )}
               {ans?.teacher_note && (
