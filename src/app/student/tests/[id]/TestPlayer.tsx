@@ -32,7 +32,7 @@ function RequiredWarningModal({ missing, onClose, onGoTo }: {
           ))}
         </div>
         <button onClick={onClose}
-          style={{ width: '100%', padding: '11px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          style={{ width: '100%', padding: '11px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
           Go back and answer
         </button>
       </div>
@@ -603,7 +603,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     return (
       <div style={{ maxWidth: 640, margin: '0 auto', paddingTop: 40 }}>
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,.06)' }}>
-          <div style={{ background: 'linear-gradient(135deg,#185FA5,#0c447c)', padding: '32px 32px 24px', color: '#fff' }}>
+          <div style={{ background: 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #000))', padding: '32px 32px 24px', color: '#fff' }}>
             <div style={{ fontSize: 12, opacity: .75, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>{test.category || 'Test'}</div>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{test.title}</h1>
           </div>
@@ -634,7 +634,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               ⚠️ Do not switch tabs or leave this page. Each detected attempt is logged as a warning. After {maxWarnings} warning{maxWarnings !== 1 ? 's' : ''} your test will be locked.
             </div>
             {canRetake ? (
-              <button onClick={startTest} style={{ width: '100%', padding: '14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              <button onClick={startTest} style={{ width: '100%', padding: '14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
                 {completedCount > 0 ? `▶ Retake Test (attempt ${completedCount + 1})` : '▶ Spustit test'}
               </button>
             ) : (
@@ -659,7 +659,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
           <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>Test submitted!</h2>
           <p style={{ color: '#4b5563', fontSize: 14, margin: 0 }}>Your answers have been recorded. Your teacher will review and finalize your score.</p>
           {att?.score != null && (
-            <div style={{ marginTop: 16, fontSize: 18, fontWeight: 700, color: '#185FA5' }}>
+            <div style={{ marginTop: 16, fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
               Auto-score: {att.score} / {att.max_score} pts
             </div>
           )}
@@ -696,7 +696,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
           return (
             <div key={q.id} style={{ border: `1.5px solid ${border}`, background: bg, borderRadius: 12, padding: '20px 24px', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <span style={{ fontWeight: 700, color: '#185FA5', fontSize: 13 }}>Q{i + 1}</span>
+                <span style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 13 }}>Q{i + 1}</span>
                 {isObjective && hasAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: isCorrect ? '#16a34a' : '#dc2626' }}>{isCorrect ? '✓ Correct' : '✗ Incorrect'}</span>}
                 {!hasAnswer && <span style={{ fontSize: 12, color: '#888' }}>— Not answered</span>}
                 {q.type === 'descriptive' && hasAnswer && <span style={{ fontSize: 12, color: '#1d4ed8' }}>📝 Descriptive — awaiting grade</span>}
@@ -746,7 +746,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             </div>
           )
         })}
-        <a href="/student/tests" style={{ display: 'inline-block', marginTop: 8, padding: '10px 20px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>← Back to tests</a>
+        <a href="/student/tests" style={{ display: 'inline-block', marginTop: 8, padding: '10px 20px', background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>← Back to tests</a>
       </div>
     )
   }
@@ -764,7 +764,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
         <div style={{ fontSize: 60, marginBottom: 16 }}>{icons[phase]}</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 12px' }}>{titles[phase]}</h2>
         <p style={{ color: '#666', fontSize: 14, lineHeight: 1.7, margin: '0 0 24px' }}>{msgs[phase]}</p>
-        <a href="/student/tests" style={{ padding: '10px 24px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>← Back to tests</a>
+        <a href="/student/tests" style={{ padding: '10px 24px', background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>← Back to tests</a>
       </div>
     )
   }
@@ -819,7 +819,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               </span>
             )}
             {timeLeft !== null && (
-              <span style={{ fontSize: 14, fontWeight: 700, color: timeLeft < 120 ? '#991b1b' : '#185FA5', background: timeLeft < 120 ? '#fee2e2' : '#E6F1FB', padding: '5px 14px', borderRadius: 20 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: timeLeft < 120 ? '#991b1b' : 'var(--accent)', background: timeLeft < 120 ? '#fee2e2' : '#E6F1FB', padding: '5px 14px', borderRadius: 20 }}>
                 ⏱ {formatTime(timeLeft)}
               </span>
             )}
@@ -831,7 +831,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
           </div>
         </div>
         <div style={{ background: '#f3f4f6', borderRadius: 4, height: 6, marginBottom: 20 }}>
-          <div style={{ background: '#185FA5', height: '100%', width: progress + '%', borderRadius: 4, transition: 'width .3s' }} />
+          <div style={{ background: 'var(--accent)', height: '100%', width: progress + '%', borderRadius: 4, transition: 'width .3s' }} />
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
           {sortedQ.map((q, i) => {
@@ -840,8 +840,8 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             const locked = lockedQuestions.has(q.id)
             const isActive = i === currentIdx
             const flagged = flaggedQuestions.has(q.id)
-            const border = isActive ? '#185FA5' : locked ? '#f97316' : flagged ? '#f59e0b' : done ? '#22c55e' : '#e5e7eb'
-            const bg = isActive ? '#185FA5' : locked ? '#fff7ed' : flagged ? '#fffbeb' : done ? '#EAF3DE' : '#fff'
+            const border = isActive ? 'var(--accent)' : locked ? '#f97316' : flagged ? '#f59e0b' : done ? '#22c55e' : '#e5e7eb'
+            const bg = isActive ? 'var(--accent)' : locked ? '#fff7ed' : flagged ? '#fffbeb' : done ? '#EAF3DE' : '#fff'
             const color = isActive ? '#fff' : locked ? '#c2410c' : flagged ? '#92400e' : done ? '#27500A' : '#888'
             return (
               <button key={q.id} onClick={() => setCurrentIdx(i)} title={locked ? 'Time expired' : undefined}
@@ -855,7 +855,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
         </div>
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '28px 32px', marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#185FA5', background: '#E6F1FB', padding: '3px 10px', borderRadius: 20 }}>Q{currentIdx + 1} / {sortedQ.length}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', background: '#E6F1FB', padding: '3px 10px', borderRadius: 20 }}>Q{currentIdx + 1} / {sortedQ.length}</span>
             <span style={{ fontSize: 11, color: '#888' }}>{currentQ.points_correct} pt{currentQ.points_correct !== 1 ? 's' : ''}</span>
             {!currentQ.is_required && <span style={{ fontSize: 11, color: '#aaa' }}>optional</span>}
             {isQLocked && <span style={{ fontSize: 11, fontWeight: 700, color: '#991b1b', background: '#fee2e2', padding: '2px 8px', borderRadius: 10 }}>🔒 Time expired</span>}
@@ -879,8 +879,8 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
                 const isSel = selected.includes(o.id)
                 return (
                   <button key={o.id} onClick={() => !isQLocked && setSelectedOptions(currentQ.id, o.id, currentQ.type)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `2px solid ${isSel ? '#185FA5' : '#e5e7eb'}`, borderRadius: 10, background: isSel ? '#E6F1FB' : '#fff', cursor: isQLocked ? 'not-allowed' : 'pointer', textAlign: 'left', fontSize: 14, color: '#111', transition: 'all .15s', opacity: isQLocked ? .7 : 1 }}>
-                    <div style={{ width: 20, height: 20, borderRadius: currentQ.type === 'multiple' ? 4 : '50%', border: `2px solid ${isSel ? '#185FA5' : '#ccc'}`, background: isSel ? '#185FA5' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `2px solid ${isSel ? 'var(--accent)' : '#e5e7eb'}`, borderRadius: 10, background: isSel ? '#E6F1FB' : '#fff', cursor: isQLocked ? 'not-allowed' : 'pointer', textAlign: 'left', fontSize: 14, color: '#111', transition: 'all .15s', opacity: isQLocked ? .7 : 1 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: currentQ.type === 'multiple' ? 4 : '50%', border: `2px solid ${isSel ? 'var(--accent)' : '#ccc'}`, background: isSel ? 'var(--accent)' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {isSel && <div style={{ width: 8, height: 8, borderRadius: currentQ.type === 'multiple' ? 2 : '50%', background: '#fff' }} />}
                     </div>
                     <span dangerouslySetInnerHTML={{ __html: o.body_html }} />
@@ -914,7 +914,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
           <span style={{ fontSize: 12, color: '#888' }}>{answered} / {sortedQ.length} answered</span>
           {currentIdx < sortedQ.length - 1 ? (
             <button onClick={() => setCurrentIdx(i => i + 1)}
-              style={{ padding: '10px 20px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              style={{ padding: '10px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
               Next →
             </button>
           ) : (

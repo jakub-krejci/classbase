@@ -78,7 +78,7 @@ export default function TestHistoryClient({ attempts, answers }: {
         <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
         <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px' }}>No test history yet</h2>
         <p style={{ color: '#666', fontSize: 14 }}>Complete a test to see your history and statistics here.</p>
-        <a href="/student/tests" style={{ display: 'inline-block', marginTop: 20, padding: '10px 24px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>← Back to tests</a>
+        <a href="/student/tests" style={{ display: 'inline-block', marginTop: 20, padding: '10px 24px', background: 'var(--accent)', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>← Back to tests</a>
       </div>
     )
   }
@@ -110,7 +110,7 @@ export default function TestHistoryClient({ attempts, answers }: {
           { label: 'Průměrné skóre', value: `${avg}%`, color: avg >= 80 ? '#16a34a' : avg >= 50 ? '#d97706' : '#dc2626' },
           { label: 'Nejlepší skóre',    value: `${best}%`, color: '#16a34a' },
           { label: 'Poslední skóre',  value: `${latest}%`, color: latest >= 80 ? '#16a34a' : latest >= 50 ? '#d97706' : '#dc2626' },
-          { label: 'Celkem pokusů', value: `${attempts.length}`, color: '#185FA5' },
+          { label: 'Celkem pokusů', value: `${attempts.length}`, color: 'var(--accent)' },
         ]
         return (
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
@@ -143,7 +143,7 @@ export default function TestHistoryClient({ attempts, answers }: {
                 const isSelected = a.id === selected
                 return (
                   <button key={a.id} onClick={() => { setSelected(a.id); setView('overview') }}
-                    style={{ width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${isSelected ? '#185FA5' : '#e5e7eb'}`, background: isSelected ? '#E6F1FB' : '#fff', cursor: 'pointer', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    style={{ width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${isSelected ? 'var(--accent)' : '#e5e7eb'}`, background: isSelected ? '#E6F1FB' : '#fff', cursor: 'pointer', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: isSelected ? '#0C447C' : '#333' }}>
                         {new Date(a.submitted_at ?? a.started_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -213,7 +213,7 @@ export default function TestHistoryClient({ attempts, answers }: {
             <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
               {(['overview', 'questions'] as const).map(t => (
                 <button key={t} onClick={() => setView(t)}
-                  style={{ padding: '7px 16px', borderRadius: 8, border: `1.5px solid ${view === t ? '#185FA5' : '#e5e7eb'}`, background: view === t ? '#185FA5' : '#fff', color: view === t ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}>
+                  style={{ padding: '7px 16px', borderRadius: 8, border: `1.5px solid ${view === t ? 'var(--accent)' : '#e5e7eb'}`, background: view === t ? 'var(--accent)' : '#fff', color: view === t ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}>
                   {t === 'overview' ? '📈 Přehled' : '❓ Otázky'}
                 </button>
               ))}
@@ -286,7 +286,7 @@ export default function TestHistoryClient({ attempts, answers }: {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#185FA5', background: '#E6F1FB', padding: '2px 8px', borderRadius: 20 }}>Q{s.q.position + 1}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', background: '#E6F1FB', padding: '2px 8px', borderRadius: 20 }}>Q{s.q.position + 1}</span>
                             <span style={{ fontSize: 11, color: '#888', background: '#f3f4f6', padding: '2px 8px', borderRadius: 10 }}>{typeLabels[s.q.type] ?? s.q.type}</span>
                             {!graded && <span style={{ fontSize: 11, color: '#888' }}>⏳ Not yet graded</span>}
                           </div>

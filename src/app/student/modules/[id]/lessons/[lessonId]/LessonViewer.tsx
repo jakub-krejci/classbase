@@ -710,12 +710,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
     h2 { font-size: 20px; margin: 22px 0 6px; }
     h3 { font-size: 17px; margin: 18px 0 4px; }
     p { margin: 8px 0; }
-    blockquote { border-left: 3px solid #185FA5; margin: 12px 0; padding: 4px 16px; color: #555; font-style: italic; }
+    blockquote { border-left: 3px solid var(--accent); margin: 12px 0; padding: 4px 16px; color: #555; font-style: italic; }
     table { border-collapse: collapse; width: 100%; margin: 12px 0; }
     td, th { border: 1px solid #ddd; padding: 8px 12px; }
     th { background: #f5f5f5; font-weight: 600; }
     img { max-width: 100%; border-radius: 6px; }
-    a { color: #185FA5; }
+    a { color: var(--accent); }
     ul, ol { padding-left: 24px; }
     .cb-quiz { background: #f0f7ff; border: 1px solid #B5D4F4; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
     details { border: 1px solid #ddd; border-radius: 6px; margin: 10px 0; }
@@ -804,8 +804,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .lesson-content h2[data-toc-active],
         .lesson-content h3[data-toc-active] {
           background: #EBF4FF;
-          color: #185FA5;
-          box-shadow: -3px 0 0 #185FA5;
+          color: var(--accent);
+          box-shadow: -3px 0 0 var(--accent);
         }
 
         /* ── Lists ── */
@@ -827,7 +827,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
         /* ── Blockquote ── */
         .lesson-content blockquote {
-          border-left: 3px solid #185FA5;
+          border-left: 3px solid var(--accent);
           padding: 8px 18px;
           margin: 1.2em 0;
           color: #4a4a4a;
@@ -837,7 +837,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         }
 
         /* ── Links ── */
-        .lesson-content a { color: #185FA5; text-decoration: underline; text-underline-offset: 3px; }
+        .lesson-content a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
         .lesson-content a:hover { color: #0c447c; }
 
         /* ── Tables ── */
@@ -881,7 +881,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
         /* ── Annotation tooltips ── */
         .cb-annotation {
-          border-bottom: 2px dotted #185FA5;
+          border-bottom: 2px dotted var(--accent);
           cursor: help;
           position: relative;
         }
@@ -993,7 +993,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
       {/* Scroll progress bar */}
       <div style={{ position:'fixed', top:52, left:0, right:0, height:3, background:'#f0f0f0', zIndex:49, pointerEvents:'none' }}>
-        <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#27500A' : '#185FA5', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
+        <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#27500A' : 'var(--accent)', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
       </div>
 
       {/* ── Left nav — always-visible fixed sidebar (desktop only) ── */}
@@ -1013,8 +1013,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                   </div>
                 ) : (
                   <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                    style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent', fontSize:13 }}>
-                    <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid var(--accent)':'3px solid transparent', fontSize:13 }}>
+                    <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'var(--accent)':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                       {isDone ? '✓' : i+1}
                     </div>
                     <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
@@ -1023,8 +1023,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                 {isCurrent && subs.length > 0 && subs.map((s:any) => (
                   <div key={s.id} style={{ paddingLeft:28, paddingRight:8, paddingTop:2, paddingBottom:2 }}>
                     <button onClick={() => setActiveTab(s.id === activeTab ? 'main' : s.id)}
-                      style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid #185FA5':'2px solid #e0e7ef', color: activeTab===s.id?'#185FA5':'#888', fontSize:11, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
-                      <span style={{ fontSize:10, color: activeTab===s.id?'#185FA5':'#bbb' }}>↳</span>
+                      style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid var(--accent)':'2px solid #e0e7ef', color: activeTab===s.id?'var(--accent)':'#888', fontSize:11, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
+                      <span style={{ fontSize:10, color: activeTab===s.id?'var(--accent)':'#bbb' }}>↳</span>
                       <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
                     </button>
                   </div>
@@ -1063,8 +1063,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                       ) : (
                         <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
                           onClick={() => { setNavOpen(false); setActiveTab('main') }}
-                          style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid #185FA5':'3px solid transparent' }}>
-                          <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'#185FA5':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid var(--accent)':'3px solid transparent' }}>
+                          <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'var(--accent)':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                             {isDone ? '✓' : i+1}
                           </div>
                           <span style={{ fontSize:13, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
@@ -1073,7 +1073,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                       {isCurrent && subs.length > 0 && subs.map((s:any) => (
                         <button key={s.id}
                           onClick={() => { setNavOpen(false); setActiveTab(s.id) }}
-                          style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'7px 14px 7px 36px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'3px solid #185FA5':'3px solid transparent', color: activeTab===s.id?'#0C447C':'#888', fontSize:12, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left' }}>
+                          style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'7px 14px 7px 36px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'3px solid var(--accent)':'3px solid transparent', color: activeTab===s.id?'#0C447C':'#888', fontSize:12, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left' }}>
                           <span style={{ fontSize:10 }}>↳</span>
                           <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
                         </button>
@@ -1128,7 +1128,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
               {/* Sub-lesson tabs */}
               {subLessons.map((s: any, i: number) => (
                 <button key={s.id} onClick={() => setActiveTab(s.id)}
-                  style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', background: activeTab===s.id ? '#185FA5' : '#fff', color: activeTab===s.id ? '#fff' : '#555', border: activeTab===s.id ? '2px solid #185FA5' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', background: activeTab===s.id ? 'var(--accent)' : '#fff', color: activeTab===s.id ? '#fff' : '#555', border: activeTab===s.id ? '2px solid var(--accent)' : '2px solid #e5e7eb', borderRadius:10, cursor:'pointer', fontFamily:'inherit', textAlign:'left', flexShrink:0, transition:'all .15s' }}>
                   <div style={{ width:26, height:26, borderRadius:'50%', background: activeTab===s.id ? 'rgba(255,255,255,.2)' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 }}>
                     {i === 0 ? '📝' : i === 1 ? '💻' : '📄'}
                   </div>
@@ -1147,7 +1147,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         {scrollPct > 0 && scrollPct < 100 && (
           <div style={{ fontSize:11, color:'#aaa', marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ flex:1, height:3, background:'#f0f0f0', borderRadius:2, overflow:'hidden', maxWidth:160 }}>
-              <div style={{ height:'100%', width: scrollPct + '%', background:'#185FA5', borderRadius:2 }} />
+              <div style={{ height:'100%', width: scrollPct + '%', background:'var(--accent)', borderRadius:2 }} />
             </div>
             <span>{scrollPct}% read</span>
           </div>
@@ -1208,7 +1208,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         {/* Progress actions */}
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:20 }}>
           <button onClick={() => setProgress(status==='completed'?'none':'completed')} disabled={saving}
-            style={{ padding:'9px 18px', background:status==='completed'?'#EAF3DE':'#185FA5', color:status==='completed'?'#27500A':'#E6F1FB', border:'none', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', flex: isMobile ? 1 : 'none' }}>
+            style={{ padding:'9px 18px', background:status==='completed'?'#EAF3DE':'var(--accent)', color:status==='completed'?'#27500A':'#E6F1FB', border:'none', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', flex: isMobile ? 1 : 'none' }}>
             {status==='completed' ? '✓ Completed' : 'Mark as complete'}
           </button>
           <button onClick={() => setProgress(status==='bookmark'?'none':'bookmark')} disabled={saving}
@@ -1230,7 +1230,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div style={{ width: isMobile ? '100%' : 'auto' }}>
             {nextLesson && (
               <a href={`/student/modules/${moduleId}/lessons/${nextLesson.id}`}
-                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:'#185FA5', color:'#E6F1FB', border:'none', borderRadius:8, fontSize:13, textDecoration:'none', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-end', boxSizing:'border-box' }}>
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:'var(--accent)', color:'#E6F1FB', border:'none', borderRadius:8, fontSize:13, textDecoration:'none', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-end', boxSizing:'border-box' }}>
                 {nextLesson.title} →
               </a>
             )}
@@ -1263,9 +1263,9 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                     padding: item.level === 1 ? '5px 14px' : item.level === 2 ? '4px 14px 4px 22px' : '3px 14px 3px 30px',
                     fontSize: item.level === 1 ? 12 : 11,
                     fontWeight: tocActiveId === item.id ? 600 : item.level === 1 ? 500 : 400,
-                    color: tocActiveId === item.id ? '#185FA5' : item.level === 1 ? '#333' : '#666',
+                    color: tocActiveId === item.id ? 'var(--accent)' : item.level === 1 ? '#333' : '#666',
                     background: tocActiveId === item.id ? '#E6F1FB' : 'none',
-                    border:'none', borderLeft: tocActiveId === item.id ? '2px solid #185FA5' : '2px solid transparent',
+                    border:'none', borderLeft: tocActiveId === item.id ? '2px solid var(--accent)' : '2px solid transparent',
                     cursor:'pointer', lineHeight:1.4, fontFamily:'inherit',
                     whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
                   }}>
@@ -1278,7 +1278,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div className="cb-sidebar-strip" title="Obsah">
             {tocItems.slice(0, 16).map(item => (
               <div key={item.id} className={`cb-strip-line h${item.level}`}
-                style={{ background: tocActiveId === item.id ? '#185FA5' : '#c7d3ff' }} />
+                style={{ background: tocActiveId === item.id ? 'var(--accent)' : '#c7d3ff' }} />
             ))}
           </div>
         </div>

@@ -72,7 +72,7 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
         <div style={{ display: 'flex', gap: 8 }}>
           {hiddenCount > 0 && (
             <button onClick={() => setShowHidden(v => !v)}
-              style={{ padding: '8px 14px', background: showHidden ? '#185FA5' : '#f3f4f6', color: showHidden ? '#fff' : '#555', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              style={{ padding: '8px 14px', background: showHidden ? 'var(--accent)' : '#f3f4f6', color: showHidden ? '#fff' : '#555', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               {showHidden ? '← Back' : `🗄 Archived (${hiddenCount})`}
             </button>
           )}
@@ -135,7 +135,7 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
               {/* Start / Continue */}
               {canStart && (
                 <a href={`/student/tests/${t.id}`}
-                  style={{ display: 'block', padding: '9px 0', background: st === 'in_progress' ? '#FEF3C7' : '#185FA5', color: st === 'in_progress' ? '#92400E' : '#fff', textAlign: 'center', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
+                  style={{ display: 'block', padding: '9px 0', background: st === 'in_progress' ? '#FEF3C7' : 'var(--accent)', color: st === 'in_progress' ? '#92400E' : '#fff', textAlign: 'center', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
                   {st === 'in_progress' ? '▶ Pokračovat v testu' : '▶ Spustit test'}
                 </a>
               )}
@@ -164,7 +164,7 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
                     {/* Retake button */}
                     {canRetakeNow && (
                       <a href={`/student/tests/${t.id}?retake=1`}
-                        style={{ flex: 1, padding: '9px 0', background: '#185FA5', color: '#fff', textAlign: 'center', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        style={{ flex: 1, padding: '9px 0', background: 'var(--accent)', color: '#fff', textAlign: 'center', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
                         🔁 Retake
                       </a>
                     )}

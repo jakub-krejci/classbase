@@ -22,7 +22,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
 
   const tabStyle = (t: string): React.CSSProperties => ({
     padding: '8px 14px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'inherit',
-    color: tab === t ? '#111' : '#888', borderBottom: tab === t ? '2px solid #185FA5' : '2px solid transparent', fontWeight: tab === t ? 600 : 400
+    color: tab === t ? '#111' : '#888', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', fontWeight: tab === t ? 600 : 400
   })
 
   function isUnlocked(i: number): boolean {
@@ -55,7 +55,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
           <div style={{ fontSize: 20, fontWeight: 600 }}>{pct}%</div>
         </div>
         <div style={{ flex: 1, minWidth: 80, height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: pct + '%', background: '#185FA5', borderRadius: 3, transition: 'width .3s' }} />
+          <div style={{ height: '100%', width: pct + '%', background: 'var(--accent)', borderRadius: 3, transition: 'width .3s' }} />
         </div>
         <div style={{ fontSize: 12, color: '#888' }}>{done.size}/{lessons.length}</div>
       </div>
@@ -149,7 +149,7 @@ export default function StudentModuleView({ module, lessons, assignments, comple
                 )}
                 {!isSubmitted && (
                   <a href={'/student/modules/' + module.id + '/assignments/' + a.id}
-                    style={{ display: 'inline-flex', padding: '5px 12px', background: '#185FA5', color: '#E6F1FB', borderRadius: 8, fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
+                    style={{ display: 'inline-flex', padding: '5px 12px', background: 'var(--accent)', color: '#E6F1FB', borderRadius: 8, fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
                     Start
                   </a>
                 )}

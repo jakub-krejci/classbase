@@ -137,7 +137,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
 
   const tabBtn = (t: string): React.CSSProperties => ({
     padding: '8px 18px', fontSize: 13, fontWeight: tab === t ? 600 : 400,
-    color: tab === t ? '#185FA5' : '#666', background: tab === t ? '#E6F1FB' : 'none',
+    color: tab === t ? 'var(--accent)' : '#666', background: tab === t ? '#E6F1FB' : 'none',
     border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
   })
 
@@ -201,7 +201,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
                   const col = c.role === 'teacher' ? '#0C447C' : '#27500A'
                   return (
                     <div key={c.id} onClick={() => openContact(c)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', background: active ? '#E6F1FB' : 'transparent', borderLeft: active ? '3px solid #185FA5' : '3px solid transparent' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer', background: active ? '#E6F1FB' : 'transparent', borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent' }}
                       onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#f0f4ff' }}
                       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}>
                       <div style={{ position: 'relative' }}>
@@ -251,7 +251,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
                         <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 6 }}>
                           {!mine && <Avatar name={activeContact.full_name} size={24} bg={activeContact.role === 'teacher' ? '#E6F1FB' : '#EAF3DE'} col={activeContact.role === 'teacher' ? '#0C447C' : '#27500A'} />}
                           <div style={{ maxWidth: '72%' }}>
-                            <div style={{ background: mine ? '#185FA5' : '#f0f2f5', color: mine ? '#fff' : '#111', borderRadius: mine ? '14px 14px 3px 14px' : '14px 14px 14px 3px', padding: '9px 13px', fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word', opacity: opt ? .6 : 1 }}>
+                            <div style={{ background: mine ? 'var(--accent)' : '#f0f2f5', color: mine ? '#fff' : '#111', borderRadius: mine ? '14px 14px 3px 14px' : '14px 14px 14px 3px', padding: '9px 13px', fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word', opacity: opt ? .6 : 1 }}>
                               {m.body}
                             </div>
                             <div style={{ fontSize: 10, color: '#bbb', marginTop: 3, textAlign: mine ? 'right' : 'left', display: 'flex', gap: 5, justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'center' }}>
@@ -270,7 +270,7 @@ export default function StudentInboxClient({ messages: initial, announcements: i
                       placeholder={`Message ${activeContact.full_name}…`}
                       style={{ flex: 1, padding: '9px 14px', border: '0.5px solid #e5e7eb', borderRadius: 22, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
                     <button onClick={sendMsg} disabled={sending || !draft.trim()}
-                      style={{ width: 36, height: 36, borderRadius: '50%', background: draft.trim() ? '#185FA5' : '#e5e7eb', color: draft.trim() ? '#fff' : '#aaa', border: 'none', cursor: draft.trim() ? 'pointer' : 'default', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>↑</button>
+                      style={{ width: 36, height: 36, borderRadius: '50%', background: draft.trim() ? 'var(--accent)' : '#e5e7eb', color: draft.trim() ? '#fff' : '#aaa', border: 'none', cursor: draft.trim() ? 'pointer' : 'default', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>↑</button>
                   </div>
                 </>
               )}

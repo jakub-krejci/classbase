@@ -130,7 +130,7 @@ export default function AssignmentView({ assignment, moduleId, studentId, existi
                     style={{ ...inp, height: 80, resize: 'vertical' }} placeholder="Your answer…" />
                 ) : (
                   (q.opts ?? []).map((o: string, oi: number) => (
-                    <label key={oi} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', border: '0.5px solid', borderColor: answers[i] === oi ? '#185FA5' : '#e5e7eb', borderRadius: 8, marginBottom: 5, cursor: 'pointer', fontSize: 13, background: answers[i] === oi ? '#E6F1FB' : '#fff' }}>
+                    <label key={oi} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', border: '0.5px solid', borderColor: answers[i] === oi ? 'var(--accent)' : '#e5e7eb', borderRadius: 8, marginBottom: 5, cursor: 'pointer', fontSize: 13, background: answers[i] === oi ? '#E6F1FB' : '#fff' }}>
                       <input type="radio" name={'q' + i} checked={answers[i] === oi} onChange={() => setAnswers(p => ({ ...p, [i]: oi }))} style={{ width: 14, height: 14 }} />
                       {o}
                     </label>
@@ -141,7 +141,7 @@ export default function AssignmentView({ assignment, moduleId, studentId, existi
           )}
 
           <button onClick={submit} disabled={submitting}
-            style={{ marginTop: 8, padding: '10px 24px', background: '#185FA5', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: submitting ? .6 : 1 }}>
+            style={{ marginTop: 8, padding: '10px 24px', background: 'var(--accent)', color: '#E6F1FB', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', opacity: submitting ? .6 : 1 }}>
             {submitting ? 'Submitting…' : 'Submit'}
           </button>
         </>

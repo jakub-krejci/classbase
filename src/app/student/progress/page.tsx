@@ -62,7 +62,7 @@ export default async function StudentProgressPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ flex: 1, height: 6, background: '#f3f4f6', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: pct + '%', background: '#185FA5', borderRadius: 3 }} />
+              <div style={{ height: '100%', width: pct + '%', background: 'var(--accent)', borderRadius: 3 }} />
             </div>
             <span style={{ fontSize: 12, fontWeight: 500, color: '#555', minWidth: 36 }}>{pct}%</span>
           </div>
