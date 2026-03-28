@@ -201,7 +201,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
               {pendingTests.slice(0, 3).map(t => {
                 const active = attempts.find(a => a.test_id === t.id && a.status === 'in_progress')
                 return (
-                  <a key={t.id} href={`/student/tests/${t.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#fff', border: `1px solid ${active ? '#fde68a' : '#e5e7eb'}`, borderRadius: 10, textDecoration: 'none', color: 'inherit', background: active ? '#fffbeb' : '#fff' } as any}>
+                  <a key={t.id} href={`/student/tests/${t.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: active ? '#fffbeb' : '#fff', border: `1px solid ${active ? '#fde68a' : '#e5e7eb'}`, borderRadius: 10, textDecoration: 'none', color: 'inherit' }}>
                     <span style={{ fontSize: 18 }}>{active ? '▶️' : '📝'}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
