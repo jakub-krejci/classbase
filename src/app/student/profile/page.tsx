@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'

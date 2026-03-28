@@ -185,7 +185,8 @@ export default function ProfileClient({ profile }: { profile: any }) {
   async function saveAppearance() {
     setSaving(true)
     const { error: err } = await supabase.from('profiles').update({ accent_color: accentColor, updated_at: new Date().toISOString() }).eq('id', profile.id)
-    if (err) flash(err.message, true); else flash('Vzhled uložen!')
+    if (err) flash(err.message, true)
+    else { flash('Vzhled uložen!'); document.documentElement.style.setProperty('--accent', accentColor) }
     setSaving(false)
   }
 
@@ -398,7 +399,7 @@ export default function ProfileClient({ profile }: { profile: any }) {
                 <div style={{ fontSize: 13, color: '#888', margin: '16px 0 20px' }}>Vybraná barva se projeví v dashboardu, kruzích pokroku a banneru.</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 20 }}>
                   {ACCENT_COLORS.map(({ label, value }) => (
-                    <button key={value} onClick={() => setAccentColor(value)} title={label}
+                    <button key={value} onClick={() => { setAccentColor(value); document.documentElement.style.setProperty('--accent', value) }} title={label}
                       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 6px', border: `2px solid ${accentColor === value ? value : '#e5e7eb'}`, borderRadius: 10, background: accentColor === value ? value + '10' : '#fff', cursor: 'pointer', transition: 'all .15s' }}>
                       <div style={{ width: 28, height: 28, borderRadius: '50%', background: value, boxShadow: accentColor === value ? `0 0 0 3px #fff, 0 0 0 5px ${value}` : 'none' }} />
                       <span style={{ fontSize: 10, color: accentColor === value ? value : '#888', fontWeight: accentColor === value ? 700 : 400 }}>{label}</span>
