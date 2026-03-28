@@ -132,6 +132,7 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
   onMoveUp: () => void; onMoveDown: () => void; canDelete: boolean
   onOpenMedia: (type: 'image'|'video'|'file'|'link', insertFn: (html: string) => void) => void
   onInsertQuiz: (insertFn: (html: string) => void) => void
+  onEditQuiz: (quizEl: HTMLElement) => void
   onDuplicate: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -140,8 +141,10 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
   const [showAnnotationModal, setShowAnnotationModal] = useState(false)
   const [annotationText, setAnnotationText] = useState('')
   const savedColorRange = useRef<Range | null>(null)
+  const slashMenuRef = useRef<{x:number;y:number} | null>(null)
+  const [slashMenu, setSlashMenuState] = useState<{x:number;y:number} | null>(null)
+  function setSlashMenu(v: {x:number;y:number} | null) { slashMenuRef.current = v; setSlashMenuState(v) }
   const savedSlashRange = useRef<Range | null>(null)
-  const [slashMenu, setSlashMenu] = useState<{x:number;y:number} | null>(null)
   const [slashFilter, setSlashFilter] = useState('')
 
   // Sync content into div on first render / when block changes externally
@@ -457,10 +460,13 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
           const target = e.target as HTMLElement
           if (target.tagName === 'IMG') showImageToolbar(target as HTMLImageElement)
           else hideImageToolbar()
+          // Detect click on quiz block → open edit modal
+          const quiz = (target.closest?.('.cb-quiz') ?? null) as HTMLElement | null
+          if (quiz) { e.preventDefault(); onEditQuiz(quiz) }
         }}
         onClick={updateActiveFormats}
         onKeyDown={e => {
-          // Slash command
+          // Slash command — only trigger when block is empty or line is empty
           if (e.key === '/') {
             const sel = window.getSelection()
             if (sel && sel.rangeCount > 0) {
@@ -468,25 +474,34 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
               const node = range.startContainer
               const text = node.textContent ?? ''
               const offset = range.startOffset
-              // Only trigger on empty line or at start
               const lineText = text.slice(0, offset).replace(/\u200B/g, '').trim()
-              if (lineText === '') {
+              const blockEmpty = (ref.current?.textContent ?? '').trim() === ''
+              if (lineText === '' || blockEmpty) {
                 e.preventDefault()
-                const rects = range.getBoundingClientRect()
-                const editorRect = ref.current!.getBoundingClientRect()
+                // Position menu relative to editor div, not cursor rect (which can be zero)
+                const editorEl = ref.current!
+                const editorRect = editorEl.getBoundingClientRect()
+                // Try cursor rect first, fall back to top-left of editor
+                const cursorRect = range.getBoundingClientRect()
+                const x = cursorRect.width > 0 ? cursorRect.left - editorRect.left : 14
+                const y = cursorRect.width > 0 ? cursorRect.bottom - editorRect.top + 4 : 40
                 savedSlashRange.current = range.cloneRange()
                 setSlashFilter('')
-                setSlashMenu({ x: rects.left - editorRect.left, y: rects.bottom - editorRect.top + 4 })
+                setSlashMenu({ x, y })
                 return
               }
             }
           }
+          // Use ref (not state) to synchronously check if menu is open
+          const menuOpen = !!slashMenuRef.current
           // Close slash menu on Escape
-          if (e.key === 'Escape' && slashMenu) { e.preventDefault(); setSlashMenu(null); return }
-          // Type to filter slash menu
-          if (slashMenu) {
-            if (e.key === 'Backspace') { setSlashFilter(f => f.slice(0, -1)); return }
-            if (e.key.length === 1) { setSlashFilter(f => f + e.key); e.preventDefault(); return }
+          if (e.key === 'Escape' && menuOpen) { e.preventDefault(); setSlashMenu(null); return }
+          // Filter slash menu — only intercept if menu is actually open
+          if (menuOpen) {
+            if (e.key === 'Backspace') { e.preventDefault(); setSlashFilter(f => f.slice(0, -1)); return }
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setSlashFilter(f => f + e.key); return }
+            // Enter/Tab select first item
+            if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return }
           }
           if (e.key === 'Enter' && e.shiftKey) {
             let node: Node | null = window.getSelection()?.getRangeAt(0).startContainer ?? null
@@ -1087,12 +1102,22 @@ function FlashcardBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDup
   onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
 }) {
   const [flipped, setFlipped] = useState(false)
+  const frontRef = useRef<HTMLDivElement>(null)
+  const backRef = useRef<HTMLDivElement>(null)
   const BC: React.CSSProperties = { padding: '3px 8px', fontSize: 11, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 5, cursor: 'pointer', color: '#555' }
+
+  useEffect(() => {
+    if (frontRef.current && frontRef.current.innerHTML !== (block.front ?? '')) frontRef.current.innerHTML = block.front ?? ''
+    if (backRef.current && backRef.current.innerHTML !== (block.back ?? '')) backRef.current.innerHTML = block.back ?? ''
+  }, [])
+
+  const richStyle: React.CSSProperties = { minHeight: 72, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', lineHeight: 1.6 }
 
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', margin: '4px 0', background: '#fafafa' }}>
       <div style={{ background: '#f3f4f6', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>🃏 Flashcard</span>
+        <span style={{ fontSize: 11, color: '#aaa' }}>— supports rich text, code snippets with ` backtick `</span>
         <div style={{ flex: 1 }} />
         <button style={BC} onClick={onDuplicate}>⎘</button>
         <button style={BC} onClick={onMoveUp}>↑</button>
@@ -1101,23 +1126,27 @@ function FlashcardBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDup
       </div>
       <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>FRONT</label>
-          <textarea value={block.front ?? ''} onChange={e => onChange({ front: e.target.value })}
-            placeholder="Term or question…"
-            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', minHeight: 72, outline: 'none', boxSizing: 'border-box' }} />
+          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>FRONT (term / question)</label>
+          <div ref={frontRef} contentEditable suppressContentEditableWarning
+            onInput={() => onChange({ front: frontRef.current?.innerHTML ?? '' })}
+            style={richStyle}
+            data-placeholder="Term or question…"
+          />
         </div>
         <div>
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>BACK</label>
-          <textarea value={block.back ?? ''} onChange={e => onChange({ back: e.target.value })}
-            placeholder="Definition or answer…"
-            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', minHeight: 72, outline: 'none', boxSizing: 'border-box' }} />
+          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>BACK (definition / answer)</label>
+          <div ref={backRef} contentEditable suppressContentEditableWarning
+            onInput={() => onChange({ back: backRef.current?.innerHTML ?? '' })}
+            style={richStyle}
+            data-placeholder="Definition or answer…"
+          />
         </div>
       </div>
       <div style={{ padding: '0 16px 16px' }}>
         <div style={{ fontSize: 11, color: '#aaa', marginBottom: 6 }}>Preview (click to flip):</div>
-        <div onClick={() => setFlipped(f => !f)} style={{ cursor: 'pointer', background: flipped ? '#E6F1FB' : '#fff', border: '2px solid #dbe4ff', borderRadius: 10, padding: '16px 20px', textAlign: 'center', fontSize: 14, fontWeight: 500, color: flipped ? '#0C447C' : '#333', minHeight: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s' }}>
-          {flipped ? (block.back || '(back)') : (block.front || '(front)')}
-        </div>
+        <div onClick={() => setFlipped(f => !f)} style={{ cursor: 'pointer', background: flipped ? '#E6F1FB' : '#fff', border: '2px solid #dbe4ff', borderRadius: 10, padding: '16px 20px', textAlign: 'center', fontSize: 14, fontWeight: 500, color: flipped ? '#0C447C' : '#333', minHeight: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s' }}
+          dangerouslySetInnerHTML={{ __html: flipped ? (block.back || '<span style="color:#ccc">(back)</span>') : (block.front || '<span style="color:#ccc">(front)</span>') }}
+        />
       </div>
     </div>
   )
@@ -1202,11 +1231,14 @@ function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) =>
 }
 
 // ─── Quiz modal ───────────────────────────────────────────────────────────────
-function QuizModal({ onInsert, onClose }: { onInsert:(h:string)=>void; onClose:()=>void }) {
-  const [q, setQ] = useState('')
-  const [opts, setOpts] = useState(['', '', '', ''])
-  const [correct, setCorrect] = useState(0)
-  const [expl, setExpl] = useState(['', '', '', ''])
+function QuizModal({ onInsert, onClose, initial }: {
+  onInsert:(h:string)=>void; onClose:()=>void
+  initial?: { q: string; opts: string[]; correct: number; expl: string[] }
+}) {
+  const [q, setQ] = useState(initial?.q ?? '')
+  const [opts, setOpts] = useState(initial?.opts ?? ['', '', '', ''])
+  const [correct, setCorrect] = useState(initial?.correct ?? 0)
+  const [expl, setExpl] = useState(initial?.expl ?? ['', '', '', ''])
   const [err, setErr] = useState('')
   const inp: React.CSSProperties = { width:'100%', padding:'7px 9px', border:'1px solid #e5e7eb', borderRadius:7, fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:8, boxSizing:'border-box' as const }
 
@@ -1475,6 +1507,7 @@ export default function LessonEditorPage() {
   const pendingQuizInsertFn = useRef<((html: string) => void) | null>(null)
   const blockDomRefs = useRef<Record<string, HTMLDivElement>>({})
   const [showQuiz, setShowQuiz] = useState(false)
+  const [editingQuizEl, setEditingQuizEl] = useState<HTMLElement | null>(null)
   const [quizTargetId, setQuizTargetId] = useState<string | null>(null)
   const [mediaModal, setMediaModal] = useState<null | 'image' | 'video' | 'file' | 'link'>(null)
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null)
@@ -1644,6 +1677,16 @@ export default function LessonEditorPage() {
                 pendingQuizInsertFn.current = insertFn
                 setShowQuiz(true)
               }}
+              onEditQuiz={(quizEl) => {
+                pendingQuizInsertFn.current = (newHtml) => {
+                  quizEl.outerHTML = newHtml
+                  // Trigger onChange for the block
+                  const blockEl = quizEl.closest('[data-block-id]') as HTMLElement | null
+                  if (blockEl) blockEl.dispatchEvent(new Event('input', { bubbles: true }))
+                }
+                setEditingQuizEl(quizEl)
+                setShowQuiz(true)
+              }}
               onDuplicate={() => duplicateBlock(block.id)}
             />
           )}
@@ -1749,13 +1792,24 @@ export default function LessonEditorPage() {
         </div>
       </div>
 
-      {showQuiz && <QuizModal onInsert={html => {
-        if (pendingQuizInsertFn.current) {
-          pendingQuizInsertFn.current(html)
-          pendingQuizInsertFn.current = null
-        }
-        setShowQuiz(false)
-      }} onClose={() => { setShowQuiz(false); pendingQuizInsertFn.current = null }} />}
+      {showQuiz && <QuizModal
+        initial={editingQuizEl ? (() => {
+          const el = editingQuizEl
+          let opts: string[] = [], expl: string[] = []
+          try { opts = JSON.parse(el.getAttribute('data-opts')?.replace(/&quot;/g, '"') ?? '[]') } catch {}
+          try { expl = JSON.parse(el.getAttribute('data-expl')?.replace(/&quot;/g, '"') ?? '[]') } catch {}
+          return { q: el.getAttribute('data-q')?.replace(/&quot;/g, '"') ?? '', opts, correct: Number(el.getAttribute('data-correct') ?? 0), expl }
+        })() : undefined}
+        onInsert={html => {
+          if (pendingQuizInsertFn.current) {
+            pendingQuizInsertFn.current(html)
+            pendingQuizInsertFn.current = null
+          }
+          setShowQuiz(false)
+          setEditingQuizEl(null)
+        }}
+        onClose={() => { setShowQuiz(false); pendingQuizInsertFn.current = null; setEditingQuizEl(null) }}
+      />}
       {showShortcuts && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
           onClick={() => setShowShortcuts(false)}>
