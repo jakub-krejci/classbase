@@ -125,7 +125,7 @@ const EDITOR_CSS = `
 .cb-rich details > *:not(summary){padding:10px 14px}
 `
 
-function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz, onDuplicate }: {
+function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz, onEditQuiz, onDuplicate }: {
   block: Block; onChange: (content: string) => void
   onMount?: (el: HTMLDivElement) => void
   onAddAfter: (type: BlockType, variant?: CalloutVariant) => void; onDelete: () => void
