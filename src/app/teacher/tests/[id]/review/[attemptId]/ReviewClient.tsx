@@ -141,7 +141,7 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
             const opts = (q.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
             const selected: string[] = ans?.selected_option_ids ?? []
             const correctIds = opts.filter((o: any) => o.is_correct).map((o: any) => o.id)
-            const isObjective = q.type !== 'descriptive'
+            const isObjective = q.type !== 'descriptive' && q.type !== 'coding'
 
             // Determine correctness for objective
             let autoCorrect: boolean | null = null
@@ -196,6 +196,21 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
                 {q.type === 'descriptive' && (
                   <div style={{ background: '#fff', border: '1px solid #dbeafe', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: '#1e3a5f', lineHeight: 1.7, marginBottom: 16, minHeight: 60 }}>
                     {ans?.answer_text || <span style={{ color: '#aaa' }}>No answer provided</span>}
+                  </div>
+                )}
+                {/* Coding answer */}
+                {q.type === 'coding' && (
+                  <div style={{ marginBottom: 16 }}>
+                    {q.starter_code && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4 }}>STARTER CODE</div>
+                        <pre style={{ margin: 0, background: '#1e1e2e', color: '#6c7086', borderRadius: 6, padding: '10px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: .7 }}>{q.starter_code}</pre>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 4 }}>STUDENT&apos;S SUBMITTED CODE</div>
+                    <pre style={{ margin: 0, background: '#1a1b26', color: '#cdd6f4', borderRadius: 8, padding: '12px 14px', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-all', minHeight: 60 }}>
+                      {ans?.answer_text || <span style={{ color: '#6c7086' }}>No code submitted</span>}
+                    </pre>
                   </div>
                 )}
 

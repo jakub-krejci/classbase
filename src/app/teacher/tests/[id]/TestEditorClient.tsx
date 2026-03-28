@@ -4,14 +4,14 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Breadcrumb } from '@/components/ui'
 
-type QType = 'single' | 'multiple' | 'descriptive' | 'truefalse'
+type QType = 'single' | 'multiple' | 'descriptive' | 'truefalse' | 'coding'
 type Tab = 'settings' | 'questions' | 'assign' | 'grading'
 
 const Q_LABELS: Record<QType, string> = {
   single: 'Single choice', multiple: 'Multiple choice',
-  descriptive: 'Descriptive', truefalse: 'True / False',
+  descriptive: 'Descriptive', truefalse: 'True / False', coding: 'Coding',
 }
-const Q_ICONS: Record<QType, string> = { single: '◉', multiple: '☑', descriptive: '✏️', truefalse: '⇄' }
+const Q_ICONS: Record<QType, string> = { single: '◉', multiple: '☑', descriptive: '✏️', truefalse: '⇄', coding: '💻' }
 
 function uid() { return Math.random().toString(36).slice(2) }
 
@@ -89,7 +89,7 @@ function QuestionEditor({ q, onChange, onDelete, onMove, total, idx }: {
               <button key={t} onClick={() => {
                 const opts = t === 'truefalse'
                   ? [{ id: uid(), body_html: 'True', is_correct: true, position: 0 }, { id: uid(), body_html: 'False', is_correct: false, position: 1 }]
-                  : t === 'descriptive' ? [] : (q.options ?? [])
+                  : (t === 'descriptive' || t === 'coding') ? [] : (q.options ?? [])
                 onChange({ ...q, type: t, options: opts })
               }}
                 style={{ padding: '4px 12px', fontSize: 12, borderRadius: 6, border: `1.5px solid ${q.type === t ? '#185FA5' : '#e5e7eb'}`, background: q.type === t ? '#E6F1FB' : '#fff', color: q.type === t ? '#0C447C' : '#555', cursor: 'pointer', fontWeight: q.type === t ? 600 : 400 }}>
@@ -133,6 +133,20 @@ function QuestionEditor({ q, onChange, onDelete, onMove, total, idx }: {
           {q.type === 'descriptive' && (
             <div style={{ background: '#f9fafb', border: '1px dashed #e5e7eb', borderRadius: 8, padding: 14, marginBottom: 14, fontSize: 13, color: '#888', textAlign: 'center' }}>
               Students type a free-text answer. You grade it manually in the results.
+            </div>
+          )}
+          {q.type === 'coding' && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 6 }}>STARTER CODE (shown to student)</label>
+              <textarea
+                value={q.starter_code ?? ''}
+                onChange={e => onChange({ ...q, starter_code: e.target.value })}
+                placeholder={'# Write starter code here (optional)\n# Students will see this when they open the question\n'}
+                spellCheck={false}
+                style={{ width: '100%', minHeight: 140, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.6, resize: 'vertical', outline: 'none', background: '#1e1e2e', color: '#cdd6f4', boxSizing: 'border-box' as const }} />
+              <div style={{ background: '#f0f4ff', border: '1px solid #c7d7fd', borderRadius: 8, padding: '8px 12px', marginTop: 8, fontSize: 12, color: '#3730a3' }}>
+                💻 Students get a live Python editor pre-filled with your starter code. They can run and test their solution, then click "Submit as answer" to save it.
+              </div>
             </div>
           )}
           {/* Meta */}
@@ -239,6 +253,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
         // Update existing
         const { error: err } = await supabase.from('test_questions').update({
           type: q.type, body_html: q.body_html,
+          starter_code: q.starter_code ?? '',
           points_correct: q.points_correct, points_incorrect: q.points_incorrect,
           is_required: q.is_required, position: i,
           time_limit_mins: q.time_limit_mins ?? null,
@@ -248,6 +263,7 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
         // Insert new
         const { data: nq, error: err } = await supabase.from('test_questions').insert({
           test_id: test.id, type: q.type, body_html: q.body_html,
+          starter_code: q.starter_code ?? '',
           points_correct: q.points_correct, points_incorrect: q.points_incorrect,
           is_required: q.is_required, position: i,
           time_limit_mins: q.time_limit_mins ?? null,
@@ -275,9 +291,9 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
   function addQuestion(type: QType) {
     const opts =
       type === 'truefalse' ? [{ id: uid(), body_html: 'True', is_correct: true, position: 0 }, { id: uid(), body_html: 'False', is_correct: false, position: 1 }]
-      : type === 'descriptive' ? []
+      : (type === 'descriptive' || type === 'coding') ? []
       : [{ id: uid(), body_html: '', is_correct: true, position: 0 }, { id: uid(), body_html: '', is_correct: false, position: 1 }]
-    setQuestions(p => [...p, { id: uid(), _dbId: null, type, body_html: '', points_correct: 1, points_incorrect: 0, is_required: true, time_limit_mins: null, options: opts }])
+    setQuestions(p => [...p, { id: uid(), _dbId: null, type, body_html: '', starter_code: '', points_correct: 1, points_incorrect: 0, is_required: true, time_limit_mins: null, options: opts }])
   }
 
   function moveQuestion(idx: number, dir: -1 | 1) {

@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { highlightPython } from '@/lib/highlight'
 
 type Phase = 'start' | 'playing' | 'submitted' | 'locked' | 'timed_out'
 
@@ -30,6 +31,106 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel }: {
             {confirmLabel}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── Coding editor (Pyodide-powered) with submit ───────────────────────────────
+function CodingEditor({ starterCode, savedCode, onSubmit }: {
+  starterCode: string; savedCode: string; onSubmit: (code: string) => void
+}) {
+  const [code, setCode] = useState(savedCode || starterCode || '')
+  const [output, setOutput] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [pyReady, setPyReady] = useState(false)
+  const [pyLoading, setPyLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(!!savedCode)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const preRef = useRef<HTMLPreElement>(null)
+
+  const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace'
+
+  function syncHighlight(val: string) {
+    if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n'
+  }
+  function syncHeight() {
+    if (!taRef.current) return
+    taRef.current.style.height = 'auto'
+    taRef.current.style.height = taRef.current.scrollHeight + 'px'
+  }
+  useEffect(() => { syncHighlight(code); syncHeight() }, [])
+
+  useEffect(() => {
+    import('@/lib/pyodide-runner').then(m => {
+      setPyLoading(true)
+      m.loadPyodide().then(() => { setPyReady(true); setPyLoading(false) }).catch(() => setPyLoading(false))
+    })
+  }, [])
+
+  async function run() {
+    if (running || !pyReady) return
+    setRunning(true); setOutput(null); setErr(null)
+    try {
+      const { runPython } = await import('@/lib/pyodide-runner')
+      const { output: out, error: e } = await runPython(code, () => {}, () => {})
+      setOutput(out || '(no output)')
+      if (e) setErr(e)
+    } catch (e: any) { setErr(e.message) }
+    setRunning(false)
+  }
+
+  function handleSubmit() {
+    onSubmit(code)
+    setSubmitted(true)
+  }
+
+  return (
+    <div style={{ borderRadius: 10, overflow: 'hidden', border: '2px solid #a6e3a1', marginBottom: 8 }}>
+      {/* Editor header */}
+      <div style={{ background: '#161825', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 5 }}>
+          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#f38ba8' }} />
+          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#f9e2af' }} />
+          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#a6e3a1' }} />
+        </div>
+        <span style={{ fontSize: 11, color: '#6c7086', fontFamily: monoFont }}>Python</span>
+        <div style={{ flex: 1 }} />
+        {pyLoading && <span style={{ fontSize: 11, color: '#f9e2af' }}>Loading Python…</span>}
+        <button onClick={run} disabled={!pyReady || running}
+          style={{ padding: '4px 14px', background: pyReady ? '#a6e3a1' : '#414459', color: pyReady ? '#1a1b26' : '#6c7086', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: pyReady ? 'pointer' : 'not-allowed', fontFamily: monoFont }}>
+          {running ? 'Running…' : '▶ Run'}
+        </button>
+      </div>
+      {/* Code area */}
+      <div style={{ position: 'relative', background: '#1a1b26' }}>
+        <pre ref={preRef} aria-hidden style={{ margin: 0, ...{ fontFamily: monoFont, fontSize: 14, lineHeight: 1.7, padding: '12px 14px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', boxSizing: 'border-box', width: '100%', minHeight: 120 } }} />
+        <textarea ref={taRef} value={code}
+          onChange={e => { setCode(e.target.value); syncHighlight(e.target.value); syncHeight(); setSubmitted(false) }}
+          onKeyDown={e => {
+            if (e.key === 'Tab') { e.preventDefault(); const s = e.currentTarget.selectionStart, en = e.currentTarget.selectionEnd; const v = code.slice(0, s) + '  ' + code.slice(en); setCode(v); syncHighlight(v); requestAnimationFrame(() => { if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s + 2 } }) }
+          }}
+          spellCheck={false}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', resize: 'none', background: 'transparent', color: 'transparent', caretColor: '#cdd6f4', border: 'none', outline: 'none', fontFamily: monoFont, fontSize: 14, lineHeight: 1.7, padding: '12px 14px', boxSizing: 'border-box', overflow: 'hidden' }} />
+      </div>
+      {/* Output */}
+      {(output !== null || err) && (
+        <div style={{ background: '#11111b', padding: '10px 14px', fontFamily: monoFont, fontSize: 13, lineHeight: 1.6 }}>
+          {output && <pre style={{ margin: 0, color: '#cdd6f4', whiteSpace: 'pre-wrap' }}>{output}</pre>}
+          {err && <pre style={{ margin: 0, color: '#f38ba8', whiteSpace: 'pre-wrap' }}>{err}</pre>}
+        </div>
+      )}
+      {/* Submit row */}
+      <div style={{ background: '#1e1e2e', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ fontSize: 12, color: submitted ? '#a6e3a1' : '#6c7086' }}>
+          {submitted ? '✓ Answer saved — you can still edit and re-submit' : 'Run your code to test it, then submit when ready'}
+        </span>
+        <button onClick={handleSubmit}
+          style={{ padding: '7px 18px', background: submitted ? '#313244' : '#a6e3a1', color: submitted ? '#a6e3a1' : '#1a1b26', border: submitted ? '1px solid #a6e3a1' : 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+          {submitted ? '✓ Re-submit answer' : 'Submit as answer'}
+        </button>
       </div>
     </div>
   )
@@ -274,7 +375,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
           const opts = (q.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
           const selected: string[] = ans?.selected_option_ids ?? []
           const correctIds = opts.filter((o: any) => o.is_correct).map((o: any) => o.id)
-          const isObjective = q.type !== 'descriptive'
+          const isObjective = q.type !== 'descriptive' && q.type !== 'coding'
           const isCorrect = isObjective && selected.length > 0 && (
             q.type === 'multiple'
               ? correctIds.every((id: string) => selected.includes(id)) && selected.every((id: string) => correctIds.includes(id))
@@ -314,6 +415,14 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
               {q.type === 'descriptive' && (
                 <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#333', lineHeight: 1.65 }}>
                   {ans?.answer_text || <span style={{ color: '#aaa' }}>No answer provided</span>}
+                </div>
+              )}
+              {q.type === 'coding' && (
+                <div style={{ background: '#1a1b26', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{ background: '#161825', padding: '5px 12px', fontSize: 11, color: '#6c7086', fontFamily: 'ui-monospace,monospace' }}>💻 Submitted code</div>
+                  <pre style={{ margin: 0, padding: '12px 14px', color: '#cdd6f4', fontFamily: 'ui-monospace,monospace', fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                    {ans?.answer_text || <span style={{ color: '#6c7086' }}>No code submitted</span>}
+                  </pre>
                 </div>
               )}
               {ans?.teacher_note && (
@@ -393,7 +502,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
           {sortedQ.map((q, i) => {
             const ans = answers[q.id]
-            const done = q.type === 'descriptive' ? (ans?.answer_text ?? '').trim() !== '' : (ans?.selected_option_ids ?? []).length > 0
+            const done = q.type === 'descriptive' || q.type === 'coding' ? (ans?.answer_text ?? '').trim() !== '' : (ans?.selected_option_ids ?? []).length > 0
             return (
               <button key={q.id} onClick={() => setCurrentIdx(i)}
                 style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${i === currentIdx ? '#185FA5' : done ? '#22c55e' : '#e5e7eb'}`, background: i === currentIdx ? '#185FA5' : done ? '#EAF3DE' : '#fff', color: i === currentIdx ? '#fff' : done ? '#27500A' : '#888', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
@@ -428,6 +537,16 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             <textarea value={descText} onChange={e => setDescriptiveAnswer(currentQ.id, e.target.value)}
               placeholder="Write your answer here…"
               style={{ width: '100%', minHeight: 140, padding: '12px 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.65, boxSizing: 'border-box' }} />
+          )}
+          {currentQ.type === 'coding' && (
+            <CodingEditor
+              starterCode={currentQ.starter_code ?? ''}
+              savedCode={answers[currentQ.id]?.answer_text ?? ''}
+              onSubmit={(code) => {
+                setAnswers(p => ({ ...p, [currentQ.id]: { ...p[currentQ.id], answer_text: code, question_id: currentQ.id } }))
+                saveAnswer(currentQ.id, { answer_text: code })
+              }}
+            />
           )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
