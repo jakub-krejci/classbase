@@ -88,6 +88,22 @@ except ImportError:
 `
     try { await py.runPythonAsync(matplotlibShim) } catch {}
 
+    // Override input() to use browser prompt() — works synchronously from Python's perspective
+    const inputShim = `
+import sys
+from js import prompt as _js_prompt
+
+def input(msg=''):
+    result = _js_prompt(str(msg))
+    if result is None:
+        raise EOFError('input() cancelled by user')
+    print(str(msg) + str(result))
+    return str(result)
+
+__builtins__['input'] = input
+`
+    try { await py.runPythonAsync(inputShim) } catch {}
+
     // Run user code
     await py.runPythonAsync(code)
 
