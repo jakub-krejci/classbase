@@ -190,11 +190,14 @@ export default function TestEditorClient({ test: initial, questions: initQ, grou
   const [error, setError] = useState('')
 
   async function unlockAttempt(attemptId: string) {
+    setError('')
     const { error: err } = await supabase.from('test_attempts')
       .update({ status: 'in_progress', locked_at: null, warning_count: 0 })
       .eq('id', attemptId)
     if (err) { setError('Unlock failed: ' + err.message); return }
-    setAttempts((p: any[]) => p.map(a => a.id === attemptId ? { ...a, status: 'in_progress', locked_at: null, warning_count: 0 } : a))
+    setAttempts((p: any[]) => p.map(a =>
+      a.id === attemptId ? { ...a, status: 'in_progress', locked_at: null, warning_count: 0 } : a
+    ))
   }
 
   // ── Save settings ──────────────────────────────────────────────────────────

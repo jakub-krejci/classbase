@@ -63,6 +63,24 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   })
 
   // ── Anti-cheat: detect tab switch / visibility change ───────────────────────
+  // ── Realtime: detect teacher unlock ─────────────────────────────────────────
+  useEffect(() => {
+    if (!attempt) return
+    const ch = supabase.channel('attempt-' + attempt.id)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'test_attempts',
+        filter: `id=eq.${attempt.id}`,
+      }, (payload: any) => {
+        const updated = payload.new
+        if (updated.status === 'in_progress' && (phase === 'locked' || phase === 'timed_out')) {
+          setWarnings(updated.warning_count ?? 0)
+          setPhase('playing')
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [attempt?.id, phase])
+
   useEffect(() => {
     if (phase !== 'playing') return
     function onVisChange() {
