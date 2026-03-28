@@ -77,7 +77,7 @@ export default function LoginPage() {
           <img
             src="/logo_hlavni.png"
             alt="ClassBase"
-            style={{ width: '100%', maxWidth: 320, height: 'auto', marginBottom: 20, objectFit: 'contain', display: 'block', margin: '0 auto 20px' }}
+            style={{ width: '100%', maxWidth: 420, height: 'auto', objectFit: 'contain', display: 'block', margin: '0 auto 20px' }}
             onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111', margin: '0 0 6px' }}>Vítejte v ClassBase</h1>

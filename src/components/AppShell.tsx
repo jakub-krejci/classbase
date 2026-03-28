@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { DarkContext } from '@/lib/darkMode'
 import ChatWidget from './ChatWidget'
 
+const LOGO_SMALL = '/logo_male.png'
+
 export default function AppShell({ user, role, children, wide }: { user: any; role: 'teacher' | 'student'; children: React.ReactNode; wide?: boolean }) {
   const path = usePathname()
   const supabase = createClient()
@@ -107,7 +109,6 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   const homeHref = role === 'teacher' ? '/teacher/modules' : '/student/dashboard'
   const initials = (user?.full_name ?? user?.email ?? '?').split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
   const roleColor = role === 'teacher' ? { bg: '#E6F1FB', text: '#0C447C' } : { bg: '#EAF3DE', text: '#27500A' }
-  const LOGO_SMALL = '/logo_male.png'
 
   return (
     <div style={{ minHeight: '100vh', background: '#f9fafb', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
@@ -124,7 +125,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
       {/* Top bar */}
       <div className="cb-nav-bar" style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 8, height: 52, position: 'sticky', top: 0, zIndex: 50 }}>
         <a href={homeHref} style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', color: '#111', marginRight: 4 }}>
-          <img src={LOGO_SMALL} alt="ClassBase" style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+          <img src={LOGO_SMALL} alt="ClassBase" style={{ height: 36, width: 'auto', objectFit: 'contain', display: 'block' }}
             onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
           <span style={{ fontWeight: 700, fontSize: 16 }}>ClassBase</span>
         </a>
