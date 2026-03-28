@@ -43,31 +43,20 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
 }) {
   const [code, setCode] = useState(savedCode || starterCode || '')
   const [output, setOutput] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [pyReady, setPyReady] = useState(false)
   const [pyLoading, setPyLoading] = useState(false)
+  const [fontSize, setFontSize] = useState(14)
+  const [outputHistory, setOutputHistory] = useState<string[]>([])
+  const [pkgStatus, setPkgStatus] = useState('')
+  const [images, setImages] = useState<string[]>([])
   const [submitted, setSubmitted] = useState(!!savedCode)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
 
-  const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace'
-  const monoStyle: React.CSSProperties = {
-    fontFamily: monoFont, fontSize: 14, lineHeight: 1.7,
-    padding: '12px 14px', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-    margin: 0, boxSizing: 'border-box', width: '100%', minHeight: 140,
-  }
-
-  function syncHighlight(val: string) {
-    if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n'
-  }
-  function syncHeight() {
-    if (!taRef.current || !preRef.current) return
-    taRef.current.style.height = 'auto'
-    taRef.current.style.height = taRef.current.scrollHeight + 'px'
-    preRef.current.style.height = taRef.current.style.height
-  }
-
+  function syncHighlight(val: string) { if (preRef.current) preRef.current.innerHTML = highlightPython(val) + '\n' }
+  function syncHeight() { if (!taRef.current) return; taRef.current.style.height = 'auto'; taRef.current.style.height = taRef.current.scrollHeight + 'px' }
   useEffect(() => { syncHighlight(code); syncHeight() }, [])
 
   useEffect(() => {
@@ -78,73 +67,121 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
   }, [])
 
   async function run() {
-    if (running || !pyReady) return
-    setRunning(true); setOutput(null); setErr(null)
+    if (running) return
+    setRunning(true); setOutput(null); setError(null); setImages([])
     try {
       const { runPython } = await import('@/lib/pyodide-runner')
-      const { output: out, error: e } = await runPython(code, () => {}, () => {})
-      setOutput(out || '(no output)')
-      if (e) setErr(e)
-    } catch (e: any) { setErr(e.message) }
+      const { output: out, error: err, images: imgs } = await runPython(code, () => {}, msg => setPkgStatus(msg))
+      const result = out || (imgs.length ? '' : '(no output)')
+      setOutput(result)
+      if (err) setError(err)
+      if (imgs.length) setImages(imgs)
+      setOutputHistory(h => [result || `[${imgs.length} chart(s)]`, ...h.slice(0, 4)])
+    } catch (e: any) { setError(e.message) }
     setRunning(false)
-  }
-
-  function handleChange(val: string) {
-    setCode(val)
-    syncHighlight(val)
-    requestAnimationFrame(syncHeight)
-    setSubmitted(false)
   }
 
   function handleSubmit() { onSubmit(code); setSubmitted(true) }
 
+  const monoFont = 'ui-monospace,"Cascadia Code","Fira Code",Consolas,monospace'
+  const monoStyle: React.CSSProperties = { fontFamily: monoFont, fontSize, lineHeight: 1.7, padding: '14px 16px 14px 52px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', display: 'block', boxSizing: 'border-box', width: '100%' }
+  const lineCount = (code.match(/\n/g)?.length ?? 0) + 1
+
   return (
-    <div style={{ borderRadius: 10, overflow: 'hidden', border: '2px solid #a6e3a1', marginBottom: 8 }}>
+    <div style={{ background: '#1a1b26', borderRadius: 8, overflow: 'hidden', margin: '1.2em 0', borderLeft: '3px solid #a6e3a1', boxShadow: '0 2px 8px rgba(0,0,0,.07)' }}>
       {/* Header */}
-      <div style={{ background: '#161825', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 5 }}>
-          {['#f38ba8','#f9e2af','#a6e3a1'].map(c => <div key={c} style={{ width: 9, height: 9, borderRadius: '50%', background: c }} />)}
-        </div>
-        <span style={{ fontSize: 11, color: '#6c7086', fontFamily: monoFont }}>Python</span>
-        <div style={{ flex: 1 }} />
-        {pyLoading && <span style={{ fontSize: 11, color: '#f9e2af' }}>Loading Python…</span>}
-        <button onClick={run} disabled={!pyReady || running}
-          style={{ padding: '4px 14px', background: pyReady ? '#a6e3a1' : '#414459', color: pyReady ? '#1a1b26' : '#6c7086', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: pyReady ? 'pointer' : 'not-allowed', fontFamily: monoFont }}>
-          {running ? 'Running…' : '▶ Run'}
+      <div style={{ background: '#161825', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width:9,height:9,borderRadius:'50%',background:'#f38ba8',flexShrink:0 }} />
+        <div style={{ width:9,height:9,borderRadius:'50%',background:'#f9e2af',flexShrink:0 }} />
+        <div style={{ width:9,height:9,borderRadius:'50%',background:'#a6e3a1',flexShrink:0 }} />
+        <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#7aa2f7', letterSpacing: '.06em', flex: 1, marginLeft: 4 }}>
+          ▶ Try It — Python
+          {pyLoading && <span style={{ color: '#45475a', marginLeft: 6, fontSize: 9 }}>loading…</span>}
+          {pyReady && <span style={{ color: '#a6e3a1', marginLeft: 6 }}>●</span>}
+        </span>
+        <button onClick={() => setFontSize(f => Math.max(10, f-1))} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A−</button>
+        <button onClick={() => setFontSize(f => Math.min(20, f+1))} style={{ fontSize:12, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 4px' }}>A+</button>
+        <button onClick={() => { setCode(starterCode); syncHighlight(starterCode); syncHeight(); setOutput(null); setError(null) }}
+          style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', padding:'1px 6px' }} title="Reset to starter code">↺ Reset</button>
+        <button onClick={run} disabled={running}
+          style={{ padding:'3px 12px', fontSize:12, background: pyReady?'#a6e3a1':'#7aa2f7', color:'#1a1b26', border:'none', borderRadius:5, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+          {running ? (pkgStatus || '⏳ Running…') : '▶ Run'}
         </button>
       </div>
 
-      {/* Code area — pre overlay + transparent textarea stacked */}
-      <div style={{ position: 'relative', background: '#1a1b26' }}>
-        {/* Syntax-highlighted display layer */}
-        <pre ref={preRef} aria-hidden
-          style={{ ...monoStyle, position: 'relative', display: 'block', color: '#cdd6f4', background: '#1a1b26', pointerEvents: 'none', userSelect: 'none' }} />
-        {/* Editable input layer — sits exactly on top, text transparent so highlight shows */}
-        <textarea ref={taRef} value={code}
-          onChange={e => handleChange(e.target.value)}
+      {/* Editor with line numbers */}
+      <div style={{ position: 'relative', background: '#1e1e2e', display: 'flex' }}>
+        <div style={{ width:40, flexShrink:0, background:'#181825', padding:'14px 8px 14px 0', textAlign:'right', fontFamily:'ui-monospace,monospace', fontSize, lineHeight:1.7, color:'#45475a', userSelect:'none', pointerEvents:'none', boxSizing:'border-box' }}>
+          {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i+1}</div>)}
+        </div>
+        <pre ref={preRef} aria-hidden="true"
+          style={{ ...monoStyle, color: '#cdd6f4', background: 'transparent', pointerEvents: 'none', position: 'absolute', left: 40, top: 0, right: 0, bottom: 0, margin: 0, overflow: 'hidden' }} />
+        <textarea ref={taRef} value={code} spellCheck={false}
+          onChange={e => { setCode(e.target.value); syncHighlight(e.target.value); syncHeight(); setSubmitted(false) }}
           onKeyDown={e => {
-            if (e.key === 'Tab') {
+            const ta = e.currentTarget; const s=ta.selectionStart, en=ta.selectionEnd, v=ta.value
+            if (e.key==='Enter' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); run(); return }
+            if (e.key==='Tab') {
               e.preventDefault()
-              const s = e.currentTarget.selectionStart, en = e.currentTarget.selectionEnd
-              const v = code.slice(0, s) + '  ' + code.slice(en)
-              handleChange(v)
-              requestAnimationFrame(() => { if (taRef.current) { taRef.current.selectionStart = taRef.current.selectionEnd = s + 2 } })
+              if (e.shiftKey) {
+                const ls=v.lastIndexOf('\n',s-1)+1; const sp=v.slice(ls).match(/^ {1,4}/)?.[0]??''
+                if (sp) { const nv=v.slice(0,ls)+v.slice(ls+sp.length); setCode(nv); syncHighlight(nv); requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s-sp.length}) }
+              } else {
+                const nv=v.slice(0,s)+'    '+v.slice(en); setCode(nv); syncHighlight(nv); requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s+4})
+              }
+              return
+            }
+            if (e.key==='Enter' && !e.shiftKey) {
+              e.preventDefault()
+              const ls=v.lastIndexOf('\n',s-1)+1; const cur=v.slice(ls,s)
+              const indent=cur.match(/^(\s*)/)?.[1]??''; const extra=cur.trimEnd().endsWith(':')?'    ':''
+              const nv=v.slice(0,s)+'\n'+indent+extra+v.slice(en); setCode(nv); syncHighlight(nv)
+              requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s+1+indent.length+extra.length})
+            }
+            const pairs: Record<string,string> = {'(':')','{':'}','[':']','"':'"',"'":"'"}
+            if (pairs[e.key] && s===en) {
+              e.preventDefault()
+              const nv=v.slice(0,s)+e.key+pairs[e.key]+v.slice(en); setCode(nv); syncHighlight(nv)
+              requestAnimationFrame(()=>{ta.selectionStart=ta.selectionEnd=s+1})
             }
           }}
-          spellCheck={false}
-          style={{ ...monoStyle, position: 'absolute', top: 0, left: 0, height: '100%', resize: 'none', background: 'transparent', color: 'transparent', caretColor: '#cdd6f4', border: 'none', outline: 'none', overflow: 'hidden' }} />
+          style={{ ...monoStyle, flex:1, color:'transparent', caretColor:'#cdd6f4', background:'transparent', border:'none', outline:'none', resize:'none', overflow:'hidden', position:'relative', zIndex:1, minHeight:60, paddingLeft:52 }}
+        />
       </div>
 
       {/* Output */}
-      {(output !== null || err) && (
-        <div style={{ background: '#11111b', padding: '10px 14px', fontFamily: monoFont, fontSize: 13, lineHeight: 1.6 }}>
-          {output && <pre style={{ margin: 0, color: '#cdd6f4', whiteSpace: 'pre-wrap' }}>{output}</pre>}
-          {err && <pre style={{ margin: 0, color: '#f38ba8', whiteSpace: 'pre-wrap' }}>{err}</pre>}
+      {(output !== null || error !== null || images.length > 0) && (
+        <div style={{ background: '#0d1117', borderTop: '1px solid #2a2a4a', padding: '10px 16px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+            <span style={{ fontSize:10, color:'#6c7086', fontFamily:'monospace', letterSpacing:'.05em' }}>OUTPUT</span>
+            {output && <button onClick={() => navigator.clipboard?.writeText(output!)} style={{ fontSize:10, color:'#6c7086', background:'none', border:'none', cursor:'pointer', marginLeft:'auto' }}>⎘ Copy</button>}
+          </div>
+          {output && <pre style={{ color:'#a6e3a1', fontFamily:'ui-monospace,monospace', fontSize:13, margin:0, whiteSpace:'pre-wrap' }}>{output}</pre>}
+          {error && <pre style={{ color:'#f38ba8', fontFamily:'ui-monospace,monospace', fontSize:12, margin: output?'6px 0 0':0, whiteSpace:'pre-wrap' }}>{error}</pre>}
+          {images.map((img, i) => (
+            <div key={i} style={{ marginTop: output || error ? 10 : 0 }}>
+              <img src={'data:image/png;base64,' + img} alt={'Chart ' + (i+1)} style={{ maxWidth:'100%', borderRadius:6, display:'block' }} />
+            </div>
+          ))}
         </div>
       )}
 
+      {/* History */}
+      {outputHistory.length > 1 && (
+        <details style={{ background:'#0a0a0f', borderTop:'1px solid #2a2a4a' }}>
+          <summary style={{ fontSize:10, color:'#45475a', padding:'4px 14px', cursor:'pointer', userSelect:'none', listStyle:'none' }}>▸ {outputHistory.length-1} previous run{outputHistory.length>2?'s':''}</summary>
+          {outputHistory.slice(1).map((h,i) => (
+            <pre key={i} style={{ color:'#585b70', fontFamily:'ui-monospace,monospace', fontSize:12, margin:0, padding:'4px 14px', borderTop:'1px solid #1a1a2e', whiteSpace:'pre-wrap' }}>{h}</pre>
+          ))}
+        </details>
+      )}
+
+      <div style={{ padding:'4px 14px 2px', fontSize:10, color:'#313244', display:'flex', gap:12 }}>
+        <span>Ctrl+Enter run</span><span>Tab indent</span><span>Shift+Tab unindent</span><span>Auto-closes brackets</span>
+      </div>
+
       {/* Submit */}
-      <div style={{ background: '#1e1e2e', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+      <div style={{ background: '#1e1e2e', borderTop: '1px solid #2a2a4a', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <span style={{ fontSize: 12, color: submitted ? '#a6e3a1' : '#6c7086' }}>
           {submitted ? '✓ Answer saved — you can still edit and re-submit' : 'Run your code to test it, then submit when ready'}
         </span>
@@ -156,6 +193,7 @@ function CodingEditor({ starterCode, savedCode, onSubmit }: {
     </div>
   )
 }
+
 
 export default function TestPlayer({ test, questions, attempt: initAttempt, answers: initAnswers, studentId }: {
   test: any; questions: any[]; attempt: any; answers: any[]; studentId: string
