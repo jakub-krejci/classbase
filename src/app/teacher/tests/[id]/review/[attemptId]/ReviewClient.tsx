@@ -136,6 +136,7 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
         type: 'announcement',
         title: `Test graded: ${test.title}`,
         body: `Your test has been reviewed. Final score: ${fs} / ${attempt.max_score}.${feedback ? ' Your teacher left feedback.' : ''}`,
+        link: `/student/tests/${test.id}`,
       }),
     })
     const result = await res.json()

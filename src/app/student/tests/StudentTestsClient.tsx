@@ -60,15 +60,25 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
                   {st === 'in_progress' ? '▶ Continue test' : '▶ Start test'}
                 </a>
               )}
-              {st === 'submitted' && (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1, padding: '9px 0', background: '#E6F1FB', color: '#0C447C', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-                    ✓ Submitted
+              {(st === 'submitted' || st === 'timed_out') && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {/* Grading status */}
+                  {st === 'submitted' && (
+                    <div style={{ fontSize: 12, color: attempt?.reviewed_at ? '#27500A' : '#888', background: attempt?.reviewed_at ? '#EAF3DE' : '#f9fafb', borderRadius: 8, padding: '6px 12px', textAlign: 'center', fontWeight: 500 }}>
+                      {attempt?.reviewed_at
+                        ? <>✓ Graded — <strong>{attempt.final_score ?? attempt.score ?? '?'} / {attempt.max_score ?? '?'} pts</strong></>
+                        : '⏳ Not yet graded'}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ flex: 1, padding: '9px 0', background: st === 'timed_out' ? '#f3f4f6' : '#E6F1FB', color: st === 'timed_out' ? '#555' : '#0C447C', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+                      {st === 'timed_out' ? '⏰ Time expired' : '✓ Submitted'}
+                    </div>
+                    <a href={`/student/tests/${t.id}`}
+                      style={{ padding: '9px 14px', background: '#f3f4f6', color: '#444', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none', border: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                      👁 My answers
+                    </a>
                   </div>
-                  <a href={`/student/tests/${t.id}`}
-                    style={{ padding: '9px 14px', background: '#f3f4f6', color: '#444', textAlign: 'center', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none', border: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
-                    👁 My answers
-                  </a>
                 </div>
               )}
             </div>

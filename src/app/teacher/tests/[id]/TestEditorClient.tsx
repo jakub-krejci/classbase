@@ -62,7 +62,8 @@ function QuestionEditor({ q, onChange, onDelete, onMove, total, idx }: {
     onChange({ ...q, options: [...(q.options ?? []), { id: uid(), body_html: '', is_correct: false, position: q.options?.length ?? 0 }] })
   }
   function toggleCorrect(id: string) {
-    if (q.type === 'single') onChange({ ...q, options: q.options.map((o: any) => ({ ...o, is_correct: o.id === id })) })
+    if (q.type === 'single' || q.type === 'truefalse')
+      onChange({ ...q, options: q.options.map((o: any) => ({ ...o, is_correct: o.id === id })) })
     else onChange({ ...q, options: q.options.map((o: any) => o.id === id ? { ...o, is_correct: !o.is_correct } : o) })
   }
 
@@ -110,10 +111,10 @@ function QuestionEditor({ q, onChange, onDelete, onMove, total, idx }: {
               </label>
               {(q.options ?? []).map((o: any) => (
                 <div key={o.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-                  <button onClick={() => q.type !== 'truefalse' && toggleCorrect(o.id)}
-                    style={{ width: 20, height: 20, borderRadius: q.type === 'multiple' ? 4 : '50%', border: `2px solid ${o.is_correct ? '#185FA5' : '#ccc'}`, background: o.is_correct ? '#185FA5' : '#fff', cursor: q.type === 'truefalse' ? 'default' : 'pointer', flexShrink: 0, marginTop: 12 }} />
+                  <button onClick={() => toggleCorrect(o.id)}
+                    style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${o.is_correct ? '#185FA5' : '#ccc'}`, background: o.is_correct ? '#185FA5' : '#fff', cursor: 'pointer', flexShrink: 0, marginTop: 12 }} />
                   {q.type === 'truefalse' ? (
-                    <div style={{ padding: '9px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, flex: 1 }}>{o.body_html}</div>
+                    <div onClick={() => toggleCorrect(o.id)} style={{ padding: '9px 10px', border: `1.5px solid ${o.is_correct ? '#185FA5' : '#e5e7eb'}`, borderRadius: 8, fontSize: 13, flex: 1, cursor: 'pointer', background: o.is_correct ? '#E6F1FB' : '#fff', color: o.is_correct ? '#0C447C' : '#333', fontWeight: o.is_correct ? 600 : 400 }}>{o.body_html}</div>
                   ) : (
                     <div style={{ flex: 1 }}>
                       <RichInput value={o.body_html} onChange={v => onChange({ ...q, options: q.options.map((x: any) => x.id === o.id ? { ...x, body_html: v } : x) })} placeholder={`Option ${o.position + 1}…`} minHeight={36} />
