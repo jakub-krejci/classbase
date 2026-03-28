@@ -1,0 +1,347 @@
+'use client'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
+
+type Phase = 'start' | 'playing' | 'submitted' | 'locked' | 'timed_out'
+
+function useTimer(seconds: number | null, onExpire: () => void) {
+  const [remaining, setRemaining] = useState(seconds)
+  const ref = useRef<any>(null)
+  useEffect(() => {
+    if (seconds === null) return
+    setRemaining(seconds)
+    ref.current = setInterval(() => {
+      setRemaining(r => {
+        if (r === null || r <= 1) { clearInterval(ref.current); onExpire(); return 0 }
+        return r - 1
+      })
+    }, 1000)
+    return () => clearInterval(ref.current)
+  }, [seconds])
+  return remaining
+}
+
+function formatTime(s: number | null) {
+  if (s === null) return ''
+  const m = Math.floor(s / 60), sec = s % 60
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+export default function TestPlayer({ test, questions, attempt: initAttempt, answers: initAnswers, studentId }: {
+  test: any; questions: any[]; attempt: any; answers: any[]; studentId: string
+}) {
+  const supabase = createClient()
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (!initAttempt) return 'start'
+    if (initAttempt.status === 'submitted') return 'submitted'
+    if (initAttempt.status === 'locked') return 'locked'
+    if (initAttempt.status === 'timed_out') return 'timed_out'
+    return 'playing'
+  })
+  const [attempt, setAttempt] = useState(initAttempt)
+  const [answers, setAnswers] = useState<Record<string, any>>(() => {
+    const m: Record<string, any> = {}
+    initAnswers.forEach((a: any) => { m[a.question_id] = a })
+    return m
+  })
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [warnings, setWarnings] = useState(initAttempt?.warning_count ?? 0)
+  const [showWarning, setShowWarning] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [qTimeLeft, setQTimeLeft] = useState<Record<string, number>>({})
+  const savingRef = useRef(false)
+
+  const sortedQ = [...questions].sort((a, b) => a.position - b.position)
+  const currentQ = sortedQ[currentIdx]
+  const maxWarnings = test.max_warnings ?? 3
+  const timeLimitSecs = test.time_limit_mins ? test.time_limit_mins * 60 : null
+
+  // ── Global timer ────────────────────────────────────────────────────────────
+  const timeLeft = useTimer(phase === 'playing' ? timeLimitSecs : null, () => {
+    handleTimedOut()
+  })
+
+  // ── Anti-cheat: detect tab switch / visibility change ───────────────────────
+  useEffect(() => {
+    if (phase !== 'playing') return
+    function onVisChange() {
+      if (document.hidden) issueWarning()
+    }
+    function onBlur() { issueWarning() }
+    document.addEventListener('visibilitychange', onVisChange)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisChange)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [phase, warnings])
+
+  async function issueWarning() {
+    const newCount = warnings + 1
+    setWarnings(newCount)
+    setShowWarning(true)
+    setTimeout(() => setShowWarning(false), 4000)
+    if (attempt) await supabase.from('test_attempts').update({ warning_count: newCount }).eq('id', attempt.id)
+    if (newCount >= maxWarnings) {
+      await lockAttempt('locked')
+    }
+  }
+
+  async function lockAttempt(status: 'locked' | 'timed_out') {
+    if (attempt) await supabase.from('test_attempts').update({ status, locked_at: new Date().toISOString() }).eq('id', attempt.id)
+    setPhase(status)
+  }
+
+  async function handleTimedOut() { await lockAttempt('timed_out') }
+
+  // ── Start test ──────────────────────────────────────────────────────────────
+  async function startTest() {
+    const { data: att } = await supabase.from('test_attempts').insert({
+      test_id: test.id, student_id: studentId, status: 'in_progress',
+    }).select().single()
+    setAttempt(att)
+    setPhase('playing')
+  }
+
+  // ── Save answer ─────────────────────────────────────────────────────────────
+  const saveAnswer = useCallback(async (questionId: string, ans: any) => {
+    if (!attempt && !savingRef.current) return
+    const existing = answers[questionId]
+    if (existing) {
+      await supabase.from('test_answers').update(ans).eq('id', existing.id)
+    } else {
+      const { data } = await supabase.from('test_answers').insert({ attempt_id: attempt.id, question_id: questionId, ...ans }).select().single()
+      if (data) setAnswers(p => ({ ...p, [questionId]: data }))
+    }
+  }, [attempt, answers])
+
+  function setSelectedOptions(qId: string, optId: string, type: string) {
+    const cur = answers[qId]?.selected_option_ids ?? []
+    let next: string[]
+    if (type === 'single' || type === 'truefalse') {
+      next = [optId]
+    } else {
+      next = cur.includes(optId) ? cur.filter((x: string) => x !== optId) : [...cur, optId]
+    }
+    const updated = { ...answers[qId], selected_option_ids: next, question_id: qId }
+    setAnswers(p => ({ ...p, [qId]: updated }))
+    saveAnswer(qId, { selected_option_ids: next })
+  }
+
+  function setDescriptiveAnswer(qId: string, text: string) {
+    const updated = { ...answers[qId], answer_text: text, question_id: qId }
+    setAnswers(p => ({ ...p, [qId]: updated }))
+    saveAnswer(qId, { answer_text: text })
+  }
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  async function submitTest() {
+    if (!confirm('Submit your test? You cannot change answers after submitting.')) return
+    setSubmitting(true)
+    // Auto-grade objective questions
+    let score = 0, maxScore = 0
+    for (const q of sortedQ) {
+      if (q.type === 'descriptive') { maxScore += q.points_correct; continue }
+      maxScore += q.points_correct
+      const ans = answers[q.id]
+      const selected: string[] = ans?.selected_option_ids ?? []
+      const opts = (q.test_question_options ?? [])
+      if (q.type === 'single' || q.type === 'truefalse') {
+        const correct = opts.find((o: any) => o.is_correct)?.id
+        if (selected[0] === correct) score += q.points_correct
+        else if (selected.length > 0) score -= (q.points_incorrect ?? 0)
+      } else if (q.type === 'multiple') {
+        const correctIds = opts.filter((o: any) => o.is_correct).map((o: any) => o.id)
+        const allCorrect = correctIds.every((id: string) => selected.includes(id)) && selected.every((id: string) => correctIds.includes(id))
+        if (allCorrect) score += q.points_correct
+        else if (selected.length > 0) score -= (q.points_incorrect ?? 0)
+      }
+    }
+    await supabase.from('test_attempts').update({
+      status: 'submitted', submitted_at: new Date().toISOString(), score, max_score: maxScore,
+    }).eq('id', attempt.id)
+    setPhase('submitted')
+    setSubmitting(false)
+  }
+
+  const answered = Object.keys(answers).length
+  const progress = sortedQ.length > 0 ? Math.round((answered / sortedQ.length) * 100) : 0
+
+  // ── START PAGE ──────────────────────────────────────────────────────────────
+  if (phase === 'start') {
+    return (
+      <div style={{ maxWidth: 640, margin: '0 auto', paddingTop: 40 }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,.06)' }}>
+          <div style={{ background: 'linear-gradient(135deg,#185FA5,#0c447c)', padding: '32px 32px 24px', color: '#fff' }}>
+            <div style={{ fontSize: 12, opacity: .75, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.08em' }}>{test.category || 'Test'}</div>
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{test.title}</h1>
+          </div>
+          <div style={{ padding: 32 }}>
+            {test.start_page_html ? (
+              <div style={{ marginBottom: 24, fontSize: 14, lineHeight: 1.7, color: '#333' }} dangerouslySetInnerHTML={{ __html: test.start_page_html }} />
+            ) : test.description ? (
+              <div style={{ marginBottom: 24, fontSize: 14, color: '#555', lineHeight: 1.7 }}>{test.description}</div>
+            ) : null}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 28 }}>
+              {[
+                ['📝', 'Questions', sortedQ.length.toString()],
+                ['⏱', 'Time limit', test.time_limit_mins ? `${test.time_limit_mins} min` : 'No limit'],
+                ['🛡', 'Anti-cheat', `${maxWarnings} warning${maxWarnings !== 1 ? 's' : ''} max`],
+                ['⚠️', 'Availability', test.available_until ? `Until ${new Date(test.available_until).toLocaleDateString('en-GB')}` : 'Open'],
+              ].map(([icon, label, val]) => (
+                <div key={label} style={{ background: '#f9fafb', borderRadius: 10, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>{icon} {label}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>{val}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 24, fontSize: 13, color: '#92400E', lineHeight: 1.6 }}>
+              ⚠️ Do not switch tabs or leave this page during the test. Each detected attempt will be logged as a warning.
+              After {maxWarnings} warning{maxWarnings !== 1 ? 's' : ''} your test will be automatically locked.
+            </div>
+            <button onClick={startTest}
+              style={{ width: '100%', padding: '14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', letterSpacing: '.01em' }}>
+              ▶ Start Test
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── SUBMITTED / LOCKED / TIMED_OUT ─────────────────────────────────────────
+  if (phase === 'submitted' || phase === 'locked' || phase === 'timed_out') {
+    const icons = { submitted: '✅', locked: '🔒', timed_out: '⏰' }
+    const titles = { submitted: 'Test submitted!', locked: 'Test locked', timed_out: 'Time expired' }
+    const msgs = {
+      submitted: 'Your answers have been recorded. Your teacher will review and finalize your score.',
+      locked: `Your test was locked after ${warnings} warning${warnings !== 1 ? 's' : ''} for potential academic dishonesty.`,
+      timed_out: 'The time limit was reached. Your answers up to this point have been saved.',
+    }
+    return (
+      <div style={{ maxWidth: 500, margin: '60px auto', textAlign: 'center' }}>
+        <div style={{ fontSize: 60, marginBottom: 16 }}>{icons[phase]}</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 12px' }}>{titles[phase]}</h2>
+        <p style={{ color: '#666', fontSize: 14, lineHeight: 1.7, margin: '0 0 24px' }}>{msgs[phase]}</p>
+        <a href="/student/tests" style={{ padding: '10px 24px', background: '#185FA5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+          ← Back to tests
+        </a>
+      </div>
+    )
+  }
+
+  // ── PLAYING ─────────────────────────────────────────────────────────────────
+  if (phase === 'playing' && currentQ) {
+    const opts = (currentQ.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
+    const selected: string[] = answers[currentQ.id]?.selected_option_ids ?? []
+    const descText: string = answers[currentQ.id]?.answer_text ?? ''
+    const isAnswered = currentQ.type === 'descriptive' ? descText.trim() !== '' : selected.length > 0
+
+    return (
+      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        {/* Warning banner */}
+        {showWarning && (
+          <div style={{ position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', background: '#991b1b', color: '#fff', padding: '12px 24px', borderRadius: 10, zIndex: 9999, fontWeight: 600, fontSize: 14, boxShadow: '0 4px 20px rgba(0,0,0,.3)', animation: 'fadeIn .2s' }}>
+            ⚠️ Warning {warnings}/{maxWarnings} — Tab switch detected!{warnings >= maxWarnings ? ' Test locked.' : ''}
+          </div>
+        )}
+
+        {/* Top bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>{test.title}</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            {warnings > 0 && (
+              <span style={{ fontSize: 12, color: '#991b1b', fontWeight: 600, background: '#fee2e2', padding: '3px 10px', borderRadius: 20 }}>
+                ⚠️ {warnings} warning{warnings !== 1 ? 's' : ''}
+              </span>
+            )}
+            {timeLimitSecs !== null && timeLeft !== null && (
+              <span style={{ fontSize: 14, fontWeight: 700, color: timeLeft < 120 ? '#991b1b' : '#185FA5', background: timeLeft < 120 ? '#fee2e2' : '#E6F1FB', padding: '5px 14px', borderRadius: 20 }}>
+                ⏱ {formatTime(timeLeft)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div style={{ background: '#f3f4f6', borderRadius: 4, height: 6, marginBottom: 24 }}>
+          <div style={{ background: '#185FA5', height: '100%', width: progress + '%', borderRadius: 4, transition: 'width .3s' }} />
+        </div>
+
+        {/* Question nav pills */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+          {sortedQ.map((q, i) => {
+            const ans = answers[q.id]
+            const done = q.type === 'descriptive' ? (ans?.answer_text ?? '').trim() !== '' : (ans?.selected_option_ids ?? []).length > 0
+            return (
+              <button key={q.id} onClick={() => setCurrentIdx(i)}
+                style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${i === currentIdx ? '#185FA5' : done ? '#22c55e' : '#e5e7eb'}`, background: i === currentIdx ? '#185FA5' : done ? '#EAF3DE' : '#fff', color: i === currentIdx ? '#fff' : done ? '#27500A' : '#888', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                {i + 1}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Question card */}
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '28px 32px', marginBottom: 20, boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#185FA5', background: '#E6F1FB', padding: '3px 10px', borderRadius: 20 }}>Q{currentIdx + 1} / {sortedQ.length}</span>
+            <span style={{ fontSize: 11, color: '#888' }}>{currentQ.points_correct} pt{currentQ.points_correct !== 1 ? 's' : ''}</span>
+            {!currentQ.is_required && <span style={{ fontSize: 11, color: '#aaa' }}>optional</span>}
+          </div>
+
+          <div style={{ fontSize: 16, lineHeight: 1.7, color: '#111', marginBottom: 24 }}
+            dangerouslySetInnerHTML={{ __html: currentQ.body_html }} />
+
+          {/* Options */}
+          {currentQ.type !== 'descriptive' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {opts.map((o: any) => {
+                const isSelected = selected.includes(o.id)
+                return (
+                  <button key={o.id} onClick={() => setSelectedOptions(currentQ.id, o.id, currentQ.type)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: `2px solid ${isSelected ? '#185FA5' : '#e5e7eb'}`, borderRadius: 10, background: isSelected ? '#E6F1FB' : '#fff', cursor: 'pointer', textAlign: 'left', fontSize: 14, color: '#111', transition: 'all .15s' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: currentQ.type === 'multiple' ? 4 : '50%', border: `2px solid ${isSelected ? '#185FA5' : '#ccc'}`, background: isSelected ? '#185FA5' : '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isSelected && <div style={{ width: 8, height: 8, borderRadius: currentQ.type === 'multiple' ? 2 : '50%', background: '#fff' }} />}
+                    </div>
+                    <span dangerouslySetInnerHTML={{ __html: o.body_html }} />
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Descriptive */}
+          {currentQ.type === 'descriptive' && (
+            <textarea value={descText} onChange={e => setDescriptiveAnswer(currentQ.id, e.target.value)}
+              placeholder="Write your answer here…"
+              style={{ width: '100%', minHeight: 140, padding: '12px 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.65, boxSizing: 'border-box' }} />
+          )}
+        </div>
+
+        {/* Navigation */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button onClick={() => setCurrentIdx(i => Math.max(0, i - 1))} disabled={currentIdx === 0}
+            style={{ padding: '10px 20px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', cursor: currentIdx === 0 ? 'not-allowed' : 'pointer', fontSize: 13, color: '#555', opacity: currentIdx === 0 ? .4 : 1 }}>
+            ← Previous
+          </button>
+          <span style={{ fontSize: 12, color: '#888' }}>{answered} / {sortedQ.length} answered</span>
+          {currentIdx < sortedQ.length - 1 ? (
+            <button onClick={() => setCurrentIdx(i => i + 1)}
+              style={{ padding: '10px 20px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              Next →
+            </button>
+          ) : (
+            <button onClick={submitTest} disabled={submitting}
+              style={{ padding: '10px 24px', background: '#27500A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: submitting ? .6 : 1 }}>
+              {submitting ? 'Submitting…' : '✓ Submit test'}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}

@@ -91,11 +91,13 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   const teacherNav = [
     { label: 'Modules', href: '/teacher/modules' },
     { label: 'Grade', href: '/teacher/grade' },
+    { label: 'Tests', href: '/teacher/tests' },
     { label: 'Groups', href: '/teacher/groups' },
   ]
   const studentNav = [
     { label: 'Modules', href: '/student/modules' },
     { label: 'Progress', href: '/student/progress' },
+    { label: 'Tests', href: '/student/tests' },
     { label: 'Bookmarks', href: '/student/bookmarks' },
   ]
   const nav = role === 'teacher' ? teacherNav : studentNav
