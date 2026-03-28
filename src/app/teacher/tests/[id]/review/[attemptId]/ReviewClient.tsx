@@ -320,9 +320,13 @@ export default function ReviewClient({ test, attempt, questions, answers: initAn
                     if (sel[0] === correctIds[0]) liveScore += q.points_correct
                     else if (sel.length > 0) liveScore -= (q.points_incorrect ?? 0)
                   } else if (q.type === 'multiple') {
-                    const allRight = correctIds.every((id: string) => sel.includes(id)) && sel.every((id: string) => correctIds.includes(id))
-                    if (allRight) liveScore += q.points_correct
-                    else if (sel.length > 0) liveScore -= (q.points_incorrect ?? 0)
+                    const correctSet = new Set(correctIds)
+                    const wrongSet = new Set(opts.filter((o: any) => !o.is_correct).map((o: any) => o.id))
+                    if (correctSet.size > 0 && sel.length > 0) {
+                      const correctHits = sel.filter((id: string) => correctSet.has(id)).length
+                      const wrongHits = sel.filter((id: string) => wrongSet.has(id)).length
+                      liveScore += Math.max(0, (correctHits / correctSet.size) * q.points_correct - wrongHits * (q.points_incorrect ?? 0))
+                    }
                   }
                 }
               }

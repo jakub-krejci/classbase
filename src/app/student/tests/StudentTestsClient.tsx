@@ -26,7 +26,13 @@ export default function StudentTestsClient({ tests, attempts, studentId: _ }: { 
 
   return (
     <div>
-      <PageHeader title="My Tests" sub="Tests assigned to you by your teachers" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <PageHeader title="My Tests" sub="Tests assigned to you by your teachers" />
+        <a href="/student/tests/history"
+          style={{ padding: '8px 16px', background: '#f3f4f6', color: '#444', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 500, border: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+          📊 History & Stats
+        </a>
+      </div>
       {tests.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 20px', color: '#aaa', border: '1px dashed #e5e7eb', borderRadius: 12 }}>
           No tests assigned yet.

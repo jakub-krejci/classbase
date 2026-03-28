@@ -343,6 +343,15 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
   // Per-question timer
   const [qTimeLeft, setQTimeLeft] = useState<number | null>(null)
   const [lockedQuestions, setLockedQuestions] = useState<Set<string>>(new Set())
+  const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(new Set())
+
+  function toggleFlag(id: string) {
+    setFlaggedQuestions(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
   const qTimerRef = useRef<any>(null)
 
   useEffect(() => {
@@ -520,15 +529,25 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
         if (selected[0] === correct) score += q.points_correct
         else if (selected.length > 0) score -= (q.points_incorrect ?? 0)
       } else if (q.type === 'multiple') {
-        const correctIds = opts.filter((o: any) => o.is_correct).map((o: any) => o.id)
-        const allCorrect = correctIds.every((id: string) => selected.includes(id)) && selected.every((id: string) => correctIds.includes(id))
-        if (allCorrect) score += q.points_correct
-        else if (selected.length > 0) score -= (q.points_incorrect ?? 0)
+        const correctIds = new Set(opts.filter((o: any) => o.is_correct).map((o: any) => o.id))
+        const wrongIds = new Set(opts.filter((o: any) => !o.is_correct).map((o: any) => o.id))
+        const totalCorrect = correctIds.size
+        if (totalCorrect > 0 && selected.length > 0) {
+          // Partial credit: +1/n per correct selected, -penalty per wrong selected
+          const correctHits = selected.filter((id: string) => correctIds.has(id)).length
+          const wrongHits = selected.filter((id: string) => wrongIds.has(id)).length
+          const partial = (correctHits / totalCorrect) * q.points_correct - wrongHits * (q.points_incorrect ?? 0)
+          score += Math.max(0, partial)  // never go below 0 for this question
+        }
       }
     }
     clearInterval(timerRef.current)
+    const timeSpentSecs = attempt?.started_at
+      ? Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000)
+      : null
     await supabase.from('test_attempts').update({
       status: 'submitted', submitted_at: new Date().toISOString(), score, max_score: maxScore,
+      time_spent_secs: timeSpentSecs,
     }).eq('id', attempt.id)
     exitFullscreen()
     setAttempt((a: any) => ({ ...a, status: 'submitted', score, max_score: maxScore }))
@@ -745,7 +764,7 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
         {showConfirm && (
           <ConfirmModal
             title="Submit your test?"
-            body={`You've answered ${answered} of ${sortedQ.length} questions. You cannot change your answers after submitting.`}
+            body={`You've answered ${answered} of ${sortedQ.length} questions.${flaggedQuestions.size > 0 ? ` You have ${flaggedQuestions.size} flagged question${flaggedQuestions.size > 1 ? 's' : ''} — are you sure you want to submit?` : ' You cannot change your answers after submitting.'}`}
             confirmLabel="✓ Submit test"
             onConfirm={doSubmit}
             onCancel={() => setShowConfirm(false)}
@@ -785,14 +804,16 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             const done = q.type === 'descriptive' || q.type === 'coding' ? (ans?.answer_text ?? '').trim() !== '' : (ans?.selected_option_ids ?? []).length > 0
             const locked = lockedQuestions.has(q.id)
             const isActive = i === currentIdx
-            const border = isActive ? '#185FA5' : locked ? '#f97316' : done ? '#22c55e' : '#e5e7eb'
-            const bg = isActive ? '#185FA5' : locked ? '#fff7ed' : done ? '#EAF3DE' : '#fff'
-            const color = isActive ? '#fff' : locked ? '#c2410c' : done ? '#27500A' : '#888'
+            const flagged = flaggedQuestions.has(q.id)
+            const border = isActive ? '#185FA5' : locked ? '#f97316' : flagged ? '#f59e0b' : done ? '#22c55e' : '#e5e7eb'
+            const bg = isActive ? '#185FA5' : locked ? '#fff7ed' : flagged ? '#fffbeb' : done ? '#EAF3DE' : '#fff'
+            const color = isActive ? '#fff' : locked ? '#c2410c' : flagged ? '#92400e' : done ? '#27500A' : '#888'
             return (
               <button key={q.id} onClick={() => setCurrentIdx(i)} title={locked ? 'Time expired' : undefined}
                 style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${border}`, background: bg, color, fontSize: 12, fontWeight: 700, cursor: 'pointer', position: 'relative' }}>
                 {i + 1}
                 {locked && <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 9, lineHeight: 1 }}>⏰</span>}
+                {!locked && flagged && <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 9, lineHeight: 1 }}>🚩</span>}
               </button>
             )
           })}
@@ -803,6 +824,13 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
             <span style={{ fontSize: 11, color: '#888' }}>{currentQ.points_correct} pt{currentQ.points_correct !== 1 ? 's' : ''}</span>
             {!currentQ.is_required && <span style={{ fontSize: 11, color: '#aaa' }}>optional</span>}
             {isQLocked && <span style={{ fontSize: 11, fontWeight: 700, color: '#991b1b', background: '#fee2e2', padding: '2px 8px', borderRadius: 10 }}>🔒 Time expired</span>}
+            <div style={{ marginLeft: 'auto' }}>
+              <button onClick={() => toggleFlag(currentQ.id)}
+                title={flaggedQuestions.has(currentQ.id) ? 'Remove flag' : 'Flag for review'}
+                style={{ padding: '3px 10px', borderRadius: 8, border: `1.5px solid ${flaggedQuestions.has(currentQ.id) ? '#f59e0b' : '#e5e7eb'}`, background: flaggedQuestions.has(currentQ.id) ? '#fffbeb' : '#fff', color: flaggedQuestions.has(currentQ.id) ? '#92400e' : '#aaa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                {flaggedQuestions.has(currentQ.id) ? '🚩 Flagged' : '⚑ Flag'}
+              </button>
+            </div>
           </div>
           {isQLocked && (
             <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '16px 20px', marginBottom: 16, fontSize: 14, color: '#991b1b', textAlign: 'center' }}>
