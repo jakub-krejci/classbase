@@ -88,8 +88,9 @@ except ImportError:
 `
     try { await py.runPythonAsync(matplotlibShim) } catch {}
 
-    // Override input() with an async version that awaits window.__cb_input (our React modal).
-    // runPythonAsync supports top-level await, so async input() works transparently.
+    // Override input() as async — works because runPythonAsync supports top-level await.
+    // We also transform user code to add 'await' before every input() call so it works
+    // even when called as: name = input("prompt")  (Python doesn't auto-await coroutines)
     const inputShim = `
 import builtins
 from js import window as _win
@@ -111,8 +112,14 @@ builtins.input = input
 `
     try { await py.runPythonAsync(inputShim) } catch {}
 
+    // Transform user code: add 'await' before input() calls so coroutines are awaited.
+    // Handles: input(), input("prompt"), x = input(...), x = int(input(...)), etc.
+    // Simple regex approach — covers all common patterns without a full AST parse.
+    const transformedCode = code
+      .replace(/(?<!await\s)(?<!\w)input\s*\(/g, 'await input(')
+
     // Run user code
-    await py.runPythonAsync(code)
+    await py.runPythonAsync(transformedCode)
 
     // Capture any figures the user forgot to show()
     try {
