@@ -20,6 +20,8 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [tagFilter, setTagFilter] = useState<string>('')
 
+  const activeTests = useMemo(() => tests.filter(t => showArchived ? !!t.archived : !t.archived), [tests, showArchived])
+
   // Collect all unique tags across active tests
   const allTags = useMemo(() => {
     const s = new Set<string>()
@@ -27,7 +29,6 @@ export default function TestsClient({ tests: initial, teacherId }: { tests: any[
     return [...s].sort()
   }, [activeTests])
 
-  const activeTests = useMemo(() => tests.filter(t => showArchived ? !!t.archived : !t.archived), [tests, showArchived])
   const filtered = useMemo(() => activeTests.filter(t => {
     if (statusFilter !== 'all' && t.status !== statusFilter) return false
     if (tagFilter && !(t.tags ?? []).includes(tagFilter)) return false
