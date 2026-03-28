@@ -27,7 +27,22 @@ function highlight(code: string, rules: [string, RegExp][]): string {
 
 // ── Python ────────────────────────────────────────────────────────────────────
 export function highlightPython(code: string): string {
-  const base = highlight(code, [
+  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+
+  // Pre-process: pull f-strings out first so their {expr} parts get special treatment.
+  // Replace each f-string with a placeholder, highlight the rest, then restore with coloring.
+  const fstrings: string[] = []
+  const placeholder = '\x00FS_'   // non-digit suffix so number rule won't touch index
+
+  const withPlaceholders = code.replace(
+    /f"""[\s\S]*?"""|f'''[\s\S]*?'''|f"(?:[^"\\]|\\.)*"|f'(?:[^'\\]|\\.)*'/g,
+    (match) => {
+      fstrings.push(match)
+      return placeholder + (fstrings.length - 1) + '_EF\x00'  // _EF\x00 as terminator
+    }
+  )
+
+  const base = highlight(withPlaceholders, [
     ['s',  /"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g],
     ['c',  /#[^\n]*/g],
     ['k',  /\b(?:def|class|if|elif|else|for|while|return|import|from|as|in|not|and|or|is|None|True|False|pass|break|continue|with|try|except|finally|raise|lambda|yield|global|nonlocal|del|assert|async|await)\b/g],
@@ -36,9 +51,55 @@ export function highlightPython(code: string): string {
     ['n',  /\b\d+\.?\d*(?:[eE][+-]?\d+)?\b/g],
     ['c2', /@[a-zA-Z_][a-zA-Z0-9_.]*/g],
   ])
-  // Post-process HTML: colour the name that immediately follows `def ` or `class `
-  // The keyword was wrapped in <span class="hl-k">def</span> — match that and grab what follows
-  return base
+
+  // Restore f-strings with colored parts: prefix f in orange, string body green, {expr} cyan
+  const restored = base.replace(
+    new RegExp(esc(placeholder) + '(\\d+)' + esc('_EF\x00'), 'g'),
+    (_, idx) => {
+      const raw = fstrings[parseInt(idx)]
+      // Determine quote style
+      const isTriple = raw.startsWith('f"""') || raw.startsWith("f'''")
+      const q = isTriple ? raw.slice(1, 4) : raw[1]
+      const inner = isTriple ? raw.slice(4, -3) : raw.slice(2, -1)
+
+      // Split inner on {expr} blocks (handle {{ and }} escapes)
+      const parts: string[] = []
+      let i = 0
+      while (i < inner.length) {
+        if (inner[i] === '{' && inner[i+1] === '{') { parts.push('{{'); i += 2; continue }
+        if (inner[i] === '}' && inner[i+1] === '}') { parts.push('}}'); i += 2; continue }
+        if (inner[i] === '{') {
+          // Find matching }
+          let depth = 1, j = i + 1
+          while (j < inner.length && depth > 0) {
+            if (inner[j] === '{') depth++
+            else if (inner[j] === '}') depth--
+            j++
+          }
+          parts.push('\x01' + inner.slice(i + 1, j - 1) + '\x01') // mark as expr
+          i = j
+        } else {
+          // collect plain chars
+          let start = i
+          while (i < inner.length && !(inner[i] === '{') && !(inner[i] === '}')) i++
+          parts.push(inner.slice(start, i))
+        }
+      }
+
+      const body = parts.map(p => {
+        if (p.startsWith('\x01') && p.endsWith('\x01')) {
+          const expr = p.slice(1, -1)
+          return `<span class="hl-fb">{</span><span class="hl-fe">${esc(expr)}</span><span class="hl-fb">}</span>`
+        }
+        return `<span class="hl-s">${esc(p)}</span>`
+      }).join('')
+
+      return `<span class="hl-fs">f${esc(q)}</span>${body}<span class="hl-fs">${esc(q)}</span>`
+    }
+  )
+
+  // Post-process: colour def/class names
+  return restored
     .replace(/(<span class="hl-k">def<\/span>)(\s+)([a-zA-Z_][a-zA-Z0-9_]*)/g,
       '$1$2<span class="hl-fn">$3</span>')
     .replace(/(<span class="hl-k">class<\/span>)(\s+)([a-zA-Z_][a-zA-Z0-9_]*)/g,
@@ -151,9 +212,12 @@ export const PYTHON_CSS = `
 .hl-c  { color:#7f848e; font-style:italic } /* comment */
 .hl-b  { color:#61afef }                    /* builtin */
 .hl-t  { color:#e5c07b; font-style:italic } /* dunder __x__ */
-.hl-fn { color:#61afef; font-weight:600 }   /* function/class name after def/class */
+.hl-fn { color:#61afef; font-weight:600 }   /* function/class name */
 .hl-c2 { color:#e06c75 }                    /* decorator @x */
 .hl-rx { color:#56b6c2 }                    /* regex/entity */
+.hl-fs { color:#e5c07b }                    /* f-string prefix f" and closing quote */
+.hl-fb { color:#c678dd; font-weight:700 }   /* f-string braces { } */
+.hl-fe { color:#56b6c2; font-style:italic } /* f-string expression inside { } */
 
 /* Legacy aliases */
 .py-k { color:#c678dd; font-weight:600 }
