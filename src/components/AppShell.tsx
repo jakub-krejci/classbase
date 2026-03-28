@@ -92,6 +92,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   function closeNotifPanel() { setNotifOpen(false) }
 
   const teacherNav = [
+    { label: '🏠 Domů', href: '/teacher/dashboard' },
     { label: 'Moduly', href: '/teacher/modules' },
     { label: 'Hodnocení', href: '/teacher/grade' },
     { label: 'Testy', href: '/teacher/tests' },
@@ -107,7 +108,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   ]
   const nav = role === 'teacher' ? teacherNav : studentNav
   const profileHref = role === 'teacher' ? '/teacher/profile' : '/student/profile'
-  const homeHref = role === 'teacher' ? '/teacher/modules' : '/student/dashboard'
+  const homeHref = role === 'teacher' ? '/teacher/dashboard' : '/student/dashboard'
   const initials = (user?.full_name ?? user?.email ?? '?').split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
   const roleColor = role === 'teacher' ? { bg: '#E6F1FB', text: '#0C447C' } : { bg: '#EAF3DE', text: '#27500A' }
 

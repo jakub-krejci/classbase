@@ -16,7 +16,7 @@ export default async function RootPage() {
 
   const profile = profileData as any
   if (profile?.role === 'teacher') {
-    redirect('/teacher/modules')
+    redirect('/teacher/dashboard')
   } else {
     redirect('/student/dashboard')
   }
