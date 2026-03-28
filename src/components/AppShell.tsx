@@ -96,14 +96,15 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
     { label: 'Groups', href: '/teacher/groups' },
   ]
   const studentNav = [
+    { label: '🏠 Home', href: '/student/dashboard' },
     { label: 'Modules', href: '/student/modules' },
-    { label: 'Progress', href: '/student/progress' },
     { label: 'Tests', href: '/student/tests' },
+    { label: 'Progress', href: '/student/progress' },
     { label: 'Bookmarks', href: '/student/bookmarks' },
   ]
   const nav = role === 'teacher' ? teacherNav : studentNav
   const profileHref = role === 'teacher' ? '/teacher/profile' : '/student/profile'
-  const homeHref = role === 'teacher' ? '/teacher/modules' : '/student/modules'
+  const homeHref = role === 'teacher' ? '/teacher/modules' : '/student/dashboard'
   const initials = (user?.full_name ?? user?.email ?? '?').split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
   const roleColor = role === 'teacher' ? { bg: '#E6F1FB', text: '#0C447C' } : { bg: '#EAF3DE', text: '#27500A' }
 

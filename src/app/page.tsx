@@ -18,6 +18,6 @@ export default async function RootPage() {
   if (profile?.role === 'teacher') {
     redirect('/teacher/modules')
   } else {
-    redirect('/student/modules')
+    redirect('/student/dashboard')
   }
 }
