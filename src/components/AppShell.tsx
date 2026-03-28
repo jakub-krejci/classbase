@@ -107,6 +107,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   const homeHref = role === 'teacher' ? '/teacher/modules' : '/student/dashboard'
   const initials = (user?.full_name ?? user?.email ?? '?').split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
   const roleColor = role === 'teacher' ? { bg: '#E6F1FB', text: '#0C447C' } : { bg: '#EAF3DE', text: '#27500A' }
+  const LOGO_SMALL = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/page_assets/logo_male.PNG`
 
   return (
     <div style={{ minHeight: '100vh', background: '#f9fafb', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
@@ -122,7 +123,11 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
 
       {/* Top bar */}
       <div className="cb-nav-bar" style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 8, height: 52, position: 'sticky', top: 0, zIndex: 50 }}>
-        <a href={homeHref} style={{ fontWeight: 700, fontSize: 16, textDecoration: 'none', color: '#111', marginRight: 4 }}>ClassBase</a>
+        <a href={homeHref} style={{ display: 'flex', alignItems: 'center', gap: 7, textDecoration: 'none', color: '#111', marginRight: 4 }}>
+          <img src={LOGO_SMALL} alt="ClassBase" style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <span style={{ fontWeight: 700, fontSize: 16 }}>ClassBase</span>
+        </a>
         <span style={{ fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: roleColor.bg, color: roleColor.text, whiteSpace: 'nowrap' }}>{role}</span>
         <div style={{ flex: 1 }} />
 
