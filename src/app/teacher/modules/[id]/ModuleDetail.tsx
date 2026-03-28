@@ -298,9 +298,16 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
                       <div style={{ display:'flex', alignItems:'center', gap:12 }}>
                         {/* Avatar */}
                         <div style={{ position:'relative', flexShrink:0 }}>
-                          <div style={{ width:38, height:38, borderRadius:'50%', background: e.banned ? '#f3f4f6' : '#E6F1FB', color: e.banned ? '#bbb' : '#0C447C', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            {e.banned ? '🚫' : initials}
-                          </div>
+                          {p?.avatar_url && !e.banned
+                            ? <a href={`/teacher/students/${e.student_id}`} style={{ display:'block' }}>
+                                <img src={p.avatar_url} alt={p.full_name} style={{ width:38, height:38, borderRadius:'50%', objectFit:'cover', border:'2px solid #e5e7eb', display:'block' }} />
+                              </a>
+                            : <a href={`/teacher/students/${e.student_id}`} style={{ display:'block', textDecoration:'none' }}>
+                                <div style={{ width:38, height:38, borderRadius:'50%', background: e.banned ? '#f3f4f6' : (p?.accent_color ?? '#E6F1FB'), color: e.banned ? '#bbb' : '#fff', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                                  {e.banned ? '🚫' : initials}
+                                </div>
+                              </a>
+                          }
                           {/* Online/offline dot */}
                           <div style={{
                             position:'absolute', bottom:0, right:0,
@@ -313,9 +320,19 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
                         {/* Name + meta */}
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                            <span style={{ fontSize:14, fontWeight:600, color: e.banned ? '#888' : '#111' }}>
-                              {p?.full_name ?? 'Unknown'}
-                            </span>
+                            {p?.profile_visibility && !e.banned
+                              ? <a href={`/teacher/students/${e.student_id}`}
+                                  style={{ fontSize:14, fontWeight:600, color:'#185FA5', textDecoration:'none' }}>
+                                  {p?.full_name ?? 'Unknown'}
+                                </a>
+                              : <a href={`/teacher/students/${e.student_id}`}
+                                  style={{ fontSize:14, fontWeight:600, color: e.banned ? '#888' : '#111', textDecoration:'none' }}>
+                                  {p?.full_name ?? 'Unknown'}
+                                </a>
+                            }
+                            {p?.student_class && <span style={{ fontSize:10, color:'#888', background:'#f3f4f6', padding:'1px 6px', borderRadius:10 }}>🏫 {p.student_class}</span>}
+                            {p?.custom_status && !e.banned && <span style={{ fontSize:10, color:'#666', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.custom_status}</span>}
+                            {!p?.profile_visibility && !e.banned && <span style={{ fontSize:9, color:'#ccc' }}>🔒</span>}
                             {e.banned && (
                               <span style={{ fontSize:10, fontWeight:600, color:'#856404', background:'#FFF3CD', padding:'2px 7px', borderRadius:8 }}>
                                 BANNED

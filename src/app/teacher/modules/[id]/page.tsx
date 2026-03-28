@@ -23,7 +23,7 @@ export default async function ModuleDetailPage({ params }: { params: any }) {
   const { data: lessons } = await admin.from('lessons').select('*').eq('module_id', moduleId).order('position').order('sub_position')
   const { data: assignments } = await admin.from('assignments').select('*').eq('module_id', moduleId).order('created_at')
   const { data: enrollments } = await admin.from('enrollments')
-    .select('student_id, banned, profiles(full_name, email, last_seen_at)')
+    .select('student_id, banned, profiles(full_name, email, last_seen_at, avatar_url, accent_color, profile_visibility, student_class, grade_level, custom_status)')
     .eq('module_id', moduleId)
 
   // Fetch lesson progress for all enrolled students
