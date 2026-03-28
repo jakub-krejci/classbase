@@ -8,7 +8,13 @@ import AiTutor from '@/components/AiTutor'
 import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
 // Parse lesson HTML into renderable blocks
-type ViewBlock = { type: 'html' | 'code' | 'tryit' | 'math'; content: string; language?: Language }
+type ViewBlock = {
+  type: 'html' | 'code' | 'tryit' | 'math' | 'embed' | 'flashcard' | 'callout'
+  content: string; language?: Language
+  embedUrl?: string
+  front?: string; back?: string
+  variant?: string
+}
 
 function parseBlocks(html: string): ViewBlock[] {
   if (!html) return []
@@ -47,6 +53,20 @@ function parseBlocks(html: string): ViewBlock[] {
       try { latex = decodeURIComponent(el.getAttribute('data-latex') ?? '') }
       catch { latex = el.getAttribute('data-latex') ?? '' }
       blocks.push({ type: 'math', content: latex })
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-embed')) {
+      flush()
+      let url = ''
+      try { url = decodeURIComponent(el.getAttribute('data-url') ?? '') } catch { url = el.getAttribute('data-url') ?? '' }
+      blocks.push({ type: 'embed', content: '', embedUrl: url })
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-flashcard')) {
+      flush()
+      let front = '', back = ''
+      try { front = decodeURIComponent(el.getAttribute('data-front') ?? '') } catch { front = el.getAttribute('data-front') ?? '' }
+      try { back = decodeURIComponent(el.getAttribute('data-back') ?? '') } catch { back = el.getAttribute('data-back') ?? '' }
+      blocks.push({ type: 'flashcard', content: '', front, back })
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-callout')) {
+      flush()
+      blocks.push({ type: 'callout', content: el.innerHTML, variant: el.getAttribute('data-variant') ?? 'info' })
     } else {
       htmlNodes.push(node)
     }
@@ -313,6 +333,70 @@ function MathViewer({ latex, mode }: { latex: string; mode?: 'display' | 'inline
   )
 }
 
+// ── Embed viewer ──────────────────────────────────────────────────────────────
+function EmbedViewer({ url }: { url: string }) {
+  if (!url) return null
+  function getEmbed(rawUrl: string) {
+    const u = rawUrl.trim()
+    const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/)
+    if (yt) return `https://www.youtube.com/embed/${yt[1]}`
+    const vi = u.match(/vimeo\.com\/(\d+)/)
+    if (vi) return `https://player.vimeo.com/video/${vi[1]}`
+    const cp = u.match(/codepen\.io\/([^/]+)\/pen\/([^/?]+)/)
+    if (cp) return `https://codepen.io/${cp[1]}/embed/${cp[2]}?default-tab=result`
+    return u
+  }
+  return (
+    <div style={{ margin: '16px 0', borderRadius: 10, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,.08)' }}>
+      <iframe src={getEmbed(url)} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen
+        style={{ width: '100%', aspectRatio: '16/9', border: 'none', display: 'block' }} />
+    </div>
+  )
+}
+
+// ── Flashcard viewer ───────────────────────────────────────────────────────────
+function FlashcardViewer({ front, back }: { front: string; back: string }) {
+  const [flipped, setFlipped] = useState(false)
+  return (
+    <div style={{ margin: '16px 0' }}>
+      <style>{`
+        .cb-fc-wrap { perspective: 1000px; height: 140px; cursor: pointer; }
+        .cb-fc-inner { position: relative; width: 100%; height: 100%; transition: transform .45s cubic-bezier(.4,0,.2,1); transform-style: preserve-3d; }
+        .cb-fc-wrap.flipped .cb-fc-inner { transform: rotateY(180deg); }
+        .cb-fc-front, .cb-fc-back { position: absolute; inset: 0; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; border-radius: 12px; padding: 20px 24px; font-size: 15px; font-weight: 500; text-align: center; }
+        .cb-fc-front { background: #fff; border: 2px solid #dbe4ff; color: #1a1a2e; }
+        .cb-fc-back  { background: #E6F1FB; border: 2px solid #93c5fd; color: #0C447C; transform: rotateY(180deg); }
+      `}</style>
+      <div className={`cb-fc-wrap${flipped ? ' flipped' : ''}`} onClick={() => setFlipped(f => !f)}>
+        <div className="cb-fc-inner">
+          <div className="cb-fc-front">{front || '(no front)'}</div>
+          <div className="cb-fc-back">{back || '(no back)'}</div>
+        </div>
+      </div>
+      <div style={{ textAlign: 'center', fontSize: 11, color: '#bbb', marginTop: 6 }}>
+        {flipped ? 'Showing answer — click to flip back' : 'Click to reveal answer'}
+      </div>
+    </div>
+  )
+}
+
+// ── Callout viewer ─────────────────────────────────────────────────────────────
+const CALLOUT_VIEW: Record<string, { bg: string; border: string; icon: string }> = {
+  tip:     { bg: '#f0fdf4', border: '#86efac', icon: '💡' },
+  warning: { bg: '#fffbeb', border: '#fcd34d', icon: '⚠️' },
+  info:    { bg: '#eff6ff', border: '#93c5fd', icon: 'ℹ️' },
+  example: { bg: '#f5f3ff', border: '#c4b5fd', icon: '✅' },
+}
+function CalloutViewer({ content, variant }: { content: string; variant: string }) {
+  const cs = CALLOUT_VIEW[variant] ?? CALLOUT_VIEW.info
+  return (
+    <div style={{ background: cs.bg, borderLeft: `4px solid ${cs.border}`, borderRadius: '0 8px 8px 0', padding: '12px 16px', margin: '14px 0', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{cs.icon}</span>
+      <div style={{ fontSize: 14, lineHeight: 1.65, color: '#1a1a2e' }} dangerouslySetInnerHTML={{ __html: content }} />
+    </div>
+  )
+}
+
 // ── HTML content block with quiz activation ───────────────────────────────────
 const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -325,6 +409,18 @@ const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
     el.querySelectorAll('button[onclick*="tbl"]').forEach(b => (b as HTMLElement).style.display='none')
     // Activate quiz blocks
     el.querySelectorAll('.cb-quiz').forEach(quiz => activateQuiz(quiz as HTMLElement))
+    // Activate annotation tooltips
+    el.querySelectorAll('.cb-annotation').forEach(span => {
+      const s = span as HTMLElement
+      let note = ''
+      try { note = decodeURIComponent(s.getAttribute('data-note') ?? '') } catch { note = s.getAttribute('data-note') ?? '' }
+      if (!note) return
+      const tip = document.createElement('span')
+      tip.className = 'cb-ann-tip'
+      tip.textContent = note
+      s.style.position = 'relative'
+      s.appendChild(tip)
+    })
   }, [html])
 
   function activateQuiz(quiz: HTMLElement) {
@@ -783,7 +879,42 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         /* ── Horizontal rule ── */
         .lesson-content hr { border: none; border-top: 1px solid #e2e8f0; margin: 2em 0; }
 
-        /* ── First paragraph emphasis ── */
+        /* ── Annotation tooltips ── */
+        .cb-annotation {
+          border-bottom: 2px dotted #185FA5;
+          cursor: help;
+          position: relative;
+        }
+        .cb-ann-tip {
+          display: none;
+          position: absolute;
+          bottom: calc(100% + 6px);
+          left: 50%;
+          transform: translateX(-50%);
+          background: #1a1a2e;
+          color: #fff;
+          font-size: 12px;
+          line-height: 1.5;
+          padding: 7px 11px;
+          border-radius: 7px;
+          white-space: pre-wrap;
+          max-width: 260px;
+          min-width: 120px;
+          text-align: left;
+          z-index: 50;
+          box-shadow: 0 4px 14px rgba(0,0,0,.25);
+          pointer-events: none;
+        }
+        .cb-ann-tip::after {
+          content: '';
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          border: 5px solid transparent;
+          border-top-color: #1a1a2e;
+        }
+        .cb-annotation:hover .cb-ann-tip { display: block; }
         .lesson-content > p:first-of-type {
           font-size: 1.07em;
           color: #2c2c2e;
@@ -1063,10 +1194,13 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         <div ref={contentRef} style={{ background:'#fafafa', border:'1px solid #e9ecef', borderRadius:12, padding: isMobile ? '20px 16px' : '32px 40px', marginBottom:20 }}>
           {blocks.map((b, i) => (
             <div key={i}>
-              {b.type === 'html'   && <HtmlBlock html={b.content} />}
-              {b.type === 'code'   && <CodeViewer code={b.content} language={b.language} />}
-              {b.type === 'tryit'  && <TryItViewer initialCode={b.content} />}
-              {b.type === 'math'   && <MathViewer latex={b.content} />}
+              {b.type === 'html'      && <HtmlBlock html={b.content} />}
+              {b.type === 'code'      && <CodeViewer code={b.content} language={b.language} />}
+              {b.type === 'tryit'     && <TryItViewer initialCode={b.content} />}
+              {b.type === 'math'      && <MathViewer latex={b.content} />}
+              {b.type === 'embed'     && <EmbedViewer url={b.embedUrl ?? ''} />}
+              {b.type === 'flashcard' && <FlashcardViewer front={b.front ?? ''} back={b.back ?? ''} />}
+              {b.type === 'callout'   && <CalloutViewer content={b.content} variant={b.variant ?? 'info'} />}
             </div>
           ))}
         </div>

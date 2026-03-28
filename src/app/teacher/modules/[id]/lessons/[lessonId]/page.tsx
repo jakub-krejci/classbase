@@ -7,8 +7,14 @@ import { BackLink, Breadcrumb } from '@/components/ui'
 import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
 // ─── Block types ──────────────────────────────────────────────────────────────
-type BlockType = 'html' | 'code' | 'tryit' | 'math'
-interface Block { id: string; type: BlockType; content: string; language?: Language }
+type BlockType = 'html' | 'code' | 'tryit' | 'math' | 'embed' | 'flashcard' | 'callout'
+type CalloutVariant = 'tip' | 'warning' | 'info' | 'example'
+interface Block {
+  id: string; type: BlockType; content: string; language?: Language
+  embedUrl?: string
+  front?: string; back?: string
+  variant?: CalloutVariant
+}
 
 function uid() { return Math.random().toString(36).slice(2) }
 
@@ -27,6 +33,18 @@ function blocksToHtml(blocks: Block[]): string {
     if (b.type === 'math') {
       const enc = encodeURIComponent(b.content)
       return `<div class="cb-math" data-latex="${enc}"></div>`
+    }
+    if (b.type === 'embed') {
+      const enc = encodeURIComponent(b.embedUrl ?? '')
+      return `<div class="cb-embed" data-url="${enc}"></div>`
+    }
+    if (b.type === 'flashcard') {
+      const front = encodeURIComponent(b.front ?? '')
+      const back = encodeURIComponent(b.back ?? '')
+      return `<div class="cb-flashcard" data-front="${front}" data-back="${back}"></div>`
+    }
+    if (b.type === 'callout') {
+      return `<div class="cb-callout" data-variant="${b.variant ?? 'info'}">${b.content}</div>`
     }
     return ''
   }).join('\n')
@@ -63,6 +81,20 @@ function htmlToBlocks(html: string): Block[] {
       flushHtml()
       try { blocks.push({ id: uid(), type: 'math', content: decodeURIComponent(el.getAttribute('data-latex') ?? '') }) }
       catch { blocks.push({ id: uid(), type: 'math', content: el.getAttribute('data-latex') ?? '' }) }
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-embed')) {
+      flushHtml()
+      let url = ''
+      try { url = decodeURIComponent(el.getAttribute('data-url') ?? '') } catch { url = el.getAttribute('data-url') ?? '' }
+      blocks.push({ id: uid(), type: 'embed', content: '', embedUrl: url })
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-flashcard')) {
+      flushHtml()
+      let front = '', back = ''
+      try { front = decodeURIComponent(el.getAttribute('data-front') ?? '') } catch { front = el.getAttribute('data-front') ?? '' }
+      try { back = decodeURIComponent(el.getAttribute('data-back') ?? '') } catch { back = el.getAttribute('data-back') ?? '' }
+      blocks.push({ id: uid(), type: 'flashcard', content: '', front, back })
+    } else if (el.nodeType === 1 && el.classList?.contains('cb-callout')) {
+      flushHtml()
+      blocks.push({ id: uid(), type: 'callout', content: el.innerHTML, variant: (el.getAttribute('data-variant') as CalloutVariant) ?? 'info' })
     } else {
       htmlAcc.push(node)
     }
@@ -96,7 +128,7 @@ const EDITOR_CSS = `
 function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, onMoveDown, canDelete, onOpenMedia, onInsertQuiz, onDuplicate }: {
   block: Block; onChange: (content: string) => void
   onMount?: (el: HTMLDivElement) => void
-  onAddAfter: (type: BlockType) => void; onDelete: () => void
+  onAddAfter: (type: BlockType, variant?: CalloutVariant) => void; onDelete: () => void
   onMoveUp: () => void; onMoveDown: () => void; canDelete: boolean
   onOpenMedia: (type: 'image'|'video'|'file'|'link', insertFn: (html: string) => void) => void
   onInsertQuiz: (insertFn: (html: string) => void) => void
@@ -105,7 +137,12 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
   const ref = useRef<HTMLDivElement>(null)
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
   const [showTableModal, setShowTableModal] = useState(false)
+  const [showAnnotationModal, setShowAnnotationModal] = useState(false)
+  const [annotationText, setAnnotationText] = useState('')
   const savedColorRange = useRef<Range | null>(null)
+  const savedSlashRange = useRef<Range | null>(null)
+  const [slashMenu, setSlashMenu] = useState<{x:number;y:number} | null>(null)
+  const [slashFilter, setSlashFilter] = useState('')
 
   // Sync content into div on first render / when block changes externally
   useEffect(() => {
@@ -423,6 +460,34 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
         }}
         onClick={updateActiveFormats}
         onKeyDown={e => {
+          // Slash command
+          if (e.key === '/') {
+            const sel = window.getSelection()
+            if (sel && sel.rangeCount > 0) {
+              const range = sel.getRangeAt(0)
+              const node = range.startContainer
+              const text = node.textContent ?? ''
+              const offset = range.startOffset
+              // Only trigger on empty line or at start
+              const lineText = text.slice(0, offset).replace(/\u200B/g, '').trim()
+              if (lineText === '') {
+                e.preventDefault()
+                const rects = range.getBoundingClientRect()
+                const editorRect = ref.current!.getBoundingClientRect()
+                savedSlashRange.current = range.cloneRange()
+                setSlashFilter('')
+                setSlashMenu({ x: rects.left - editorRect.left, y: rects.bottom - editorRect.top + 4 })
+                return
+              }
+            }
+          }
+          // Close slash menu on Escape
+          if (e.key === 'Escape' && slashMenu) { e.preventDefault(); setSlashMenu(null); return }
+          // Type to filter slash menu
+          if (slashMenu) {
+            if (e.key === 'Backspace') { setSlashFilter(f => f.slice(0, -1)); return }
+            if (e.key.length === 1) { setSlashFilter(f => f + e.key); e.preventDefault(); return }
+          }
           if (e.key === 'Enter' && e.shiftKey) {
             let node: Node | null = window.getSelection()?.getRangeAt(0).startContainer ?? null
             while (node && (node as HTMLElement).tagName !== 'BLOCKQUOTE') node = node.parentElement
@@ -460,6 +525,81 @@ function RichBlock({ block, onChange, onMount, onAddAfter, onDelete, onMoveUp, o
           onInsert={(r, c) => { insertTable(r, c); setShowTableModal(false) }}
           onClose={() => setShowTableModal(false)}
         />
+      )}
+
+      {/* ── Slash command menu ── */}
+      {slashMenu && (() => {
+        const SLASH_ITEMS: { icon: string; label: string; desc: string; type: BlockType | 'annotation' }[] = [
+          { icon: '📝', label: 'Text', desc: 'Plain text block', type: 'html' },
+          { icon: '💻', label: 'Code', desc: 'Syntax-highlighted code', type: 'code' },
+          { icon: '▶️', label: 'Try-it', desc: 'Interactive Python', type: 'tryit' },
+          { icon: '∑', label: 'Math', desc: 'LaTeX equation', type: 'math' },
+          { icon: '🔗', label: 'Embed', desc: 'YouTube, Vimeo, CodePen…', type: 'embed' },
+          { icon: '🃏', label: 'Flashcard', desc: 'Flippable study card', type: 'flashcard' },
+          { icon: '💡', label: 'Tip', desc: 'Tip callout box', type: 'callout' },
+          { icon: '⚠️', label: 'Warning', desc: 'Warning callout box', type: 'callout' },
+          { icon: '📌', label: 'Annotation', desc: 'Side note on selected text', type: 'annotation' },
+        ]
+        const filtered = SLASH_ITEMS.filter(it =>
+          !slashFilter || it.label.toLowerCase().startsWith(slashFilter.toLowerCase())
+        )
+        return (
+          <div style={{ position: 'absolute', left: slashMenu.x, top: slashMenu.y, zIndex: 200, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.12)', minWidth: 220, overflow: 'hidden' }}
+            onMouseDown={e => e.preventDefault()}>
+            <div style={{ padding: '6px 10px', fontSize: 10, color: '#aaa', borderBottom: '1px solid #f3f4f6', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+              <span>BLOCKS {slashFilter && <span style={{ color: '#185FA5' }}>/ {slashFilter}</span>}</span>
+              <span style={{ cursor: 'pointer', color: '#ccc' }} onClick={() => setSlashMenu(null)}>✕</span>
+            </div>
+            {filtered.length === 0 && <div style={{ padding: '12px', fontSize: 13, color: '#aaa', textAlign: 'center' }}>No match</div>}
+            {filtered.map(item => (
+              <div key={item.label} onClick={() => {
+                setSlashMenu(null)
+                if (item.type === 'annotation') {
+                  setShowAnnotationModal(true)
+                } else if (item.type === 'callout') {
+                  const variantMap: Record<string, CalloutVariant> = { 'Tip': 'tip', 'Warning': 'warning', 'Info': 'info', 'Example': 'example' }
+                  onAddAfter('callout', variantMap[item.label] ?? 'info')
+                } else {
+                  onAddAfter(item.type as BlockType)
+                }
+              }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', fontSize: 13 }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f5f9ff')}
+                onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                <span style={{ fontSize: 18, width: 24, textAlign: 'center' }}>{item.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 500, color: '#111' }}>{item.label}</div>
+                  <div style={{ fontSize: 11, color: '#888' }}>{item.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+
+      {/* ── Annotation modal ── */}
+      {showAnnotationModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onMouseDown={e => { if (e.target === e.currentTarget) setShowAnnotationModal(false) }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 400, boxShadow: '0 16px 48px rgba(0,0,0,.2)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>📌 Add Annotation</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Select text first, then add a side note that appears on hover.</div>
+            <textarea value={annotationText} onChange={e => setAnnotationText(e.target.value)}
+              placeholder="Enter annotation note…" autoFocus
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', minHeight: 80, outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setShowAnnotationModal(false); setAnnotationText('') }}
+                style={{ padding: '7px 16px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+              <button onClick={() => {
+                if (!annotationText.trim()) return
+                const enc = encodeURIComponent(annotationText.trim())
+                insertHtml(`<span class="cb-annotation" data-note="${enc}" style="border-bottom:2px dotted #185FA5;cursor:help;position:relative">📌</span>`)
+                setShowAnnotationModal(false); setAnnotationText('')
+              }}
+                style={{ padding: '7px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Insert</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -887,6 +1027,153 @@ function MathBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicat
 }
 
 
+// ─── Embed block editor ───────────────────────────────────────────────────────
+function EmbedBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
+  block: Block; onChange: (b: Partial<Block>) => void
+  onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
+}) {
+  const [url, setUrl] = useState(block.embedUrl ?? '')
+  const [editing, setEditing] = useState(!block.embedUrl)
+
+  function getEmbed(rawUrl: string) {
+    const u = rawUrl.trim()
+    const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/)
+    if (yt) return `https://www.youtube.com/embed/${yt[1]}`
+    const vi = u.match(/vimeo\.com\/(\d+)/)
+    if (vi) return `https://player.vimeo.com/video/${vi[1]}`
+    const cp = u.match(/codepen\.io\/([^/]+)\/pen\/([^/?]+)/)
+    if (cp) return `https://codepen.io/${cp[1]}/embed/${cp[2]}?default-tab=result`
+    return u
+  }
+
+  const embedSrc = getEmbed(block.embedUrl ?? '')
+  const BC: React.CSSProperties = { padding: '3px 8px', fontSize: 11, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 5, cursor: 'pointer', color: '#555' }
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', margin: '4px 0', background: '#fafafa' }}>
+      <div style={{ background: '#f3f4f6', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>🔗 Embed</span>
+        <div style={{ flex: 1 }} />
+        <button style={BC} onClick={() => setEditing(e => !e)}>{editing ? 'Preview' : 'Edit URL'}</button>
+        <button style={BC} onClick={onDuplicate}>⎘</button>
+        <button style={BC} onClick={onMoveUp}>↑</button>
+        <button style={BC} onClick={onMoveDown}>↓</button>
+        <button style={{ ...BC, color: '#A32D2D' }} onClick={onDelete}>✕</button>
+      </div>
+      {editing ? (
+        <div style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Paste a YouTube, Vimeo, or CodePen URL:</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={url} onChange={e => setUrl(e.target.value)}
+              placeholder="https://youtube.com/watch?v=..."
+              style={{ flex: 1, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none' }} />
+            <button onClick={() => { onChange({ embedUrl: url }); setEditing(false) }}
+              style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Embed</button>
+          </div>
+        </div>
+      ) : embedSrc ? (
+        <iframe src={embedSrc} allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowFullScreen
+          style={{ width: '100%', aspectRatio: '16/9', border: 'none', display: 'block' }} />
+      ) : (
+        <div style={{ padding: 24, textAlign: 'center', color: '#aaa', fontSize: 13 }}>No URL set — click Edit URL</div>
+      )}
+    </div>
+  )
+}
+
+// ─── Flashcard block editor ────────────────────────────────────────────────────
+function FlashcardBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
+  block: Block; onChange: (b: Partial<Block>) => void
+  onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
+}) {
+  const [flipped, setFlipped] = useState(false)
+  const BC: React.CSSProperties = { padding: '3px 8px', fontSize: 11, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 5, cursor: 'pointer', color: '#555' }
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', margin: '4px 0', background: '#fafafa' }}>
+      <div style={{ background: '#f3f4f6', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>🃏 Flashcard</span>
+        <div style={{ flex: 1 }} />
+        <button style={BC} onClick={onDuplicate}>⎘</button>
+        <button style={BC} onClick={onMoveUp}>↑</button>
+        <button style={BC} onClick={onMoveDown}>↓</button>
+        <button style={{ ...BC, color: '#A32D2D' }} onClick={onDelete}>✕</button>
+      </div>
+      <div style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>FRONT</label>
+          <textarea value={block.front ?? ''} onChange={e => onChange({ front: e.target.value })}
+            placeholder="Term or question…"
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', minHeight: 72, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 600, color: '#888', display: 'block', marginBottom: 4 }}>BACK</label>
+          <textarea value={block.back ?? ''} onChange={e => onChange({ back: e.target.value })}
+            placeholder="Definition or answer…"
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', minHeight: 72, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+      </div>
+      <div style={{ padding: '0 16px 16px' }}>
+        <div style={{ fontSize: 11, color: '#aaa', marginBottom: 6 }}>Preview (click to flip):</div>
+        <div onClick={() => setFlipped(f => !f)} style={{ cursor: 'pointer', background: flipped ? '#E6F1FB' : '#fff', border: '2px solid #dbe4ff', borderRadius: 10, padding: '16px 20px', textAlign: 'center', fontSize: 14, fontWeight: 500, color: flipped ? '#0C447C' : '#333', minHeight: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s' }}>
+          {flipped ? (block.back || '(back)') : (block.front || '(front)')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Callout block editor ──────────────────────────────────────────────────────
+const CALLOUT_STYLES: Record<CalloutVariant, { bg: string; border: string; icon: string; label: string }> = {
+  tip:     { bg: '#f0fdf4', border: '#86efac', icon: '💡', label: 'Tip' },
+  warning: { bg: '#fffbeb', border: '#fcd34d', icon: '⚠️', label: 'Warning' },
+  info:    { bg: '#eff6ff', border: '#93c5fd', icon: 'ℹ️', label: 'Info' },
+  example: { bg: '#f5f3ff', border: '#c4b5fd', icon: '✅', label: 'Example' },
+}
+
+function CalloutBlock({ block, onChange, onDelete, onMoveUp, onMoveDown, onDuplicate }: {
+  block: Block; onChange: (b: Partial<Block>) => void
+  onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void; onDuplicate: () => void
+}) {
+  const variant = (block.variant ?? 'info') as CalloutVariant
+  const cs = CALLOUT_STYLES[variant]
+  const ref = useRef<HTMLDivElement>(null)
+  const BC: React.CSSProperties = { padding: '3px 8px', fontSize: 11, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 5, cursor: 'pointer', color: '#555' }
+
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== block.content) ref.current.innerHTML = block.content
+  }, [])
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', margin: '4px 0' }}>
+      <div style={{ background: '#f3f4f6', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #e5e7eb' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>{cs.icon} Callout</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(Object.keys(CALLOUT_STYLES) as CalloutVariant[]).map(v => (
+            <button key={v} onClick={() => onChange({ variant: v })}
+              style={{ padding: '2px 8px', fontSize: 10, border: `1px solid ${v === variant ? '#185FA5' : '#e5e7eb'}`, borderRadius: 4, background: v === variant ? '#E6F1FB' : '#fff', color: v === variant ? '#0C447C' : '#555', cursor: 'pointer', fontWeight: v === variant ? 700 : 400 }}>
+              {CALLOUT_STYLES[v].label}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <button style={BC} onClick={onDuplicate}>⎘</button>
+        <button style={BC} onClick={onMoveUp}>↑</button>
+        <button style={BC} onClick={onMoveDown}>↓</button>
+        <button style={{ ...BC, color: '#A32D2D' }} onClick={onDelete}>✕</button>
+      </div>
+      <div style={{ background: cs.bg, borderLeft: `4px solid ${cs.border}`, padding: '12px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{cs.icon}</span>
+          <div ref={ref} contentEditable suppressContentEditableWarning
+            onInput={() => onChange({ content: ref.current?.innerHTML ?? '' })}
+            style={{ flex: 1, outline: 'none', fontSize: 14, lineHeight: 1.6, color: '#1a1a2e', minHeight: 32 }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Table modal ──────────────────────────────────────────────────────────────
 function TableModal({ onInsert, onClose }: { onInsert: (r: number, c: number) => void; onClose: () => void }) {
   const [rows, setRows] = useState(3)
@@ -1253,10 +1540,19 @@ export default function LessonEditorPage() {
   function updateBlockLanguage(id: string, language: Language) {
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, language } : b))
   }
-  function addBlockAfter(afterId: string, type: BlockType) {
+  function addBlockAfter(afterId: string, type: BlockType, variant?: CalloutVariant) {
     setBlocks(prev => {
       const idx = prev.findIndex(b => b.id === afterId)
-      const nb: Block = { id: uid(), type, content: type === 'tryit' ? 'print("Hello!")\n' : '# Python code\nprint("Hello, world!")\n', language: type === 'code' ? 'python' : undefined }
+      let nb: Block
+      if (type === 'embed') {
+        nb = { id: uid(), type: 'embed', content: '', embedUrl: '' }
+      } else if (type === 'flashcard') {
+        nb = { id: uid(), type: 'flashcard', content: '', front: '', back: '' }
+      } else if (type === 'callout') {
+        nb = { id: uid(), type: 'callout', content: '<p>Write your note here…</p>', variant: variant ?? 'info' }
+      } else {
+        nb = { id: uid(), type, content: type === 'tryit' ? 'print("Hello!")\n' : '# Python code\nprint("Hello, world!")\n', language: type === 'code' ? 'python' : undefined }
+      }
       const next = [...prev]; next.splice(idx + 1, 0, nb); return next
     })
   }
@@ -1335,7 +1631,7 @@ export default function LessonEditorPage() {
               block={block}
               onMount={(el: HTMLDivElement) => { blockDomRefs.current[block.id] = el }}
               onChange={c => updateBlock(block.id, c)}
-              onAddAfter={type => addBlockAfter(block.id, type)}
+              onAddAfter={(type, variant) => addBlockAfter(block.id, type, variant)}
               onDelete={() => deleteBlock(block.id)}
               onMoveUp={() => moveBlock(block.id, -1)}
               onMoveDown={() => moveBlock(block.id, 1)}
@@ -1374,14 +1670,40 @@ export default function LessonEditorPage() {
               onMoveDown={() => moveBlock(block.id, 1)}
             />
           )}
+          {block.type === 'embed' && (
+            <EmbedBlock block={block} onChange={p => setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, ...p } : b))}
+              onDuplicate={() => duplicateBlock(block.id)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)}
+            />
+          )}
+          {block.type === 'flashcard' && (
+            <FlashcardBlock block={block} onChange={p => setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, ...p } : b))}
+              onDuplicate={() => duplicateBlock(block.id)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)}
+            />
+          )}
+          {block.type === 'callout' && (
+            <CalloutBlock block={block} onChange={p => setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, ...p } : b))}
+              onDuplicate={() => duplicateBlock(block.id)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, -1)}
+              onMoveDown={() => moveBlock(block.id, 1)}
+            />
+          )}
           {/* Add block buttons between blocks */}
           <div style={{ display:'flex', gap:4, margin:'4px 0 4px', justifyContent:'center', opacity:0.5 }}>
             <button onClick={() => addHtmlBlock(block.id)} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#f9fafb', cursor:'pointer', color:'#555' }}>+ Text</button>
             <button onClick={() => addBlockAfter(block.id,'code')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1e1e2e', cursor:'pointer', color:'#cdd6f4' }}>+ Code</button>
             <button onClick={() => addBlockAfter(block.id,'tryit')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #e5e7eb', borderRadius:4, background:'#1a1b26', cursor:'pointer', color:'#7aa2f7' }}>+ Try it</button>
             <button onClick={() => addBlockAfter(block.id,'math')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #d6bcfa', borderRadius:4, background:'#faf9ff', cursor:'pointer', color:'#6b46c1' }}>+ Math</button>
+            <button onClick={() => addBlockAfter(block.id,'embed')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #bfdbfe', borderRadius:4, background:'#eff6ff', cursor:'pointer', color:'#1d4ed8' }}>+ Embed</button>
+            <button onClick={() => addBlockAfter(block.id,'flashcard')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #ddd6fe', borderRadius:4, background:'#f5f3ff', cursor:'pointer', color:'#7c3aed' }}>+ Card</button>
+            <button onClick={() => addBlockAfter(block.id,'callout','info')} style={{ padding:'2px 8px', fontSize:10, border:'1px solid #bfdbfe', borderRadius:4, background:'#eff6ff', cursor:'pointer', color:'#1d4ed8' }}>+ Callout</button>
             <button onClick={() => {
-              // Create a new html block after this one and insert the quiz into it
               pendingQuizInsertFn.current = (html: string) => {
                 setBlocks(prev => {
                   const idx = prev.findIndex(b => b.id === block.id)
