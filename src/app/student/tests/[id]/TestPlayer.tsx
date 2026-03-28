@@ -288,6 +288,11 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     setIsFullscreen(false)
   }
 
+  // Enter fullscreen on mount if already playing (student clicked "Continue test")
+  useEffect(() => {
+    if (phase === 'playing') enterFullscreen()
+  }, [])
+
   useEffect(() => {
     function onFsChange() {
       if (!document.fullscreenElement && !inputSuppressedRef.current) setIsFullscreen(false)

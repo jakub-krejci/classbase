@@ -88,31 +88,26 @@ except ImportError:
 `
     try { await py.runPythonAsync(matplotlibShim) } catch {}
 
-    // Override input() to use a custom in-page modal via window.__cb_input
-    // __cb_input(prompt) must be set by the editor to a function returning a Promise<string|null>
-    // Falls back to window.prompt if not set (lesson viewer)
+    // Override input() with an async version that awaits window.__cb_input (our React modal).
+    // runPythonAsync supports top-level await, so async input() works transparently.
     const inputShim = `
-import sys
-from pyodide.ffi import run_sync
+import builtins
 from js import window as _win
 
-def input(msg=''):
+async def input(msg=''):
     _cb = getattr(_win, '__cb_input', None)
     if _cb is not None:
-        result = run_sync(_cb(str(msg)))
+        result = await _cb(str(msg))
     else:
         from js import prompt as _p
         result = _p(str(msg))
     if result is None:
         raise EOFError('input() cancelled')
-    print(str(msg) + str(result))
-    return str(result)
+    val = str(result)
+    print(str(msg) + val)
+    return val
 
-try:
-    __builtins__['input'] = input
-except TypeError:
-    import builtins
-    builtins.input = input
+builtins.input = input
 `
     try { await py.runPythonAsync(inputShim) } catch {}
 
