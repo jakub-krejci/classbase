@@ -121,7 +121,7 @@ export default function BulkGradeClient({ test, questions, attempts, answers, in
   if (!currentQ) return <div style={{ padding: 40, textAlign: 'center', color: '#aaa' }}>No questions.</div>
 
   const opts = (currentQ.test_question_options ?? []).sort((a: any, b: any) => a.position - b.position)
-  const correctIds = new Set(opts.filter((o: any) => o.is_correct).map((o: any) => o.id))
+  const correctIds = new Set<string>(opts.filter((o: any) => o.is_correct).map((o: any) => o.id))
 
   function getAnswer(attemptId: string) {
     return localAnswers[attemptId + '|' + currentQ.id] ?? null
