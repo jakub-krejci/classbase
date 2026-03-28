@@ -107,7 +107,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
   const homeHref = role === 'teacher' ? '/teacher/modules' : '/student/dashboard'
   const initials = (user?.full_name ?? user?.email ?? '?').split(' ').map((w: string) => w[0] ?? '').join('').toUpperCase().slice(0, 2)
   const roleColor = role === 'teacher' ? { bg: '#E6F1FB', text: '#0C447C' } : { bg: '#EAF3DE', text: '#27500A' }
-  const LOGO_SMALL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '') + '/storage/v1/object/public/page_assets/logo_male.PNG'
+  const LOGO_SMALL = '/logo_male.png'
 
   return (
     <div style={{ minHeight: '100vh', background: '#f9fafb', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
