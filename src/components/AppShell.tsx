@@ -148,8 +148,8 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
             <a key={n.href} href={n.href} className="cb-nav-link" style={{
               fontSize: 13, fontWeight: path.startsWith(n.href) ? 600 : 400, textDecoration: 'none',
               padding: '4px 8px', borderRadius: 6,
-              color: path.startsWith(n.href) ? '#185FA5' : '#555',
-              background: path.startsWith(n.href) ? '#E6F1FB' : 'transparent',
+              color: path.startsWith(n.href) ? (role === 'student' ? 'var(--accent)' : '#185FA5') : '#555',
+              background: path.startsWith(n.href) ? (role === 'student' ? 'color-mix(in srgb, var(--accent) 12%, #fff)' : '#E6F1FB') : 'transparent',
               whiteSpace: 'nowrap',
             }}>
               <span className="cb-nav-label">{n.label}</span>
@@ -216,7 +216,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
         <div className="cb-mobile-menu" style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '8px 16px 12px', position: 'sticky', top: 52, zIndex: 49 }}>
           {nav.map(n => (
             <a key={n.href} href={n.href} onClick={() => setMenuOpen(false)}
-              style={{ display: 'flex', alignItems: 'center', padding: '10px 8px', textDecoration: 'none', fontSize: 15, fontWeight: path.startsWith(n.href) ? 600 : 400, color: path.startsWith(n.href) ? '#185FA5' : '#333', borderRadius: 8, background: path.startsWith(n.href) ? '#E6F1FB' : 'transparent', marginBottom: 2 }}>
+              style={{ display: 'flex', alignItems: 'center', padding: '10px 8px', textDecoration: 'none', fontSize: 15, fontWeight: path.startsWith(n.href) ? 600 : 400, color: path.startsWith(n.href) ? (role === 'student' ? 'var(--accent)' : '#185FA5') : '#333', borderRadius: 8, background: path.startsWith(n.href) ? (role === 'student' ? 'color-mix(in srgb, var(--accent) 12%, #fff)' : '#E6F1FB') : 'transparent', marginBottom: 2 }}>
               {n.label}
             </a>
           ))}
