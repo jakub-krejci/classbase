@@ -233,7 +233,9 @@ export default function TestPlayer({ test, questions, attempt: initAttempt, answ
     function onFsChange() { if (!document.fullscreenElement) setIsFullscreen(false) }
     document.addEventListener('fullscreenchange', onFsChange)
     return () => document.removeEventListener('fullscreenchange', onFsChange)
-  }, [])vives page refresh because started_at is in DB
+  }, [])
+
+  // ── Timer: compute from started_at — survives page refresh because started_at is in DB
   const timeLimitSecs = test.time_limit_mins ? test.time_limit_mins * 60 : null
   const [timeLeft, setTimeLeft] = useState<number | null>(() => {
     if (!timeLimitSecs || !initAttempt?.started_at) return timeLimitSecs
