@@ -1,9 +1,8 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import GlobalSearch from '@/components/GlobalSearch'
 
 const D = {
   bgMain:   '#090B10',
@@ -45,7 +44,9 @@ function Avatar({ src, name, size = 32, accent = '#7C3AED' }: { src?: string | n
 
 function SideIcon({ icon, active, href, label, accent }: { icon: string; active?: boolean; href: string; label: string; accent: string }) {
   return (
-    <a href={href} title={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: D.radiusSm, background: active ? accent + '25' : 'transparent', color: active ? accent : D.txtSec, textDecoration: 'none', fontSize: 18, transition: 'all .15s', flexShrink: 0 }}>
+    <a href={href} title={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: D.radiusSm, background: active ? accent + '25' : 'transparent', color: active ? accent : D.txtSec, textDecoration: 'none', fontSize: 18, transition: 'all .2s', flexShrink: 0 }}
+      onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.07)'; (e.currentTarget as HTMLElement).style.color = '#fff' } }}
+      onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = D.txtSec } }}>
       {icon}
     </a>
   )
@@ -89,6 +90,42 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
   const [enrollCode, setEnrollCode] = useState('')
   const [enrolling, setEnrolling] = useState(false)
   const [enrollErr, setEnrollErr] = useState('')
+
+  // ── Inline search state ──
+  const [searchOpen, setSearchOpen]   = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchSelected, setSearchSelected] = useState(0)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const runSearch = useCallback((q: string) => {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    if (q.length < 2) { setSearchResults([]); setSearchLoading(false); return }
+    setSearchLoading(true)
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        const data = await res.json()
+        setSearchResults(data.results ?? []); setSearchSelected(0)
+      } catch { setSearchResults([]) }
+      setSearchLoading(false)
+    }, 250)
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(o => !o) }
+      if (e.key === 'Escape') setSearchOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    if (searchOpen) { setSearchQuery(''); setSearchResults([]); setTimeout(() => searchInputRef.current?.focus(), 50) }
+  }, [searchOpen])
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60000)
@@ -160,15 +197,62 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
         .icon-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 10px; transition: background .15s; padding: 6px; color: ${D.txtSec}; }
         .icon-btn:hover { background: rgba(255,255,255,.06); }
         .mod-card:hover .mod-overlay { opacity: 1 !important; }
+        @keyframes spin { to { transform: rotate(360deg) } }
         @media (max-width: 1100px) { .right-panel { display: none !important; } }
         @media (max-width: 860px)  { .main-grid  { grid-template-columns: 1fr !important; } }
         @media (max-width: 640px)  { .sidebar-full { display: none !important; } }
       `}</style>
 
-      {/* GlobalSearch — mounted for Ctrl+K listener, visually hidden */}
-      <div style={{ position: 'fixed', bottom: -9999, opacity: 0, pointerEvents: 'none' }}>
-        <GlobalSearch />
-      </div>
+      {/* ── Inline search overlay ── */}
+      {searchOpen && (
+        <>
+          <div onClick={() => setSearchOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 9998, backdropFilter: 'blur(3px)' }} />
+          <div style={{ position: 'fixed', top: '15%', left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 580, zIndex: 9999, padding: '0 16px' }}>
+            <div style={{ background: D.bgCard, borderRadius: D.radius, boxShadow: '0 24px 64px rgba(0,0,0,.5)', overflow: 'hidden', border: `1px solid ${D.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: searchResults.length > 0 || searchLoading ? `1px solid ${D.border}` : 'none' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={D.txtSec} strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                <input ref={searchInputRef} value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); runSearch(e.target.value) }}
+                  onKeyDown={e => {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setSearchSelected(s => Math.min(s+1, searchResults.length-1)) }
+                    if (e.key === 'ArrowUp')   { e.preventDefault(); setSearchSelected(s => Math.max(s-1, 0)) }
+                    if (e.key === 'Enter' && searchResults[searchSelected]) { setSearchOpen(false); router.push(searchResults[searchSelected].href) }
+                  }}
+                  placeholder="Hledat lekce, moduly, testy, úkoly…"
+                  style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, fontFamily: 'inherit', background: 'transparent', color: D.txtPri }} />
+                {searchLoading && <div style={{ width: 16, height: 16, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite', flexShrink: 0 }} />}
+                <kbd onClick={() => setSearchOpen(false)} style={{ fontSize: 11, padding: '2px 7px', background: 'rgba(255,255,255,.08)', border: `1px solid ${D.border}`, borderRadius: 5, cursor: 'pointer', color: D.txtSec }}>Esc</kbd>
+              </div>
+              {searchResults.length > 0 && (
+                <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+                  {searchResults.map((r, i) => {
+                    const meta: any = { module: { icon: '📚', color: '#6c47ff' }, lesson: { icon: '📖', color: '#22C55E' }, assignment: { icon: '📝', color: '#FBBF24' }, test: { icon: '🧪', color: '#EF4444' } }[r.type] ?? { icon: '📄', color: D.txtSec }
+                    return (
+                      <div key={r.href} onClick={() => { setSearchOpen(false); router.push(r.href) }} onMouseEnter={() => setSearchSelected(i)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 18px', cursor: 'pointer', background: searchSelected === i ? 'rgba(255,255,255,.05)' : 'transparent', borderBottom: `1px solid ${D.border}` }}>
+                        <div style={{ width: 34, height: 34, borderRadius: 8, background: meta.color+'20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>{meta.icon}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                          <div style={{ fontSize: 11, color: D.txtSec, marginTop: 1 }}>{r.excerpt}</div>
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', background: meta.color+'20', color: meta.color, borderRadius: 20, flexShrink: 0 }}>{r.type}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {searchQuery.length >= 2 && !searchLoading && searchResults.length === 0 && (
+                <div style={{ padding: '28px 18px', textAlign: 'center', color: D.txtSec, fontSize: 13 }}>Žádné výsledky pro „{searchQuery}"</div>
+              )}
+              {searchQuery.length < 2 && (
+                <div style={{ padding: '14px 18px', display: 'flex', gap: 16, color: D.txtSec, fontSize: 11 }}>
+                  <span>↑↓ navigace</span><span>↵ otevřít</span><span>Esc zavřít</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Enroll modal */}
       {enrollOpen && (
@@ -211,9 +295,8 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
             <SideIcon icon="📊" href="/student/progress" label="Pokrok" accent={accent} />
             <SideIcon icon="🔖" href="/student/bookmarks" label="Záložky" accent={accent} />
           </div>
-          {/* Bottom */}
+          {/* Bottom: logout only */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <SideIcon icon="👤" href="/student/profile" label="Profil" accent={accent} />
             <button onClick={logout} title="Odhlásit se" className="icon-btn" style={{ width: 40, height: 40, fontSize: 18 }}>↩</button>
           </div>
         </nav>
@@ -225,9 +308,9 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${D.border}`, gap: 12 }}>
             {/* Left spacer */}
             <div />
-            {/* Centered search — triggers GlobalSearch Ctrl+K overlay */}
+            {/* Centered search */}
             <button
-              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+              onClick={() => setSearchOpen(true)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: 30, cursor: 'pointer', color: D.txtSec, fontSize: 13, fontFamily: 'inherit', width: 360 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <span style={{ flex: 1, textAlign: 'left' }}>Hledat...</span>
@@ -267,14 +350,14 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
                 <SectionLabel>Rychlé akce</SectionLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {[
-                    { icon: '🐍', label: 'Spustit Python editor' },
-                    { icon: '📓', label: 'Otevřít Jupyter Notebook' },
-                    { icon: '🌐', label: 'Spustit HTML editor' },
-                    { icon: '🗄️', label: 'Spustit SQL editor' },
+                    { icon: '/icons/python.png',   label: 'Spustit Python editor' },
+                    { icon: '/icons/jupyter.png',  label: 'Otevřít Jupyter Notebook' },
+                    { icon: '/icons/html.png',     label: 'Spustit HTML editor' },
+                    { icon: '/icons/database.png', label: 'Spustit SQL editor' },
                   ].map(({ icon, label }) => (
                     <button key={label} className="bento-hover"
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`, borderRadius: D.radiusSm, color: D.txtSec, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const, width: '100%' }}>
-                      <span style={{ fontSize: 17 }}>{icon}</span>
+                      <img src={icon} alt="" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
                       {label}
                     </button>
                   ))}
