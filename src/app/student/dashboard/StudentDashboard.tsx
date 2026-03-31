@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import GlobalSearch from '@/components/GlobalSearch'
 
 const D = {
   bgMain:   '#090B10',
@@ -164,6 +165,11 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
         @media (max-width: 640px)  { .sidebar-full { display: none !important; } }
       `}</style>
 
+      {/* GlobalSearch — mounted for Ctrl+K listener, visually hidden */}
+      <div style={{ position: 'fixed', bottom: -9999, opacity: 0, pointerEvents: 'none' }}>
+        <GlobalSearch />
+      </div>
+
       {/* Enroll modal */}
       {enrollOpen && (
         <>
@@ -194,8 +200,8 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
         {/* ── Left sidebar ── */}
         <nav className="sidebar-full" style={{ width: 64, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0 16px', borderRight: `1px solid ${D.border}`, background: D.bgMain, position: 'sticky', top: 0, height: '100vh' }}>
           {/* Logo with big gap below */}
-          <a href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 12, background: accent, fontSize: 20, textDecoration: 'none', flexShrink: 0, marginBottom: 28 }}>
-            📚
+          <a href="/student/dashboard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, textDecoration: 'none', flexShrink: 0, marginBottom: 28 }}>
+            <img src="/logo_male.png" alt="ClassBase" style={{ width: 36, height: 36, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none'; (e.target as HTMLImageElement).insertAdjacentHTML('afterend','<div style="width:36px;height:36px;border-radius:10px;background:'+accent+';display:flex;align-items:center;justify-content:center;font-size:18px">📚</div>') }} />
           </a>
           {/* Nav icons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
@@ -219,14 +225,14 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${D.border}`, gap: 12 }}>
             {/* Left spacer */}
             <div />
-            {/* Centered search */}
-            <a href="/student/modules"
-              onClick={e => { e.preventDefault(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })) }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: 30, cursor: 'text', color: D.txtSec, fontSize: 13, textDecoration: 'none', width: 360 }}>
+            {/* Centered search — triggers GlobalSearch Ctrl+K overlay */}
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: 30, cursor: 'pointer', color: D.txtSec, fontSize: 13, fontFamily: 'inherit', width: 360 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <span style={{ flex: 1 }}>Hledat...</span>
-              <kbd style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(255,255,255,.08)', borderRadius: 5 }}>⌘K</kbd>
-            </a>
+              <span style={{ flex: 1, textAlign: 'left' }}>Hledat...</span>
+              <kbd style={{ fontSize: 10, padding: '2px 6px', background: 'rgba(255,255,255,.08)', borderRadius: 5, color: D.txtSec }}>⌘K</kbd>
+            </button>
             {/* Right: bell + avatar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
               <button className="icon-btn" style={{ fontSize: 18, position: 'relative' }}>
@@ -240,56 +246,36 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
           </div>
 
           {/* ── Bento grid ── */}
-          <div style={{ flex: 1, padding: '20px', display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }} className="main-grid">
+          <div style={{ flex: 1, padding: '20px', display: 'grid', gridTemplateColumns: '420px 1fr', gap: 16, alignItems: 'start' }} className="main-grid">
 
             {/* ══ LEFT COLUMN ══ */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-              {/* Row 1: Greeting + Continue side by side */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                {/* Greeting */}
-                <div style={{ ...card({ padding: '18px 16px', overflow: 'hidden', position: 'relative', minHeight: 110 }) }}>
-                  <div style={{ position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%', background: accent + '18', filter: 'blur(30px)', pointerEvents: 'none' }} />
-                  {profile?.banner_url && <div style={{ position: 'absolute', inset: 0, background: `url(${profile.banner_url}) center/cover`, opacity: .07, borderRadius: D.radius }} />}
-                  <div style={{ position: 'relative' }}>
-                    <div style={{ fontSize: 11, color: D.txtSec, marginBottom: 3 }}>{greeting} 👋</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: D.txtPri, lineHeight: 1.2, marginBottom: 6 }}>{firstName}</div>
-                    {profile?.custom_status && <div style={{ fontSize: 11, color: accent, background: accent + '15', padding: '2px 8px', borderRadius: 20, display: 'inline-block' }}>{profile.custom_status}</div>}
-                  </div>
+              {/* Greeting — full width */}
+              <div style={{ ...card({ padding: '22px 24px', overflow: 'hidden', position: 'relative', minHeight: 100 }) }}>
+                <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: accent + '18', filter: 'blur(35px)', pointerEvents: 'none' }} />
+                {profile?.banner_url && <div style={{ position: 'absolute', inset: 0, background: `url(${profile.banner_url}) center/cover`, opacity: .07, borderRadius: D.radius }} />}
+                <div style={{ position: 'relative' }}>
+                  <div style={{ fontSize: 12, color: D.txtSec, marginBottom: 3 }}>{greeting} 👋</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: D.txtPri, lineHeight: 1.2, marginBottom: 6 }}>{firstName}</div>
+                  {profile?.custom_status && <div style={{ fontSize: 11, color: accent, background: accent + '15', padding: '2px 8px', borderRadius: 20, display: 'inline-block' }}>{profile.custom_status}</div>}
                 </div>
-                {/* Continue CTA */}
-                {continueEnrollment ? (
-                  <a href={`/student/modules/${continueEnrollment.module_id}`}
-                    style={{ ...card({ padding: '16px', background: accent, border: 'none', textDecoration: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 110 }), cursor: 'pointer' }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.65)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>Pokračovat</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.3, marginBottom: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>{continueMod?.title ?? 'Modul'}</div>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>{continueDone}/{continueTotal} lekcí</div>
-                    </div>
-                    <ProgressBar pct={continuePct} color="rgba(255,255,255,.85)" height={3} />
-                  </a>
-                ) : (
-                  <a href="/student/modules" style={{ ...card({ padding: '16px', border: `1px dashed ${D.border}`, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 110, gap: 8 }) }}>
-                    <div style={{ fontSize: 24 }}>➕</div>
-                    <div style={{ fontSize: 12, color: D.txtSec, textAlign: 'center' }}>Přihlásit se do modulu</div>
-                  </a>
-                )}
               </div>
 
-              {/* Quick actions — editor tools */}
+              {/* Quick actions — single column, no brand colors */}
               <div style={card({ padding: '16px 18px' })}>
                 <SectionLabel>Rychlé akce</SectionLabel>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {[
-                    { icon: '🐍', label: 'Python editor',    color: '#3B82F6' },
-                    { icon: '📓', label: 'Jupyter Notebook', color: '#F97316' },
-                    { icon: '🌐', label: 'HTML editor',       color: '#E34C26' },
-                    { icon: '🗄️',  label: 'SQL editor',       color: '#00758F' },
-                  ].map(({ icon, label, color }) => (
+                    { icon: '🐍', label: 'Spustit Python editor' },
+                    { icon: '📓', label: 'Otevřít Jupyter Notebook' },
+                    { icon: '🌐', label: 'Spustit HTML editor' },
+                    { icon: '🗄️', label: 'Spustit SQL editor' },
+                  ].map(({ icon, label }) => (
                     <button key={label} className="bento-hover"
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: color + '15', border: `1px solid ${color}30`, borderRadius: D.radiusSm, color: color, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`, borderRadius: D.radiusSm, color: D.txtSec, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const, width: '100%' }}>
                       <span style={{ fontSize: 17 }}>{icon}</span>
-                      <span>{label.split(' ')[0]}</span>
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -344,6 +330,31 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
 
             {/* ══ RIGHT COLUMN ══ */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Continue CTA — top of right column */}
+              {continueEnrollment ? (
+                <a href={`/student/modules/${continueEnrollment.module_id}`}
+                  style={{ ...card({ padding: '20px 24px', background: accent, border: 'none', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 20, position: 'relative', overflow: 'hidden' }), cursor: 'pointer' }}
+                  className="bento-hover">
+                  <div style={{ position: 'absolute', top: -50, right: -50, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,.08)', filter: 'blur(40px)', pointerEvents: 'none' }} />
+                  <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, flexShrink: 0 }}>📖</div>
+                  <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,.65)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Pokračovat ve studiu</div>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: '#fff', lineHeight: 1.25, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{continueMod?.title ?? 'Modul'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <ProgressBar pct={continuePct} color="rgba(255,255,255,.85)" height={4} />
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,.8)', fontWeight: 700, flexShrink: 0 }}>{continuePct}%</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', flexShrink: 0 }}>{continueDone}/{continueTotal} lekcí →</div>
+                </a>
+              ) : (
+                <button onClick={() => setEnrollOpen(true)}
+                  style={{ ...card({ padding: '20px 24px', border: `1px dashed rgba(255,255,255,.15)`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit', color: D.txtSec, fontSize: 14, width: '100%' }) }}
+                  className="bento-hover">
+                  <span style={{ fontSize: 20 }}>➕</span> Přihlásit se do prvního modulu
+                </button>
+              )}
 
               {/* All modules section */}
               <div>
