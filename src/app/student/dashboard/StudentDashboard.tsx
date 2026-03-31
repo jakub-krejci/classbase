@@ -350,16 +350,16 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
                 <SectionLabel>Rychlé akce</SectionLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {[
-                    { icon: '/icons/python.png',   label: 'Spustit Python editor' },
-                    { icon: '/icons/jupyter.png',  label: 'Otevřít Jupyter Notebook' },
-                    { icon: '/icons/html.png',     label: 'Spustit HTML editor' },
-                    { icon: '/icons/database.png', label: 'Spustit SQL editor' },
-                  ].map(({ icon, label }) => (
-                    <button key={label} className="bento-hover"
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`, borderRadius: D.radiusSm, color: D.txtSec, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const, width: '100%' }}>
+                    { icon: '/icons/python.png',   label: 'Spustit Python editor',   href: '/student/python' },
+                    { icon: '/icons/jupyter.png',  label: 'Otevřít Jupyter Notebook', href: '#' },
+                    { icon: '/icons/html.png',     label: 'Spustit HTML editor',      href: '#' },
+                    { icon: '/icons/database.png', label: 'Spustit SQL editor',       href: '#' },
+                  ].map(({ icon, label, href }) => (
+                    <a key={label} href={href} className="bento-hover"
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`, borderRadius: D.radiusSm, color: D.txtSec, fontSize: 13, fontWeight: 500, textDecoration: 'none', width: '100%' }}>
                       <img src={icon} alt="" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0 }} />
                       {label}
-                    </button>
+                    </a>
                   ))}
                 </div>
               </div>
