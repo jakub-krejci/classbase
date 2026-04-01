@@ -115,6 +115,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   const [splitFile, setSplitFile]       = useState<WebFile | null>(null)
   const [splitView, setSplitView]       = useState(false)
   const [isDirty, setIsDirty]           = useState(false)
+  const contentsRef = useRef<Map<string, string>>(new Map())
   const [livePreview, setLivePreview]   = useState(true)
 
   // ── Editor refs ───────────────────────────────────────────────────────────
@@ -245,6 +246,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             const path = editorFilePath.current
             if (!path) return
             const val = editorRef.current.getValue()
+            contentsRef.current.set(path, val)
             setContents(prev => { const n = new Map(prev); n.set(path, val); return n })
             setIsDirty(true)
             schedulePreview()
@@ -279,6 +281,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         const path = splitEditorFilePath.current
         if (!path) return
         const val = splitEditorRef.current.getValue()
+        contentsRef.current.set(path, val)
         setContents(prev => { const n = new Map(prev); n.set(path, val); return n })
         setIsDirty(true)
         schedulePreview()
@@ -360,6 +363,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       newContents.set(f.path, text)
     }))
     setContents(newContents)
+    contentsRef.current = newContents
 
     // Open index.html or first HTML file
     const firstHtml = proj.files.find(f => f.name === 'index.html' && f.folder === '')
@@ -403,7 +407,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     previewTimer.current = setTimeout(() => updatePreview(), 600)
   }
   function updatePreview(c?: Map<string, string>, files?: WebFile[]) {
-    const cc = c ?? contents
+    const cc = c ?? contentsRef.current
     const ff = files ?? activeProject?.files ?? []
     if (previewRef.current) previewRef.current.srcdoc = buildPreview(ff, cc)
   }
@@ -463,6 +467,12 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       if (projs.length > 0) await openProject(projs[0])
       else setActiveProject(null)
     }
+    // Remove from recent list
+    setRecent(prev => {
+      const n = prev.filter(r => r.key !== proj.key)
+      try { localStorage.setItem(LS_RECENT, JSON.stringify(n)) } catch {}
+      return n
+    })
     setDeleteProjModal(null); setSaving(false)
   }
 
@@ -544,7 +554,11 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     setUploadingImg(true)
     for (const file of Array.from(files)) {
       const path = storagePath(uid, activeProject.key, 'img', file.name)
-      await pushFile(path, file)
+      await supabase.storage.from(BUCKET).remove([path])
+      await supabase.storage.from(BUCKET).upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: true, cacheControl: '0',
+      })
     }
     const projs = await refreshProjects()
     const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
@@ -594,7 +608,10 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = `${activeProject.name}.zip`
+    a.style.display = 'none'
+    document.body.appendChild(a)
     a.click()
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href) }, 1000)
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
@@ -640,7 +657,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   }
 
   // Folder display names
-  const folderLabel = (folder: string) => folder === '' ? '/' : folder === 'img' ? '📷 img' : `📁 ${folder}`
+  const folderLabel = (folder: string) => folder === '' ? '/' : `📁 ${folder}`
 
   // Group files by folder
   const filesByFolder = () => {
@@ -849,7 +866,9 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                           draggable onDragStart={() => setDraggingFile(f)} onDragEnd={() => { setDraggingFile(null); setDragOverFolder(null) }}
                           style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px 4px 16px', borderRadius: 7, cursor: 'pointer', marginBottom: 1, background: f.path === activeFile?.path ? accent+'18' : 'transparent', border: `1px solid ${f.path === activeFile?.path ? accent+'30' : 'transparent'}` }}
                           onClick={() => clickFile(f)}>
-                          <span style={{ fontSize: 13, color: getFileColor(f.type), flexShrink: 0 }}>{getFileIcon(f.name, f.type)}</span>
+                          {f.type === 'img'
+                            ? <span style={{ fontSize: 13, flexShrink: 0 }}>📁</span>
+                            : <img src={`/icons/${f.type}.png`} alt={f.type} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />}
                           <span style={{ fontSize: 12, color: f.path === activeFile?.path ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
                           {f.size ? <span style={{ fontSize: 9, color: D.txtSec }}>{fmtSize(f.size)}</span> : null}
                           <div className="w-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
@@ -878,7 +897,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             {/* Active file tab */}
             {activeFile && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px', background: D.bgMid, borderRadius: 7, fontSize: 12 }}>
-                <span style={{ color: getFileColor(activeFile.type) }}>{getFileIcon(activeFile.name, activeFile.type)}</span>
+                {activeFile.type === 'img' ? <span style={{ fontSize: 13 }}>🖼</span> : <img src={`/icons/${activeFile.type}.png`} alt={activeFile.type} style={{ width: 15, height: 15, objectFit: 'contain', flexShrink: 0 }} />}
                 <span style={{ color: D.txtPri, fontWeight: 600 }}>{activeFile.folder ? activeFile.folder + '/' : ''}{activeFile.name}</span>
                 {isDirty && <span style={{ color: D.warning, fontSize: 10 }}>●</span>}
               </div>
@@ -897,6 +916,8 @@ export default function HtmlEditor({ profile }: { profile: any }) {
               <button onClick={() => updatePreview()}
                 style={{ padding: '5px 12px', background: accent+'20', color: accent, border: `1px solid ${accent}40`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>▶ Obnovit</button>
             )}
+            <button onClick={downloadProject} disabled={!activeProject}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: activeProject ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeProject ? 1 : .4 }}>⬇️ ZIP</button>
             <button id="html-save-btn" onClick={saveActiveFile} disabled={!activeFile || saving}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeFile || saving ? .4 : 1 }}>
               {saving ? '…' : '💾 Uložit'}
@@ -906,7 +927,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           {/* Editor area */}
           <div style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden' }}>
             {/* Primary editor */}
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, borderRight: splitView ? `1px solid rgba(255,255,255,.1)` : 'none' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', width: splitView ? '50%' : '100%', flexShrink: 0, overflow: 'hidden', borderRight: splitView ? `1px solid rgba(255,255,255,.1)` : 'none' }}>
               {activeFile?.type === 'img'
                 ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#252526', flexDirection: 'column', gap: 12 }}>
                     {contents.get(activeFile.path)
@@ -919,11 +940,11 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             </div>
             {/* Split editor */}
             {splitView && (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', width: '50%', flexShrink: 0, overflow: 'hidden' }}>
                 {/* Split header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#252526', borderBottom: '1px solid rgba(255,255,255,.08)', flexShrink: 0 }}>
                   {splitFile
-                    ? <><span style={{ fontSize: 12, color: getFileColor(splitFile.type) }}>{getFileIcon(splitFile.name, splitFile.type)}</span>
+                    ? <><span style={{ fontSize: 12 }}>{splitFile.type === 'img' ? '🖼' : ''}</span>{splitFile.type !== 'img' && <img src={`/icons/${splitFile.type}.png`} alt={splitFile.type} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
                        <span style={{ fontSize: 11, color: D.txtSec }}>{splitFile.name}</span></>
                     : <span style={{ fontSize: 11, color: D.txtSec }}>Druhý editor</span>
                   }
