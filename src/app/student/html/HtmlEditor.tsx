@@ -115,7 +115,9 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   const [splitFile, setSplitFile]       = useState<WebFile | null>(null)
   const [splitView, setSplitView]       = useState(false)
   const [isDirty, setIsDirty]           = useState(false)
-  const contentsRef = useRef<Map<string, string>>(new Map())
+  const contentsRef      = useRef<Map<string, string>>(new Map())
+  const livePreviewRef   = useRef(true)    // mirror of livePreview for closures
+  const activeProjectRef = useRef<WebProject | null>(null)  // mirror for closures
   const [livePreview, setLivePreview]   = useState(true)
 
   // ── Editor refs ───────────────────────────────────────────────────────────
@@ -400,15 +402,19 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     try { localStorage.setItem(LS_LAST, proj.key) } catch {}
   }
 
+  // Keep refs in sync with state for use in closures (timers, event handlers)
+  useEffect(() => { livePreviewRef.current = livePreview }, [livePreview])
+  useEffect(() => { activeProjectRef.current = activeProject }, [activeProject])
+
   // ── Preview ───────────────────────────────────────────────────────────────
   function schedulePreview() {
-    if (!livePreview) return
+    if (!livePreviewRef.current) return
     if (previewTimer.current) clearTimeout(previewTimer.current)
     previewTimer.current = setTimeout(() => updatePreview(), 600)
   }
   function updatePreview(c?: Map<string, string>, files?: WebFile[]) {
     const cc = c ?? contentsRef.current
-    const ff = files ?? activeProject?.files ?? []
+    const ff = files ?? activeProjectRef.current?.files ?? []
     if (previewRef.current) previewRef.current.srcdoc = buildPreview(ff, cc)
   }
   useEffect(() => { if (monacoReady && activeProject) updatePreview() }, [monacoReady])
@@ -552,14 +558,17 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   async function uploadImages(files: FileList) {
     if (!activeProject) return
     setUploadingImg(true)
+    const uploadErrors: string[] = []
     for (const file of Array.from(files)) {
       const path = storagePath(uid, activeProject.key, 'img', file.name)
       await supabase.storage.from(BUCKET).remove([path])
-      await supabase.storage.from(BUCKET).upload(path, file, {
-        contentType: file.type || 'application/octet-stream',
-        upsert: true, cacheControl: '0',
+      const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+        contentType: 'application/octet-stream',
+        cacheControl: '0',
       })
+      if (error) uploadErrors.push(file.name + ': ' + error.message)
     }
+    if (uploadErrors.length > 0) { flash('❌ ' + uploadErrors[0]); setUploadingImg(false); return }
     const projs = await refreshProjects()
     const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
     flash(`✓ ${files.length} obrázek nahrán`)
@@ -579,16 +588,21 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     setDraggingFile(null); setDragOverFolder(null); setSaving(false)
   }
 
-  // ── Download project as ZIP (using JSZip from CDN) ────────────────────────
+  // ── Download project as ZIP ─────────────────────────────────────────────────
   async function downloadProject() {
     if (!activeProject) return
+    // Load JSZip from CDN if not already loaded
     const w = window as any
     if (!w.JSZip) {
-      const s = document.createElement('script')
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-      document.head.appendChild(s)
-      await new Promise(r => { s.onload = r })
+      await new Promise<void>((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+        s.onload = () => resolve()
+        s.onerror = () => reject(new Error('JSZip load failed'))
+        document.head.appendChild(s)
+      })
     }
+    if (!w.JSZip) { flash('❌ JSZip se nepodařilo načíst'); return }
     const zip = new w.JSZip()
     for (const file of activeProject.files.filter(f => f.name !== '.gitkeep')) {
       if (file.type === 'img') {
@@ -784,7 +798,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       </div>
 
       {/* ── 2-col layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr', gap: 14, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
 
         {/* ══ LEFT: Sidebar ══ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -797,7 +811,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
               <button className="w-sb" style={sideBtn} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít projekt</button>
               <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
               <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject || saving ? .4 : 1 }} disabled={!activeProject || saving} onClick={saveAll}><span>💾</span> Uložit vše</button>
-              <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject ? .4 : 1 }} disabled={!activeProject} onClick={downloadProject}><span>⬇️</span> Stáhnout ZIP</button>
+
               <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject ? .4 : 1 }} disabled={!activeProject} onClick={() => imgInputRef.current?.click()}>
                 <span>🖼</span> {uploadingImg ? 'Nahrávám…' : 'Nahrát obrázky'}
               </button>
@@ -890,7 +904,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         </div>
 
         {/* ══ RIGHT: Editor + Preview ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, overflow: 'hidden' }}>
 
           {/* Toolbar */}
           <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
@@ -925,7 +939,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           </div>
 
           {/* Editor area */}
-          <div style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden', width: '100%', boxSizing: 'border-box' as const }}>
             {/* Primary editor */}
             <div style={{ display: 'flex', flexDirection: 'column', width: splitView ? '50%' : '100%', flexShrink: 0, overflow: 'hidden', borderRight: splitView ? `1px solid rgba(255,255,255,.1)` : 'none' }}>
               {activeFile?.type === 'img'
