@@ -65,6 +65,10 @@ function getFileIcon(name: string, type: FileType): string {
 }
 
 // ── Build preview ─────────────────────────────────────────────────────────────
+// Escapes special regex chars in a string so it can be used in RegExp
+function reEsc(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 function buildPreview(files: WebFile[], contents: Map<string, string>): string {
   const htmlFile = files.find(f => f.name === 'index.html' && f.folder === '')
     ?? files.find(f => f.type === 'html')
@@ -72,29 +76,49 @@ function buildPreview(files: WebFile[], contents: Map<string, string>): string {
 
   let html = contents.get(htmlFile.path) ?? ''
 
-  // Inline CSS files referenced by <link> tags
+  // Inline all CSS files referenced by <link href="..."> 
+  // Matches both bare filename and folder/filename
   for (const f of files.filter(f => f.type === 'css')) {
     const css = contents.get(f.path) ?? ''
-    html = html.replace(new RegExp(`<link[^>]*href=["']?${f.name}["']?[^>]*>`, 'g'),
-      `<style>/* ${f.name} */\n${css}\n</style>`)
-    html = html.replace(new RegExp(`<link[^>]*href=["']?${f.folder ? f.folder + '/' : ''}${f.name}["']?[^>]*>`, 'g'),
-      `<style>/* ${f.name} */\n${css}\n</style>`)
+    const refPaths = [
+      reEsc(f.name),
+      f.folder ? reEsc(f.folder + '/' + f.name) : null,
+    ].filter(Boolean).join('|')
+    html = html.replace(
+      new RegExp(`<link[^>]*href=["']?(${refPaths})["']?[^>]*>`, 'gi'),
+      `<style>/* ${f.folder ? f.folder + '/' : ''}${f.name} */\n${css}\n</style>`
+    )
   }
-  // Inline JS files referenced by <script src>
+
+  // Inline all JS files referenced by <script src="...">
   for (const f of files.filter(f => f.type === 'js')) {
     const js = contents.get(f.path) ?? ''
-    html = html.replace(new RegExp(`<script[^>]*src=["']?${f.name}["']?[^>]*></script>`, 'g'),
-      `<script>/* ${f.name} */\n${js}\n</script>`)
-    html = html.replace(new RegExp(`<script[^>]*src=["']?${f.folder ? f.folder + '/' : ''}${f.name}["']?[^>]*></script>`, 'g'),
-      `<script>/* ${f.name} */\n${js}\n</script>`)
+    const refPaths = [
+      reEsc(f.name),
+      f.folder ? reEsc(f.folder + '/' + f.name) : null,
+    ].filter(Boolean).join('|')
+    html = html.replace(
+      new RegExp(`<script[^>]*src=["']?(${refPaths})["']?[^>]*>\\s*</script>`, 'gi'),
+      `<script>/* ${f.folder ? f.folder + '/' : ''}${f.name} */\n${js}\n</script>`
+    )
   }
-  // Inline images as base64 (stored as data URLs in contents map)
-  for (const [path, dataUrl] of contents.entries()) {
-    if (dataUrl.startsWith('data:')) {
-      const fname = path.split('/').pop() ?? ''
-      html = html.replace(new RegExp(`src=["']?(?:[^"'>]*/)?${fname}["']?`, 'g'), `src="${dataUrl}"`)
-    }
+
+  // Inline all images as base64 data URLs
+  // Matches src="img/photo.png", src="photo.png", src='./img/photo.png' etc.
+  for (const f of files.filter(f => f.type === 'img')) {
+    const dataUrl = contents.get(f.path)
+    if (!dataUrl || !dataUrl.startsWith('data:')) continue
+    const refPaths = [
+      reEsc(f.name),
+      f.folder ? reEsc(f.folder + '/' + f.name) : null,
+      f.folder ? reEsc('./' + f.folder + '/' + f.name) : null,
+    ].filter(Boolean).join('|')
+    html = html.replace(
+      new RegExp(`(src=["']?)(?:[^"']*[\\/])?(?:${refPaths})(["']?)`, 'gi'),
+      `$1${dataUrl}$2`
+    )
   }
+
   return html
 }
 
@@ -236,14 +260,14 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           theme: 'vs-dark', fontSize: 14,
           fontFamily: "'JetBrains Mono','Fira Code',monospace",
           minimap: { enabled: false }, lineNumbers: 'on' as const,
-          wordWrap: 'on' as const, automaticLayout: false,
+          wordWrap: 'off' as const, automaticLayout: false,
           scrollBeyondLastLine: false,
           renderLineHighlight: 'line' as const,
           padding: { top: 14, bottom: 14 },
           bracketPairColorization: { enabled: true },
         }
         if (editorContainerRef.current) {
-          editorRef.current = monaco.editor.create(editorContainerRef.current, { ...commonOpts, value: DEFAULT_HTML, language: 'html' })
+          editorRef.current = monaco.editor.create(editorContainerRef.current, { ...commonOpts, value: DEFAULT_HTML, language: 'html', wordWrap: 'off', scrollbar: { horizontal: 'auto', vertical: 'auto' } })
           editorRef.current.onDidChangeModelContent(() => {
             const path = editorFilePath.current
             if (!path) return
@@ -271,11 +295,12 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         theme: 'vs-dark', fontSize: 14,
         fontFamily: "'JetBrains Mono','Fira Code',monospace",
         minimap: { enabled: false }, lineNumbers: 'on' as const,
-        wordWrap: 'on' as const, automaticLayout: false,
+        wordWrap: 'off' as const, automaticLayout: false,
         scrollBeyondLastLine: false,
         renderLineHighlight: 'line' as const,
         padding: { top: 14, bottom: 14 },
         bracketPairColorization: { enabled: true },
+        scrollbar: { horizontal: 'auto', vertical: 'auto' },
         value: splitFile ? (contents.get(splitFile.path) ?? '') : '',
         language: splitFile ? getMonacoLanguage(splitFile.type) : 'html',
       })
@@ -591,18 +616,20 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   // ── Download project as ZIP ─────────────────────────────────────────────────
   async function downloadProject() {
     if (!activeProject) return
-    // Load JSZip from CDN if not already loaded
+    // Dynamically import JSZip via fetch+eval (avoids CDN script tag issues)
     const w = window as any
     if (!w.JSZip) {
-      await new Promise<void>((resolve, reject) => {
-        const s = document.createElement('script')
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-        s.onload = () => resolve()
-        s.onerror = () => reject(new Error('JSZip load failed'))
-        document.head.appendChild(s)
-      })
+      try {
+        const res = await fetch('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js')
+        if (!res.ok) throw new Error('fetch failed')
+        const code = await res.text()
+        // eslint-disable-next-line no-new-func
+        new Function(code)()
+      } catch {
+        flash('❌ JSZip se nepodařilo načíst'); return
+      }
     }
-    if (!w.JSZip) { flash('❌ JSZip se nepodařilo načíst'); return }
+    if (!w.JSZip) { flash('❌ JSZip nedostupný'); return }
     const zip = new w.JSZip()
     for (const file of activeProject.files.filter(f => f.name !== '.gitkeep')) {
       if (file.type === 'img') {
@@ -762,7 +789,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             {activeProject?.files.filter(f => f.type !== 'img' && f.name !== '.gitkeep').map(f => (
               <div key={f.path} onClick={() => openInSplit(f)}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, cursor: 'pointer', marginBottom: 3, background: f.path === splitFile?.path ? accent+'15' : 'transparent' }} className="w-row">
-                <span style={{ fontSize: 14, color: getFileColor(f.type) }}>{getFileIcon(f.name, f.type)}</span>
+                <img src={`/icons/${f.type}.png`} alt={f.type} style={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
                 <span style={{ fontSize: 13, color: f.path === splitFile?.path ? accent : D.txtPri }}>{f.folder ? f.folder + '/' : ''}{f.name}</span>
               </div>
             ))}
@@ -880,9 +907,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                           draggable onDragStart={() => setDraggingFile(f)} onDragEnd={() => { setDraggingFile(null); setDragOverFolder(null) }}
                           style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px 4px 16px', borderRadius: 7, cursor: 'pointer', marginBottom: 1, background: f.path === activeFile?.path ? accent+'18' : 'transparent', border: `1px solid ${f.path === activeFile?.path ? accent+'30' : 'transparent'}` }}
                           onClick={() => clickFile(f)}>
-                          {f.type === 'img'
-                            ? <span style={{ fontSize: 13, flexShrink: 0 }}>📁</span>
-                            : <img src={`/icons/${f.type}.png`} alt={f.type} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />}
+                          <img src={f.type === 'img' ? '/icons/img.png' : `/icons/${f.type}.png`} alt={f.type} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
                           <span style={{ fontSize: 12, color: f.path === activeFile?.path ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
                           {f.size ? <span style={{ fontSize: 9, color: D.txtSec }}>{fmtSize(f.size)}</span> : null}
                           <div className="w-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
