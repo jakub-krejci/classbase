@@ -4,66 +4,98 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const BUCKET       = 'web-files'
-const DEFAULT_PROJ = 'Muj_projekt'
-const LS_RECENT    = 'cb_html_recent'
-const LS_LAST      = 'cb_html_last'
+// ── Constants ─────────────────────────────────────────────────────────────────
+const BUCKET    = 'web-files'
+const LS_RECENT = 'cb_html_recent'
+const LS_LAST   = 'cb_html_last'
+const LS_LAST2  = 'cb_html_last2'  // second split-view file
 
-const DEFAULT_HTML = `<!DOCTYPE html>
-<html lang="cs">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Můj projekt</title>
-</head>
-<body>
-  <h1>Ahoj, světe! 👋</h1>
-  <p>Začni upravovat HTML, CSS a JS...</p>
-</body>
-</html>`
+const DEFAULT_HTML = `<!DOCTYPE html>\n<html lang="cs">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Můj projekt</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Ahoj, světe! 👋</h1>\n  <p>Začni upravovat HTML, CSS a JS...</p>\n  <script src="script.js"></script>\n</body>\n</html>`
+const DEFAULT_CSS  = `body {\n  font-family: system-ui, sans-serif;\n  max-width: 800px;\n  margin: 40px auto;\n  padding: 0 20px;\n  background: #f9fafb;\n  color: #111;\n}\n\nh1 { color: #7C3AED; }`
+const DEFAULT_JS   = `// JavaScript\nconsole.log('Ahoj z JavaScriptu!');`
 
-const DEFAULT_CSS = `body {
-  font-family: system-ui, sans-serif;
-  max-width: 800px;
-  margin: 40px auto;
-  padding: 0 20px;
-  background: #f9fafb;
-  color: #111;
-}
-
-h1 {
-  color: #7C3AED;
-}`
-
-const DEFAULT_JS = `// JavaScript kód
-console.log('Ahoj z JavaScriptu!');`
-
-// ── Storage paths ─────────────────────────────────────────────────────────────
-// web-files/zaci/{uid}/{project}/index.html
-function sanitizeKey(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._\-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'projekt'
-}
-function fp(uid: string, proj: string, file: 'index.html' | 'style.css' | 'script.js') {
-  return `zaci/${uid}/${sanitizeKey(proj)}/${file}`
-}
-
-// ── Types ────────────────────────────────────────────────────────────────────
-interface WebProject {
-  name: string            // display name (may have diacritics)
-  key: string             // sanitized key used in storage path
-  hasHtml: boolean; hasCss: boolean; hasJs: boolean
+// ── Types ─────────────────────────────────────────────────────────────────────
+type FileType = 'html' | 'css' | 'js' | 'img' | 'folder'
+interface WebFile {
+  path: string      // full storage path
+  name: string      // filename
+  folder: string    // subfolder within project ('' = root, 'img' = img/, 'css' = css/, etc.)
+  type: FileType
+  size?: number
   updatedAt: string
 }
+interface WebProject { name: string; key: string; files: WebFile[]; updatedAt: string }
 interface RecentEntry { name: string; key: string; openedAt: string }
 
-// ── Build preview HTML ────────────────────────────────────────────────────────
-function buildPreview(html: string, css: string, js: string): string {
-  // Inject CSS and JS into the HTML document
-  const withCss = html.replace('</head>', `<style>\n${css}\n</style>\n</head>`)
-  const withJs  = withCss.replace('</body>', `<script>\n${js}\n</script>\n</body>`)
-  return withJs
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sanitizeKey(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._\-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'soubor'
+}
+function storagePath(uid: string, projKey: string, folder: string, name: string) {
+  return folder ? `zaci/${uid}/${projKey}/${folder}/${name}` : `zaci/${uid}/${projKey}/${name}`
+}
+function getFileType(name: string): FileType {
+  const ext = name.split('.').pop()?.toLowerCase()
+  if (ext === 'html' || ext === 'htm') return 'html'
+  if (ext === 'css') return 'css'
+  if (ext === 'js') return 'js'
+  if (['png','jpg','jpeg','gif','webp','svg','ico'].includes(ext ?? '')) return 'img'
+  return 'html'
+}
+function getMonacoLanguage(type: FileType): string {
+  if (type === 'html') return 'html'
+  if (type === 'css')  return 'css'
+  if (type === 'js')   return 'javascript'
+  return 'html'
+}
+function getFileColor(type: FileType): string {
+  if (type === 'html') return '#E34C26'
+  if (type === 'css')  return '#264DE4'
+  if (type === 'js')   return '#F7DF1E'
+  if (type === 'img')  return '#22C55E'
+  return D.txtSec
+}
+function getFileIcon(name: string, type: FileType): string {
+  if (type === 'img') return '🖼'
+  if (type === 'html') return '📄'
+  if (type === 'css') return '🎨'
+  if (type === 'js') return '⚡'
+  return '📄'
+}
+
+// ── Build preview ─────────────────────────────────────────────────────────────
+function buildPreview(files: WebFile[], contents: Map<string, string>): string {
+  const htmlFile = files.find(f => f.name === 'index.html' && f.folder === '')
+    ?? files.find(f => f.type === 'html')
+  if (!htmlFile) return '<p style="font-family:sans-serif;padding:20px;color:#888">Žádný HTML soubor v projektu</p>'
+
+  let html = contents.get(htmlFile.path) ?? ''
+
+  // Inline CSS files referenced by <link> tags
+  for (const f of files.filter(f => f.type === 'css')) {
+    const css = contents.get(f.path) ?? ''
+    html = html.replace(new RegExp(`<link[^>]*href=["']?${f.name}["']?[^>]*>`, 'g'),
+      `<style>/* ${f.name} */\n${css}\n</style>`)
+    html = html.replace(new RegExp(`<link[^>]*href=["']?${f.folder ? f.folder + '/' : ''}${f.name}["']?[^>]*>`, 'g'),
+      `<style>/* ${f.name} */\n${css}\n</style>`)
+  }
+  // Inline JS files referenced by <script src>
+  for (const f of files.filter(f => f.type === 'js')) {
+    const js = contents.get(f.path) ?? ''
+    html = html.replace(new RegExp(`<script[^>]*src=["']?${f.name}["']?[^>]*></script>`, 'g'),
+      `<script>/* ${f.name} */\n${js}\n</script>`)
+    html = html.replace(new RegExp(`<script[^>]*src=["']?${f.folder ? f.folder + '/' : ''}${f.name}["']?[^>]*></script>`, 'g'),
+      `<script>/* ${f.name} */\n${js}\n</script>`)
+  }
+  // Inline images as base64 (stored as data URLs in contents map)
+  for (const [path, dataUrl] of contents.entries()) {
+    if (dataUrl.startsWith('data:')) {
+      const fname = path.split('/').pop() ?? ''
+      html = html.replace(new RegExp(`src=["']?(?:[^"'>]*/)?${fname}["']?`, 'g'), `src="${dataUrl}"`)
+    }
+  }
+  return html
 }
 
 export default function HtmlEditor({ profile }: { profile: any }) {
@@ -71,98 +103,121 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   const accent   = profile?.accent_color ?? '#7C3AED'
   const uid      = profile?.id as string
 
-  // ── Editor content ────────────────────────────────────────────────────────
-  const [html, setHtml]   = useState(DEFAULT_HTML)
-  const [css, setCss]     = useState(DEFAULT_CSS)
-  const [js, setJs]       = useState(DEFAULT_JS)
-  const [isDirty, setIsDirty] = useState(false)
-  const [livePreview, setLivePreview] = useState(true)
-
-  // ── Panels: collapsed & widths ────────────────────────────────────────────
-  const [collapsed, setCollapsed] = useState<{ html: boolean; css: boolean; js: boolean }>({ html: false, css: false, js: false })
-  const [panelWidths, setPanelWidths] = useState<[number, number, number]>([33, 33, 34])
-  const dragging = useRef<{ panel: number; startX: number; startWidths: [number, number, number] } | null>(null)
-
-  // ── Monaco editors ────────────────────────────────────────────────────────
-  const htmlContainerRef = useRef<HTMLDivElement>(null)
-  const cssContainerRef  = useRef<HTMLDivElement>(null)
-  const jsContainerRef   = useRef<HTMLDivElement>(null)
-  const htmlEditorRef    = useRef<any>(null)
-  const cssEditorRef     = useRef<any>(null)
-  const jsEditorRef      = useRef<any>(null)
-  const monacoRef        = useRef<any>(null)
-  const [monacoReady, setMonacoReady] = useState(false)
-
-  // ── Projects ──────────────────────────────────────────────────────────────
+  // ── Projects & files ──────────────────────────────────────────────────────
   const [projects, setProjects]         = useState<WebProject[]>([])
   const [loadingProj, setLoadingProj]   = useState(true)
   const [activeProject, setActiveProject] = useState<WebProject | null>(null)
   const [recent, setRecent]             = useState<RecentEntry[]>([])
-  const [expanded, setExpanded]         = useState<Set<string>>(new Set())
+  const [expanded, setExpanded]         = useState<Set<string>>(new Set(['']))  // expanded folders
+  // file contents cache: path → string content (or data URL for images)
+  const [contents, setContents]         = useState<Map<string, string>>(new Map())
+  const [activeFile, setActiveFile]     = useState<WebFile | null>(null)
+  const [splitFile, setSplitFile]       = useState<WebFile | null>(null)
+  const [splitView, setSplitView]       = useState(false)
+  const [isDirty, setIsDirty]           = useState(false)
+  const [livePreview, setLivePreview]   = useState(true)
+
+  // ── Editor refs ───────────────────────────────────────────────────────────
+  const editorContainerRef  = useRef<HTMLDivElement>(null)
+  const splitContainerRef   = useRef<HTMLDivElement>(null)
+  const editorRef           = useRef<any>(null)
+  const splitEditorRef      = useRef<any>(null)
+  const monacoRef           = useRef<any>(null)
+  const [monacoReady, setMonacoReady] = useState(false)
+  // Track which file each editor is showing (to avoid infinite setValue loops)
+  const editorFilePath      = useRef<string>('')
+  const splitEditorFilePath = useRef<string>('')
+
+  // ── Preview ───────────────────────────────────────────────────────────────
+  const previewRef          = useRef<HTMLIFrameElement>(null)
+  const previewTimer        = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── UI state ──────────────────────────────────────────────────────────────
-  const [saving, setSaving]           = useState(false)
-  const [saveMsg, setSaveMsg]         = useState('')
-  const [newProjModal, setNewProjModal]   = useState(false)
-  const [newProjName, setNewProjName]     = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [saveMsg, setSaveMsg]   = useState('')
+  const [draggingFile, setDraggingFile] = useState<WebFile | null>(null)
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
+  // Modals
+  const [newProjModal, setNewProjModal]     = useState(false)
+  const [newProjName, setNewProjName]       = useState('')
   const [deleteProjModal, setDeleteProjModal] = useState<WebProject | null>(null)
-  const [renamingProj, setRenamingProj]   = useState<WebProject | null>(null)
-  const [renameVal, setRenameVal]         = useState('')
-  const [openProjModal, setOpenProjModal] = useState(false)
-
-  // ── Preview ref ───────────────────────────────────────────────────────────
-  const previewRef = useRef<HTMLIFrameElement>(null)
-  const previewTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [renameProjModal, setRenameProjModal] = useState<WebProject | null>(null)
+  const [renameProjVal, setRenameProjVal]   = useState('')
+  const [openProjModal, setOpenProjModal]   = useState(false)
+  const [newItemModal, setNewItemModal]     = useState<{ folder: string } | null>(null)
+  const [newItemName, setNewItemName]       = useState('')
+  const [newItemType, setNewItemType]       = useState<'html'|'css'|'js'|'folder'>('html')
+  const [renameModal, setRenameModal]       = useState<WebFile | null>(null)
+  const [renameVal, setRenameVal]           = useState('')
+  const [deleteModal, setDeleteModal]       = useState<WebFile | null>(null)
+  const [uploadingImg, setUploadingImg]     = useState(false)
+  const imgInputRef = useRef<HTMLInputElement>(null)
+  const [splitPickOpen, setSplitPickOpen]   = useState(false)
 
   // ── Storage helpers ───────────────────────────────────────────────────────
-  async function pushFile(path: string, content: string): Promise<string | null> {
-    const blob = new Blob([content], { type: 'text/plain' })
-    let { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'text/plain', upsert: true, cacheControl: '0' })
+  async function pushFile(path: string, content: string | Blob): Promise<string | null> {
+    const blob = typeof content === 'string' ? new Blob([content], { type: 'text/plain' }) : content
+    let { error } = await supabase.storage.from(BUCKET).upload(path, blob, { upsert: true, cacheControl: '0' })
     if (error) {
       await supabase.storage.from(BUCKET).remove([path])
-      const r2 = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'text/plain', cacheControl: '0' })
+      const r2 = await supabase.storage.from(BUCKET).upload(path, blob, { cacheControl: '0' })
       if (r2.error) return r2.error.message
     }
     return null
   }
-
-  async function fetchFile(path: string): Promise<string> {
-    const { data, error } = await supabase.storage.from(BUCKET).download(path + '?t=' + Date.now())
-    if (error || !data) {
-      const { data: d2 } = await supabase.storage.from(BUCKET).download(path)
-      if (!d2) return ''
-      return await d2.text()
-    }
+  async function fetchText(path: string): Promise<string> {
+    const { data } = await supabase.storage.from(BUCKET).download(path + '?t=' + Date.now())
+    if (!data) return ''
     return await data.text()
   }
+  async function fetchAsDataUrl(path: string): Promise<string> {
+    const { data } = await supabase.storage.from(BUCKET).download(path)
+    if (!data) return ''
+    return new Promise(resolve => {
+      const r = new FileReader(); r.onload = () => resolve(r.result as string); r.readAsDataURL(data)
+    })
+  }
 
-  // ── Refresh project list ──────────────────────────────────────────────────
+  // ── Refresh project tree ──────────────────────────────────────────────────
   const refreshProjects = useCallback(async (): Promise<WebProject[]> => {
     setLoadingProj(true)
-    const { data: topLevel } = await supabase.storage.from(BUCKET).list(`zaci/${uid}`, {
-      limit: 200, sortBy: { column: 'name', order: 'asc' }
-    })
-    if (!topLevel) { setLoadingProj(false); return [] }
+    const { data: top } = await supabase.storage.from(BUCKET).list(`zaci/${uid}`, { limit: 200 })
+    if (!top) { setLoadingProj(false); return [] }
 
     const result: WebProject[] = []
-    for (const item of topLevel) {
-      if (item.metadata !== null && item.metadata !== undefined) continue
-      if (item.name.includes('.')) continue
-      const { data: files } = await supabase.storage.from(BUCKET).list(`zaci/${uid}/${item.name}`, { limit: 20 })
-      const names = (files ?? []).map(f => f.name)
-      result.push({
-        name: item.name,
-        key: item.name,
-        hasHtml: names.includes('index.html'),
-        hasCss:  names.includes('style.css'),
-        hasJs:   names.includes('script.js'),
-        updatedAt: files?.[0]?.updated_at ?? new Date().toISOString(),
-      })
+    for (const item of top) {
+      if ((item.metadata !== null && item.metadata !== undefined) || item.name.includes('.')) continue
+      // List root files
+      const files: WebFile[] = []
+      await listFolder(`zaci/${uid}/${item.name}`, '', item.name, files)
+      result.push({ name: item.name, key: item.name, files, updatedAt: files[0]?.updatedAt ?? new Date().toISOString() })
     }
     setProjects(result)
     setLoadingProj(false)
     return result
   }, [uid])
+
+  async function listFolder(storagePfx: string, folderRelative: string, projKey: string, out: WebFile[]) {
+    const { data } = await supabase.storage.from(BUCKET).list(storagePfx, { limit: 200 })
+    if (!data) return
+    for (const item of data) {
+      if (item.metadata === null || item.metadata === undefined) {
+        // subfolder
+        if (!item.name.includes('.')) {
+          await listFolder(`${storagePfx}/${item.name}`, folderRelative ? `${folderRelative}/${item.name}` : item.name, projKey, out)
+        }
+      } else {
+        const name = item.name
+        const type = getFileType(name)
+        out.push({
+          path: `${storagePfx}/${name}`,
+          name, folder: folderRelative, type,
+          size: item.metadata?.size,
+          updatedAt: item.updated_at ?? new Date().toISOString(),
+        })
+      }
+    }
+  }
 
   // ── Monaco loader ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -174,262 +229,399 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
       w.require(['vs/editor/editor.main'], (monaco: any) => {
         monacoRef.current = monaco
-        const common = {
-          theme: 'vs-dark', fontSize: 13,
+        const commonOpts = {
+          theme: 'vs-dark', fontSize: 14,
           fontFamily: "'JetBrains Mono','Fira Code',monospace",
-          minimap: { enabled: false }, lineNumbers: 'on' as const, wordWrap: 'on' as const,
-          automaticLayout: false,   // ← MUST be false: true causes infinite resize loop
+          minimap: { enabled: false }, lineNumbers: 'on' as const,
+          wordWrap: 'on' as const, automaticLayout: false,
           scrollBeyondLastLine: false,
-          renderLineHighlight: 'line' as const, padding: { top: 12, bottom: 12 },
+          renderLineHighlight: 'line' as const,
+          padding: { top: 14, bottom: 14 },
           bracketPairColorization: { enabled: true },
         }
-        if (htmlContainerRef.current) {
-          htmlEditorRef.current = monaco.editor.create(htmlContainerRef.current, { ...common, value: DEFAULT_HTML, language: 'html' })
-          htmlEditorRef.current.onDidChangeModelContent(() => { setHtml(htmlEditorRef.current.getValue()); setIsDirty(true); schedulePreview() })
-        }
-        if (cssContainerRef.current) {
-          cssEditorRef.current = monaco.editor.create(cssContainerRef.current, { ...common, value: DEFAULT_CSS, language: 'css' })
-          cssEditorRef.current.onDidChangeModelContent(() => { setCss(cssEditorRef.current.getValue()); setIsDirty(true); schedulePreview() })
-        }
-        if (jsContainerRef.current) {
-          jsEditorRef.current = monaco.editor.create(jsContainerRef.current, { ...common, value: DEFAULT_JS, language: 'javascript' })
-          jsEditorRef.current.onDidChangeModelContent(() => { setJs(jsEditorRef.current.getValue()); setIsDirty(true); schedulePreview() })
+        if (editorContainerRef.current) {
+          editorRef.current = monaco.editor.create(editorContainerRef.current, { ...commonOpts, value: DEFAULT_HTML, language: 'html' })
+          editorRef.current.onDidChangeModelContent(() => {
+            const path = editorFilePath.current
+            if (!path) return
+            const val = editorRef.current.getValue()
+            setContents(prev => { const n = new Map(prev); n.set(path, val); return n })
+            setIsDirty(true)
+            schedulePreview()
+          })
+          editorRef.current.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => document.getElementById('html-save-btn')?.click())
         }
         setMonacoReady(true)
       })
     }
     document.head.appendChild(s)
-    return () => { htmlEditorRef.current?.dispose(); cssEditorRef.current?.dispose(); jsEditorRef.current?.dispose() }
+    return () => { editorRef.current?.dispose(); splitEditorRef.current?.dispose() }
   }, [])
 
-  // ── Re-layout Monaco editors when panels resize or collapse ──────────────
-  // Must NOT use automaticLayout:true (causes infinite loop with % widths).
-  // Instead we call layout() once after each deliberate state change.
+  // ── Create/destroy split editor when splitView toggles ────────────────────
   useEffect(() => {
-    if (!monacoReady) return
-    const raf = requestAnimationFrame(() => {
-      htmlEditorRef.current?.layout()
-      cssEditorRef.current?.layout()
-      jsEditorRef.current?.layout()
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [panelWidths, collapsed, monacoReady])
-
-  // ── Init: load projects ───────────────────────────────────────────────────
-  useEffect(() => {
-    try { setRecent(JSON.parse(localStorage.getItem(LS_RECENT) ?? '[]')) } catch {}
-    ;(async () => {
-      const projs = await refreshProjects()
-      const lastKey = localStorage.getItem(LS_LAST)
-      if (lastKey) {
-        const p = projs.find(x => x.key === lastKey)
-        if (p) { await openProject(p); return }
-      }
-      if (projs.length > 0) await openProject(projs[0])
-      else await doCreateProject(DEFAULT_PROJ, true)
-    })()
-  }, [])
-
-  // ── Live preview ──────────────────────────────────────────────────────────
-  function schedulePreview() {
-    if (!livePreview) return
-    if (previewTimeout.current) clearTimeout(previewTimeout.current)
-    previewTimeout.current = setTimeout(updatePreview, 500)
-  }
-
-  function updatePreview() {
-    const h = htmlEditorRef.current?.getValue() ?? html
-    const c = cssEditorRef.current?.getValue() ?? css
-    const j = jsEditorRef.current?.getValue() ?? js
-    const preview = buildPreview(h, c, j)
-    if (previewRef.current) {
-      previewRef.current.srcdoc = preview
+    if (!monacoReady || !monacoRef.current) return
+    if (splitView && splitContainerRef.current && !splitEditorRef.current) {
+      const monaco = monacoRef.current
+      splitEditorRef.current = monaco.editor.create(splitContainerRef.current, {
+        theme: 'vs-dark', fontSize: 14,
+        fontFamily: "'JetBrains Mono','Fira Code',monospace",
+        minimap: { enabled: false }, lineNumbers: 'on' as const,
+        wordWrap: 'on' as const, automaticLayout: false,
+        scrollBeyondLastLine: false,
+        renderLineHighlight: 'line' as const,
+        padding: { top: 14, bottom: 14 },
+        bracketPairColorization: { enabled: true },
+        value: splitFile ? (contents.get(splitFile.path) ?? '') : '',
+        language: splitFile ? getMonacoLanguage(splitFile.type) : 'html',
+      })
+      splitEditorRef.current.onDidChangeModelContent(() => {
+        const path = splitEditorFilePath.current
+        if (!path) return
+        const val = splitEditorRef.current.getValue()
+        setContents(prev => { const n = new Map(prev); n.set(path, val); return n })
+        setIsDirty(true)
+        schedulePreview()
+      })
     }
+    if (!splitView && splitEditorRef.current) {
+      splitEditorRef.current.dispose()
+      splitEditorRef.current = null
+      splitEditorFilePath.current = ''
+    }
+  }, [splitView, monacoReady])
+
+  // ── Open file in primary editor ───────────────────────────────────────────
+  function openInEditor(file: WebFile) {
+    if (file.type === 'img') return  // images don't open in Monaco
+    const content = contents.get(file.path) ?? ''
+    if (editorFilePath.current !== file.path) {
+      editorFilePath.current = file.path
+      const monaco = monacoRef.current
+      if (monaco && editorRef.current) {
+        const lang = getMonacoLanguage(file.type)
+        const model = monaco.editor.createModel(content, lang)
+        editorRef.current.setModel(model)
+      }
+    }
+    setActiveFile(file)
   }
 
-  useEffect(() => { if (monacoReady) updatePreview() }, [monacoReady])
+  // ── Open file in split editor ─────────────────────────────────────────────
+  function openInSplit(file: WebFile) {
+    if (file.type === 'img') return
+    const content = contents.get(file.path) ?? ''
+    splitEditorFilePath.current = file.path
+    const monaco = monacoRef.current
+    if (monaco && splitEditorRef.current) {
+      const lang = getMonacoLanguage(file.type)
+      const model = monaco.editor.createModel(content, lang)
+      splitEditorRef.current.setModel(model)
+    }
+    setSplitFile(file)
+    setSplitPickOpen(false)
+    try { localStorage.setItem(LS_LAST2, file.path) } catch {}
+  }
+
+  // ── Load file content ─────────────────────────────────────────────────────
+  async function loadFileContent(file: WebFile): Promise<string | null> {
+    if (contents.has(file.path)) return null  // already cached
+    if (file.type === 'img') {
+      const url = await fetchAsDataUrl(file.path)
+      setContents(prev => { const n = new Map(prev); n.set(file.path, url); return n })
+      return null
+    }
+    const text = await fetchText(file.path)
+    setContents(prev => { const n = new Map(prev); n.set(file.path, text); return n })
+    return text
+  }
+
+  // ── Click file in sidebar ────────────────────────────────────────────────
+  async function clickFile(file: WebFile) {
+    await loadFileContent(file)
+    openInEditor(file)
+  }
 
   // ── Open project ──────────────────────────────────────────────────────────
   async function openProject(proj: WebProject) {
-    const [h, c, j] = await Promise.all([
-      proj.hasHtml ? fetchFile(fp(uid, proj.key, 'index.html')) : Promise.resolve(DEFAULT_HTML),
-      proj.hasCss  ? fetchFile(fp(uid, proj.key, 'style.css'))  : Promise.resolve(DEFAULT_CSS),
-      proj.hasJs   ? fetchFile(fp(uid, proj.key, 'script.js'))  : Promise.resolve(DEFAULT_JS),
-    ])
-    setHtml(h); setCss(c); setJs(j); setIsDirty(false)
-    htmlEditorRef.current?.setValue(h)
-    cssEditorRef.current?.setValue(c)
-    jsEditorRef.current?.setValue(j)
     setActiveProject(proj)
+    setContents(new Map())
+    setIsDirty(false)
+    setActiveFile(null)
+    setSplitFile(null)
+    editorFilePath.current = ''
+    splitEditorFilePath.current = ''
+    setExpanded(new Set(['', 'img']))
+
+    // Preload all text files
+    const newContents = new Map<string, string>()
+    await Promise.all(proj.files.filter(f => f.type !== 'img').map(async f => {
+      const text = await fetchText(f.path)
+      newContents.set(f.path, text)
+    }))
+    setContents(newContents)
+
+    // Open index.html or first HTML file
+    const firstHtml = proj.files.find(f => f.name === 'index.html' && f.folder === '')
+      ?? proj.files.find(f => f.type === 'html')
+    if (firstHtml) {
+      const content = newContents.get(firstHtml.path) ?? ''
+      editorFilePath.current = firstHtml.path
+      const monaco = monacoRef.current
+      if (monaco && editorRef.current) {
+        editorRef.current.setModel(monaco.editor.createModel(content, 'html'))
+      }
+      setActiveFile(firstHtml)
+    }
+
+    // Restore split file if saved
+    const lastSplit = localStorage.getItem(LS_LAST2)
+    if (splitView && lastSplit) {
+      const sf = proj.files.find(f => f.path === lastSplit)
+      if (sf) {
+        const sc = newContents.get(sf.path) ?? ''
+        splitEditorFilePath.current = sf.path
+        const monaco = monacoRef.current
+        if (monaco && splitEditorRef.current) splitEditorRef.current.setModel(monaco.editor.createModel(sc, getMonacoLanguage(sf.type)))
+        setSplitFile(sf)
+      }
+    }
+
     // Update preview
-    setTimeout(() => {
-      if (previewRef.current) previewRef.current.srcdoc = buildPreview(h, c, j)
-    }, 100)
-    // Recent
+    setTimeout(() => updatePreview(newContents, proj.files), 100)
+
+    // Recent list
     const entry: RecentEntry = { name: proj.name, key: proj.key, openedAt: new Date().toISOString() }
-    setRecent(prev => {
-      const next = [entry, ...prev.filter(r => r.key !== proj.key)].slice(0, 3)
-      try { localStorage.setItem(LS_RECENT, JSON.stringify(next)) } catch {}
-      return next
-    })
+    setRecent(prev => { const n = [entry, ...prev.filter(r => r.key !== proj.key)].slice(0, 3); try { localStorage.setItem(LS_RECENT, JSON.stringify(n)) } catch {}; return n })
     try { localStorage.setItem(LS_LAST, proj.key) } catch {}
-    setExpanded(prev => new Set([...prev, proj.key]))
   }
 
+  // ── Preview ───────────────────────────────────────────────────────────────
+  function schedulePreview() {
+    if (!livePreview) return
+    if (previewTimer.current) clearTimeout(previewTimer.current)
+    previewTimer.current = setTimeout(() => updatePreview(), 600)
+  }
+  function updatePreview(c?: Map<string, string>, files?: WebFile[]) {
+    const cc = c ?? contents
+    const ff = files ?? activeProject?.files ?? []
+    if (previewRef.current) previewRef.current.srcdoc = buildPreview(ff, cc)
+  }
+  useEffect(() => { if (monacoReady && activeProject) updatePreview() }, [monacoReady])
+
+  // ── Flash ─────────────────────────────────────────────────────────────────
   function flash(msg: string) { setSaveMsg(msg); setTimeout(() => setSaveMsg(''), 2800) }
 
-  // ── Save ──────────────────────────────────────────────────────────────────
-  async function saveProject() {
+  // ── Save active file ──────────────────────────────────────────────────────
+  async function saveActiveFile() {
+    if (!activeFile || activeFile.type === 'img') return
+    setSaving(true)
+    const content = contents.get(activeFile.path) ?? ''
+    const err = await pushFile(activeFile.path, content)
+    if (err) flash('❌ ' + err)
+    else { flash('✓ Uloženo'); setIsDirty(false) }
+    setSaving(false)
+  }
+
+  // ── Save all files ────────────────────────────────────────────────────────
+  async function saveAll() {
     if (!activeProject) return
     setSaving(true)
-    const h = htmlEditorRef.current?.getValue() ?? html
-    const c = cssEditorRef.current?.getValue() ?? css
-    const j = jsEditorRef.current?.getValue() ?? js
-    const [e1, e2, e3] = await Promise.all([
-      pushFile(fp(uid, activeProject.key, 'index.html'), h),
-      pushFile(fp(uid, activeProject.key, 'style.css'), c),
-      pushFile(fp(uid, activeProject.key, 'script.js'), j),
-    ])
-    if (e1 || e2 || e3) flash('❌ Chyba při ukládání')
-    else { flash('✓ Uloženo'); setIsDirty(false) }
-    refreshProjects()
+    const errs: string[] = []
+    await Promise.all(activeProject.files.filter(f => f.type !== 'img').map(async f => {
+      const c = contents.get(f.path); if (!c) return
+      const e = await pushFile(f.path, c); if (e) errs.push(e)
+    }))
+    if (errs.length) flash('❌ ' + errs[0])
+    else { flash('✓ Vše uloženo'); setIsDirty(false) }
     setSaving(false)
   }
 
   // ── Create project ────────────────────────────────────────────────────────
-  async function doCreateProject(projName: string, silent = false) {
-    const name = projName.trim() || 'Nový projekt'
+  async function doCreateProject(name: string, silent = false) {
+    const key = sanitizeKey(name.trim() || 'projekt')
     setSaving(true)
-    const key = sanitizeKey(name)
-    const [e1, e2, e3] = await Promise.all([
-      pushFile(fp(uid, key, 'index.html'), DEFAULT_HTML),
-      pushFile(fp(uid, key, 'style.css'), DEFAULT_CSS),
-      pushFile(fp(uid, key, 'script.js'), DEFAULT_JS),
+    await Promise.all([
+      pushFile(`zaci/${uid}/${key}/index.html`, DEFAULT_HTML),
+      pushFile(`zaci/${uid}/${key}/style.css`, DEFAULT_CSS),
+      pushFile(`zaci/${uid}/${key}/script.js`, DEFAULT_JS),
+      pushFile(`zaci/${uid}/${key}/img/.gitkeep`, ''),
     ])
-    if (!e1 && !e2 && !e3) {
-      const projs = await refreshProjects()
-      const p = projs.find(x => x.key === key)
-      if (p) await openProject(p)
-      if (!silent) flash('✓ Projekt vytvořen')
-    } else flash('❌ Chyba')
+    const projs = await refreshProjects()
+    const p = projs.find(x => x.key === key)
+    if (p) await openProject(p)
+    if (!silent) flash('✓ Projekt vytvořen')
     setNewProjModal(false); setNewProjName(''); setSaving(false)
   }
 
   // ── Delete project ────────────────────────────────────────────────────────
   async function doDeleteProject(proj: WebProject) {
     setSaving(true)
-    await supabase.storage.from(BUCKET).remove([
-      fp(uid, proj.key, 'index.html'),
-      fp(uid, proj.key, 'style.css'),
-      fp(uid, proj.key, 'script.js'),
-    ])
+    await supabase.storage.from(BUCKET).remove(proj.files.map(f => f.path))
     const projs = await refreshProjects()
     if (activeProject?.key === proj.key) {
       if (projs.length > 0) await openProject(projs[0])
-      else { setActiveProject(null); htmlEditorRef.current?.setValue(''); cssEditorRef.current?.setValue(''); jsEditorRef.current?.setValue('') }
+      else setActiveProject(null)
     }
     setDeleteProjModal(null); setSaving(false)
   }
 
   // ── Rename project ────────────────────────────────────────────────────────
   async function doRenameProject(proj: WebProject) {
-    const newName = renameVal.trim()
-    if (!newName || newName === proj.name) { setRenamingProj(null); return }
-    const newKey = sanitizeKey(newName)
+    const newKey = sanitizeKey(renameProjVal.trim() || proj.name)
+    if (newKey === proj.key) { setRenameProjModal(null); return }
     setSaving(true)
-    // Load all 3 files, re-upload under new key, delete old
-    const [h, c, j] = await Promise.all([
-      fetchFile(fp(uid, proj.key, 'index.html')),
-      fetchFile(fp(uid, proj.key, 'style.css')),
-      fetchFile(fp(uid, proj.key, 'script.js')),
-    ])
-    await Promise.all([
-      pushFile(fp(uid, newKey, 'index.html'), h),
-      pushFile(fp(uid, newKey, 'style.css'), c),
-      pushFile(fp(uid, newKey, 'script.js'), j),
-    ])
-    await supabase.storage.from(BUCKET).remove([
-      fp(uid, proj.key, 'index.html'),
-      fp(uid, proj.key, 'style.css'),
-      fp(uid, proj.key, 'script.js'),
-    ])
+    await Promise.all(proj.files.map(async f => {
+      const newPath = f.path.replace(`zaci/${uid}/${proj.key}/`, `zaci/${uid}/${newKey}/`)
+      const content = f.type === 'img' ? null : (contents.get(f.path) ?? await fetchText(f.path))
+      if (content !== null) await pushFile(newPath, content)
+    }))
+    await supabase.storage.from(BUCKET).remove(proj.files.map(f => f.path))
     const projs = await refreshProjects()
     if (activeProject?.key === proj.key) {
-      const renamed = projs.find(x => x.key === newKey)
-      if (renamed) {
-        setActiveProject(renamed)
-        setRecent(prev => {
-          const next = prev.map(r => r.key === proj.key ? { ...r, name: newName, key: newKey } : r)
-          try { localStorage.setItem(LS_RECENT, JSON.stringify(next)) } catch {}
-          return next
-        })
-        try { localStorage.setItem(LS_LAST, newKey) } catch {}
-      }
+      const p = projs.find(x => x.key === newKey); if (p) await openProject(p)
     }
-    setRenamingProj(null); setSaving(false)
+    setRenameProjModal(null); setSaving(false)
   }
 
-  // ── Download ──────────────────────────────────────────────────────────────
-  function downloadHtml() {
-    const h = htmlEditorRef.current?.getValue() ?? html
-    const c = cssEditorRef.current?.getValue() ?? css
-    const j = jsEditorRef.current?.getValue() ?? js
-    const blob = new Blob([buildPreview(h, c, j)], { type: 'text/html' })
+  // ── Create new file/folder ────────────────────────────────────────────────
+  async function doNewItem() {
+    if (!activeProject || !newItemModal) return
+    const folder = newItemModal.folder
+    setSaving(true)
+    if (newItemType === 'folder') {
+      const folderName = sanitizeKey(newItemName.trim() || 'slozka')
+      await pushFile(storagePath(uid, activeProject.key, folder ? `${folder}/${folderName}` : folderName, '.gitkeep'), '')
+    } else {
+      const ext = newItemType
+      const rawName = newItemName.trim() || `novy.${ext}`
+      const fileName = rawName.includes('.') ? rawName : `${rawName}.${ext}`
+      const content = ext === 'html' ? DEFAULT_HTML : ext === 'css' ? DEFAULT_CSS : DEFAULT_JS
+      await pushFile(storagePath(uid, activeProject.key, folder, fileName), content)
+    }
+    const projs = await refreshProjects()
+    const p = projs.find(x => x.key === activeProject.key)
+    if (p) { setActiveProject(p); setContents(prev => { const n = new Map(prev); return n }) }
+    setNewItemModal(null); setNewItemName(''); setSaving(false)
+  }
+
+  // ── Rename file ───────────────────────────────────────────────────────────
+  async function doRenameFile(file: WebFile) {
+    const newName = renameVal.trim()
+    if (!newName || !activeProject) { setRenameModal(null); return }
+    const finalName = newName.includes('.') ? newName : `${newName}.${file.name.split('.').pop()}`
+    const newPath = storagePath(uid, activeProject.key, file.folder, finalName)
+    setSaving(true)
+    const content = file.type === 'img' ? null : (contents.get(file.path) ?? await fetchText(file.path))
+    if (content !== null) await pushFile(newPath, content)
+    await supabase.storage.from(BUCKET).remove([file.path])
+    const projs = await refreshProjects()
+    const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
+    if (activeFile?.path === file.path) {
+      const newFile = p?.files.find(f => f.path === newPath)
+      if (newFile) { setActiveFile(newFile); editorFilePath.current = newPath; setContents(prev => { const n = new Map(prev); if (content) n.set(newPath, content); n.delete(file.path); return n }) }
+    }
+    setRenameModal(null); setSaving(false)
+  }
+
+  // ── Delete file ───────────────────────────────────────────────────────────
+  async function doDeleteFile(file: WebFile) {
+    if (!activeProject) { setDeleteModal(null); return }
+    setSaving(true)
+    await supabase.storage.from(BUCKET).remove([file.path])
+    const projs = await refreshProjects()
+    const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
+    if (activeFile?.path === file.path) {
+      const first = p?.files.find(f => f.type !== 'img')
+      if (first) clickFile(first); else setActiveFile(null)
+    }
+    setDeleteModal(null); setSaving(false)
+  }
+
+  // ── Upload images ─────────────────────────────────────────────────────────
+  async function uploadImages(files: FileList) {
+    if (!activeProject) return
+    setUploadingImg(true)
+    for (const file of Array.from(files)) {
+      const path = storagePath(uid, activeProject.key, 'img', file.name)
+      await pushFile(path, file)
+    }
+    const projs = await refreshProjects()
+    const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
+    flash(`✓ ${files.length} obrázek nahrán`)
+    setUploadingImg(false)
+  }
+
+  // ── Drag & drop between folders ───────────────────────────────────────────
+  async function dropFileOnFolder(file: WebFile, targetFolder: string) {
+    if (!activeProject || file.folder === targetFolder) return
+    setSaving(true)
+    const newPath = storagePath(uid, activeProject.key, targetFolder, file.name)
+    const content = file.type === 'img' ? null : (contents.get(file.path) ?? await fetchText(file.path))
+    if (content !== null) await pushFile(newPath, content)
+    await supabase.storage.from(BUCKET).remove([file.path])
+    const projs = await refreshProjects()
+    const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
+    setDraggingFile(null); setDragOverFolder(null); setSaving(false)
+  }
+
+  // ── Download project as ZIP (using JSZip from CDN) ────────────────────────
+  async function downloadProject() {
+    if (!activeProject) return
+    const w = window as any
+    if (!w.JSZip) {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+      document.head.appendChild(s)
+      await new Promise(r => { s.onload = r })
+    }
+    const zip = new w.JSZip()
+    for (const file of activeProject.files.filter(f => f.name !== '.gitkeep')) {
+      if (file.type === 'img') {
+        const { data } = await supabase.storage.from(BUCKET).download(file.path)
+        if (data) {
+          const buf = await data.arrayBuffer()
+          const folder = file.folder ? file.folder + '/' : ''
+          zip.file(folder + file.name, buf)
+        }
+      } else {
+        const content = contents.get(file.path) ?? await fetchText(file.path)
+        const folder = file.folder ? file.folder + '/' : ''
+        zip.file(folder + file.name, content)
+      }
+    }
+    const blob = await zip.generateAsync({ type: 'blob' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = (activeProject?.name ?? 'projekt') + '.html'
+    a.download = `${activeProject.name}.zip`
     a.click()
   }
 
-  // ── Panel drag resize ─────────────────────────────────────────────────────
-  function onDividerMouseDown(e: React.MouseEvent, afterPanel: 0 | 1) {
-    e.preventDefault()
-    dragging.current = { panel: afterPanel, startX: e.clientX, startWidths: [...panelWidths] as [number, number, number] }
-    const onMove = (ev: MouseEvent) => {
-      if (!dragging.current) return
-      const { panel, startX, startWidths } = dragging.current
-      const totalW = (e.target as HTMLElement).closest('.editor-row')?.clientWidth ?? 1
-      const delta = ((ev.clientX - startX) / totalW) * 100
-      const ws: [number, number, number] = [...startWidths] as [number, number, number]
-      if (panel === 0) {
-        ws[0] = Math.max(10, Math.min(80, startWidths[0] + delta))
-        ws[1] = Math.max(10, Math.min(80, startWidths[1] - delta))
-      } else {
-        ws[1] = Math.max(10, Math.min(80, startWidths[1] + delta))
-        ws[2] = Math.max(10, Math.min(80, startWidths[2] - delta))
-      }
-      setPanelWidths(ws)
-    }
-    const onUp = () => { dragging.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
+  // ── Init ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    try { setRecent(JSON.parse(localStorage.getItem(LS_RECENT) ?? '[]')) } catch {}
+    ;(async () => {
+      const projs = await refreshProjects()
+      const lastKey = localStorage.getItem(LS_LAST)
+      if (lastKey) { const p = projs.find(x => x.key === lastKey); if (p) { await openProject(p); return } }
+      if (projs.length > 0) await openProject(projs[0])
+      else await doCreateProject('Muj_web', true)
+    })()
+  }, [])
 
-  function toggleCollapse(panel: 'html' | 'css' | 'js') {
-    setCollapsed(prev => ({ ...prev, [panel]: !prev[panel] }))
-  }
+  // ── Format helpers ────────────────────────────────────────────────────────
+  function fmtDate(iso: string) { return new Date(iso).toLocaleString('cs-CZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }
+  function fmtSize(b?: number) { if (!b) return ''; return b < 1024 ? `${b}B` : `${(b/1024).toFixed(1)}kB` }
 
-  function fmtDate(iso: string) {
-    return new Date(iso).toLocaleString('cs-CZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-  }
+  // ── Styles ────────────────────────────────────────────────────────────────
+  const sideBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`, borderRadius: D.radiusSm, color: D.txtSec, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', width: '100%', textAlign: 'left' as const, transition: 'all .15s' }
+  const modalInp: React.CSSProperties = { width: '100%', padding: '10px 13px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 10, fontSize: 14, color: D.txtPri, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }
 
-  const sideBtn: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px',
-    background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`,
-    borderRadius: D.radiusSm, color: D.txtSec, fontSize: 12, fontWeight: 500,
-    cursor: 'pointer', fontFamily: 'inherit', width: '100%', textAlign: 'left' as const, transition: 'all .15s',
-  }
-  const modalInp: React.CSSProperties = {
-    width: '100%', padding: '10px 13px', background: D.bgMid,
-    border: `1px solid ${D.border}`, borderRadius: 10, fontSize: 14,
-    color: D.txtPri, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const,
-  }
-
-  function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  function Modal({ title, children, onClose, width = 400 }: { title: string; children: React.ReactNode; onClose: () => void; width?: number }) {
     return (
       <>
         <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.72)', zIndex: 9998, backdropFilter: 'blur(5px)' }} />
-        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 9999, width: '100%', maxWidth: 400, padding: '0 16px' }}>
+        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 9999, width: '100%', maxWidth: width, padding: '0 16px' }}>
           <div style={{ background: D.bgCard, borderRadius: D.radius, padding: '28px 24px', border: `1px solid ${D.border}`, boxShadow: '0 28px 70px rgba(0,0,0,.75)' }}>
             <div style={{ fontSize: 17, fontWeight: 800, color: D.txtPri, marginBottom: 16 }}>{title}</div>
             {children}
@@ -441,17 +633,26 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   function MBtns({ onOk, onCancel, label, danger, disabled }: { onOk: () => void; onCancel: () => void; label: string; danger?: boolean; disabled?: boolean }) {
     return (
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onOk} disabled={disabled || saving}
-          style={{ flex: 1, padding: '10px', background: danger ? D.danger : accent, color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: disabled || saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: disabled || saving ? .4 : 1 }}>
-          {saving ? '…' : label}
-        </button>
+        <button onClick={onOk} disabled={disabled || saving} style={{ flex: 1, padding: '10px', background: danger ? D.danger : accent, color: '#fff', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: disabled || saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: disabled || saving ? .4 : 1 }}>{saving ? '…' : label}</button>
         <button onClick={onCancel} style={{ padding: '10px 14px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>Zrušit</button>
       </div>
     )
   }
 
-  const PANEL_COLORS = { html: '#E34C26', css: '#264DE4', js: '#F7DF1E' }
-  const PANEL_LABELS = { html: 'HTML', css: 'CSS', js: 'JavaScript' }
+  // Folder display names
+  const folderLabel = (folder: string) => folder === '' ? '/' : folder === 'img' ? '📷 img' : `📁 ${folder}`
+
+  // Group files by folder
+  const filesByFolder = () => {
+    if (!activeProject) return new Map<string, WebFile[]>()
+    const m = new Map<string, WebFile[]>()
+    for (const f of activeProject.files) {
+      if (!m.has(f.folder)) m.set(f.folder, [])
+      m.get(f.folder)!.push(f)
+    }
+    return m
+  }
+  const folders = activeProject ? [...new Set(activeProject.files.map(f => f.folder))].sort() : []
 
   return (
     <DarkLayout profile={profile} activeRoute="/student/html">
@@ -459,69 +660,94 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       {/* ── Modals ── */}
       {newProjModal && (
         <Modal title="🌐 Nový projekt" onClose={() => setNewProjModal(false)}>
-          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 12 }}>Název projektu — automaticky se vytvoří soubory HTML, CSS a JS</p>
-          <input value={newProjName} onChange={e => setNewProjName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && newProjName.trim() && doCreateProject(newProjName)}
-            autoFocus placeholder="Můj web"
-            style={{ ...modalInp, marginBottom: 14 }} />
+          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 12 }}>Název projektu</p>
+          <input value={newProjName} onChange={e => setNewProjName(e.target.value)} onKeyDown={e => e.key === 'Enter' && newProjName.trim() && doCreateProject(newProjName)} autoFocus placeholder="Můj web" style={{ ...modalInp, marginBottom: 14 }} />
           <MBtns onOk={() => doCreateProject(newProjName)} onCancel={() => setNewProjModal(false)} label="Vytvořit" disabled={!newProjName.trim()} />
         </Modal>
       )}
-
       {deleteProjModal && (
         <Modal title="🗑 Smazat projekt" onClose={() => setDeleteProjModal(null)}>
-          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 6, lineHeight: 1.6 }}>
-            Smazat projekt <strong style={{ color: D.txtPri }}>{deleteProjModal.name}</strong> včetně všech souborů?
-          </p>
+          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 6, lineHeight: 1.6 }}>Smazat <strong style={{ color: D.txtPri }}>{deleteProjModal.name}</strong> a všechny soubory?</p>
           <p style={{ fontSize: 12, color: D.danger, marginBottom: 18 }}>Tato akce je nevratná.</p>
-          <MBtns onOk={() => doDeleteProject(deleteProjModal)} onCancel={() => setDeleteProjModal(null)} label="Smazat projekt" danger />
+          <MBtns onOk={() => doDeleteProject(deleteProjModal)} onCancel={() => setDeleteProjModal(null)} label="Smazat" danger />
         </Modal>
       )}
-
-      {renamingProj && (
-        <Modal title="✏ Přejmenovat projekt" onClose={() => setRenamingProj(null)}>
-          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 12 }}>Nový název projektu</p>
-          <input value={renameVal} onChange={e => setRenameVal(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && renameVal.trim() && doRenameProject(renamingProj)}
-            autoFocus placeholder={renamingProj.name}
-            style={{ ...modalInp, marginBottom: 14 }} />
-          <MBtns onOk={() => doRenameProject(renamingProj)} onCancel={() => setRenamingProj(null)} label="Přejmenovat" disabled={!renameVal.trim()} />
+      {renameProjModal && (
+        <Modal title="✏ Přejmenovat projekt" onClose={() => setRenameProjModal(null)}>
+          <input value={renameProjVal} onChange={e => setRenameProjVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && renameProjVal.trim() && doRenameProject(renameProjModal)} autoFocus placeholder={renameProjModal.name} style={{ ...modalInp, marginBottom: 14 }} />
+          <MBtns onOk={() => doRenameProject(renameProjModal)} onCancel={() => setRenameProjModal(null)} label="Přejmenovat" disabled={!renameProjVal.trim()} />
         </Modal>
       )}
-
       {openProjModal && (
         <Modal title="📂 Otevřít projekt" onClose={() => setOpenProjModal(false)}>
-          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
-            {loadingProj
-              ? <div style={{ fontSize: 13, color: D.txtSec, textAlign: 'center', padding: '20px 0' }}>Načítám…</div>
-              : projects.length === 0
-                ? <div style={{ fontSize: 13, color: D.txtSec }}>Žádné projekty.</div>
-                : projects.map(proj => (
-                    <div key={proj.key} onClick={() => { openProject(proj); setOpenProjModal(false) }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', marginBottom: 4, background: proj.key === activeProject?.key ? accent+'15' : 'transparent' }}
-                      className="html-row">
-                      <span style={{ fontSize: 18 }}>🌐</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: proj.key === activeProject?.key ? accent : D.txtPri }}>{proj.name}</div>
-                        <div style={{ fontSize: 10, color: D.txtSec }}>HTML · CSS · JS · {fmtDate(proj.updatedAt)}</div>
-                      </div>
-                    </div>
-                  ))
-            }
+          <div style={{ maxHeight: 360, overflowY: 'auto', marginBottom: 14 }}>
+            {projects.map(proj => (
+              <div key={proj.key} onClick={() => { openProject(proj); setOpenProjModal(false) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', marginBottom: 4, background: proj.key === activeProject?.key ? accent+'15' : 'transparent' }} className="w-row">
+                <span>🌐</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: proj.key === activeProject?.key ? accent : D.txtPri }}>{proj.name}</div>
+                  <div style={{ fontSize: 10, color: D.txtSec }}>{proj.files.filter(f => f.name !== '.gitkeep').length} souborů</div>
+                </div>
+              </div>
+            ))}
           </div>
-          <div style={{ marginTop: 14 }}>
-            <button onClick={() => setOpenProjModal(false)} style={{ width: '100%', padding: '10px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>Zavřít</button>
+          <button onClick={() => setOpenProjModal(false)} style={{ width: '100%', padding: '10px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>Zavřít</button>
+        </Modal>
+      )}
+      {newItemModal !== null && (
+        <Modal title="➕ Nová položka" onClose={() => setNewItemModal(null)}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' as const }}>
+            {(['html','css','js','folder'] as const).map(t => (
+              <button key={t} onClick={() => setNewItemType(t)}
+                style={{ padding: '5px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, background: newItemType === t ? (t === 'folder' ? D.txtSec+'20' : getFileColor(t as FileType)+'25') : D.bgMid, color: newItemType === t ? (t === 'folder' ? D.txtSec : getFileColor(t as FileType)) : D.txtSec }}>
+                {t === 'folder' ? '📁 Složka' : t.toUpperCase()}
+              </button>
+            ))}
           </div>
+          <input value={newItemName} onChange={e => setNewItemName(e.target.value)} onKeyDown={e => e.key === 'Enter' && doNewItem()} autoFocus
+            placeholder={newItemType === 'folder' ? 'nazev_slozky' : `soubor.${newItemType}`}
+            style={{ ...modalInp, marginBottom: 14 }} />
+          <MBtns onOk={doNewItem} onCancel={() => setNewItemModal(null)} label="Vytvořit" disabled={!newItemName.trim()} />
+        </Modal>
+      )}
+      {renameModal && (
+        <Modal title="✏ Přejmenovat soubor" onClose={() => setRenameModal(null)}>
+          <input value={renameVal} onChange={e => setRenameVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && renameVal.trim() && doRenameFile(renameModal)} autoFocus placeholder={renameModal.name} style={{ ...modalInp, marginBottom: 14 }} />
+          <MBtns onOk={() => doRenameFile(renameModal)} onCancel={() => setRenameModal(null)} label="Přejmenovat" disabled={!renameVal.trim()} />
+        </Modal>
+      )}
+      {deleteModal && (
+        <Modal title="🗑 Smazat soubor" onClose={() => setDeleteModal(null)}>
+          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 6 }}>Smazat <strong style={{ color: D.txtPri }}>{deleteModal.name}</strong>?</p>
+          <p style={{ fontSize: 12, color: D.danger, marginBottom: 18 }}>Tato akce je nevratná.</p>
+          <MBtns onOk={() => doDeleteFile(deleteModal)} onCancel={() => setDeleteModal(null)} label="Smazat" danger />
+        </Modal>
+      )}
+      {/* Split file picker */}
+      {splitPickOpen && (
+        <Modal title="📄 Otevřít ve druhém editoru" onClose={() => setSplitPickOpen(false)}>
+          <div style={{ maxHeight: 360, overflowY: 'auto', marginBottom: 14 }}>
+            {activeProject?.files.filter(f => f.type !== 'img' && f.name !== '.gitkeep').map(f => (
+              <div key={f.path} onClick={() => openInSplit(f)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, cursor: 'pointer', marginBottom: 3, background: f.path === splitFile?.path ? accent+'15' : 'transparent' }} className="w-row">
+                <span style={{ fontSize: 14, color: getFileColor(f.type) }}>{getFileIcon(f.name, f.type)}</span>
+                <span style={{ fontSize: 13, color: f.path === splitFile?.path ? accent : D.txtPri }}>{f.folder ? f.folder + '/' : ''}{f.name}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setSplitPickOpen(false)} style={{ width: '100%', padding: '10px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit' }}>Zavřít</button>
         </Modal>
       )}
 
+      <input ref={imgInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => e.target.files && uploadImages(e.target.files)} />
+
       <style>{`
-        .html-sb:hover { background: rgba(255,255,255,.08) !important; color: #fff !important; }
-        .html-row { transition: background .12s; }
-        .html-row:hover { background: rgba(255,255,255,.05) !important; }
-        .html-row:hover .html-acts { opacity: 1 !important; }
-        .divider { width: 5px; background: transparent; cursor: col-resize; flex-shrink: 0; transition: background .15s; position: relative; z-index: 1; }
-        .divider:hover, .divider:active { background: ${accent}60 !important; }
+        .w-sb:hover { background: rgba(255,255,255,.08) !important; color: #fff !important; }
+        .w-row { transition: background .12s; }
+        .w-row:hover { background: rgba(255,255,255,.05) !important; }
+        .w-row:hover .w-acts { opacity: 1 !important; }
+        .drop-target { border: 1px dashed ${accent} !important; background: ${accent}10 !important; }
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
@@ -532,61 +758,44 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         </div>
         <div>
           <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>HTML Editor</h1>
-          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>HTML · CSS · JavaScript editor s real-time náhledem</p>
+          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>HTML · CSS · JavaScript · Ctrl+S uložit</p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
           {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
-          {/* Live preview toggle */}
-          <button onClick={() => { setLivePreview(p => !p) }}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: livePreview ? accent+'20' : 'rgba(255,255,255,.05)', color: livePreview ? accent : D.txtSec, border: `1px solid ${livePreview ? accent+'40' : D.border}`, borderRadius: 20, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-            {livePreview ? '⚡ Live' : '⏸ Pauza'}
-          </button>
         </div>
       </div>
 
-      {/* ── 2-col: sidebar + main ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 14, alignItems: 'start' }}>
+      {/* ── 2-col layout ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr', gap: 14, alignItems: 'start' }}>
 
         {/* ══ LEFT: Sidebar ══ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-          {/* File actions */}
+          {/* Project actions */}
           <div style={card({ padding: '13px' })}>
-            <SectionLabel>Projekty</SectionLabel>
+            <SectionLabel>Projekt</SectionLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <button className="html-sb" style={sideBtn} onClick={() => setNewProjModal(true)}>
-                <span>🌐</span> Nový projekt
-              </button>
-              <button className="html-sb" style={sideBtn} onClick={() => { setOpenProjModal(true); refreshProjects() }}>
-                <span>📂</span> Otevřít projekt
-              </button>
+              <button className="w-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>🌐</span> Nový projekt</button>
+              <button className="w-sb" style={sideBtn} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít projekt</button>
               <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
-              <button className="html-sb" style={{ ...sideBtn, opacity: !activeProject || saving ? .4 : 1 }}
-                onClick={saveProject} disabled={!activeProject || saving}>
-                <span>💾</span> Uložit projekt
-              </button>
-              <button className="html-sb" style={{ ...sideBtn, opacity: !activeProject ? .4 : 1 }}
-                onClick={downloadHtml} disabled={!activeProject}>
-                <span>⬇️</span> Stáhnout HTML
-              </button>
-              <button className="html-sb" style={{ ...sideBtn, opacity: !livePreview ? 1 : .4 }}
-                onClick={updatePreview}>
-                <span>▶</span> Obnovit náhled
+              <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject || saving ? .4 : 1 }} disabled={!activeProject || saving} onClick={saveAll}><span>💾</span> Uložit vše</button>
+              <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject ? .4 : 1 }} disabled={!activeProject} onClick={downloadProject}><span>⬇️</span> Stáhnout ZIP</button>
+              <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject ? .4 : 1 }} disabled={!activeProject} onClick={() => imgInputRef.current?.click()}>
+                <span>🖼</span> {uploadingImg ? 'Nahrávám…' : 'Nahrát obrázky'}
               </button>
             </div>
           </div>
 
-          {/* Recent */}
+          {/* Nedávné */}
           <div style={card({ padding: '13px' })}>
             <SectionLabel>Nedávné projekty</SectionLabel>
             {recent.length === 0
               ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné projekty</div>
               : recent.map(r => (
-                  <div key={r.key} className="html-row"
-                    onClick={() => { const p = projects.find(x => x.key === r.key); if (p) openProject(p) }}
+                  <div key={r.key} className="w-row" onClick={() => { const p = projects.find(x => x.key === r.key); if (p) openProject(p) }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 7px', borderRadius: D.radiusSm, cursor: 'pointer', background: r.key === activeProject?.key ? accent+'15' : 'transparent', marginBottom: 2 }}>
-                    <span style={{ fontSize: 14 }}>🌐</span>
+                    <span>🌐</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: r.key === activeProject?.key ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
                       <div style={{ fontSize: 10, color: D.txtSec }}>{fmtDate(r.openedAt)}</div>
@@ -596,153 +805,155 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             }
           </div>
 
-          {/* Projects tree */}
+          {/* File tree */}
           <div style={{ ...card({ padding: '13px' }), flex: 1 }}>
-            <SectionLabel>Moje projekty</SectionLabel>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                {activeProject ? activeProject.name : 'Soubory'}
+              </div>
+              {activeProject && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => setNewItemModal({ folder: '' })} title="Přidat soubor/složku"
+                    style={{ padding: '2px 7px', background: accent+'20', color: accent, border: 'none', borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>+</button>
+                  <button onClick={() => { setRenameProjModal(activeProject); setRenameProjVal(activeProject.name) }}
+                    style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přejmenovat projekt">✏</button>
+                  <button onClick={() => setDeleteProjModal(activeProject)}
+                    style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat projekt">🗑</button>
+                </div>
+              )}
+            </div>
+
             {loadingProj
               ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
                   <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
                 </div>
-              : projects.length === 0
-                ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné projekty</div>
-                : projects.map(proj => (
-                    <div key={proj.key} style={{ marginBottom: 4 }}>
-                      {/* Project header */}
-                      <div className="html-row"
-                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', borderRadius: 7, background: proj.key === activeProject?.key ? accent+'12' : 'transparent' }}>
-                        <div onClick={() => { toggleExpand(proj.key); openProject(proj) }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, cursor: 'pointer' }}>
-                          <span style={{ fontSize: 9, color: D.txtSec, display: 'inline-block', transform: expanded.has(proj.key) ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
-                          <span style={{ fontSize: 14 }}>🌐</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: proj.key === activeProject?.key ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</span>
-                        </div>
-                        <div className="html-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
-                          <button onClick={e => { e.stopPropagation(); setRenamingProj(proj); setRenameVal(proj.name) }}
-                            style={{ padding: '2px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11, borderRadius: 4 }} title="Přejmenovat">✏</button>
-                          <button onClick={e => { e.stopPropagation(); setDeleteProjModal(proj) }}
-                            style={{ padding: '2px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11, borderRadius: 4 }} title="Smazat">🗑</button>
-                        </div>
+              : !activeProject
+                ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádný projekt není otevřen</div>
+                : folders.map(folder => (
+                    <div key={folder} style={{ marginBottom: 4 }}>
+                      {/* Folder header */}
+                      <div className="w-row"
+                        onDragOver={e => { e.preventDefault(); setDragOverFolder(folder) }}
+                        onDragLeave={() => setDragOverFolder(null)}
+                        onDrop={e => { e.preventDefault(); if (draggingFile) dropFileOnFolder(draggingFile, folder) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 6px', borderRadius: 7, cursor: 'pointer', background: dragOverFolder === folder ? accent+'15' : 'transparent' }}
+                        onClick={() => setExpanded(prev => { const n = new Set(prev); n.has(folder) ? n.delete(folder) : n.add(folder); return n })}>
+                        <span style={{ fontSize: 9, color: D.txtSec, display: 'inline-block', transform: expanded.has(folder) ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: D.txtSec, flex: 1 }}>{folderLabel(folder)}</span>
+                        <button onClick={e => { e.stopPropagation(); setNewItemModal({ folder }) }}
+                          style={{ opacity: 0, padding: '1px 5px', background: 'none', border: 'none', cursor: 'pointer', color: accent, fontSize: 12, fontWeight: 700 }} className="w-acts">+</button>
                       </div>
-                      {/* File list */}
-                      {expanded.has(proj.key) && (
-                        <div style={{ marginLeft: 20, marginTop: 2 }}>
-                          {(['html', 'css', 'js'] as const).map(ext => {
-                            const exists = ext === 'html' ? proj.hasHtml : ext === 'css' ? proj.hasCss : proj.hasJs
-                            const fname  = ext === 'html' ? 'index.html' : ext === 'css' ? 'style.css' : 'script.js'
-                            const color  = PANEL_COLORS[ext]
-                            return (
-                              <div key={ext} onClick={() => openProject(proj)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 7px', borderRadius: 6, cursor: 'pointer', marginBottom: 1, opacity: exists ? 1 : .4 }}>
-                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                                <span style={{ fontSize: 11, color: D.txtSec, fontFamily: 'monospace' }}>{fname}</span>
-                              </div>
-                            )
-                          })}
+                      {/* Files */}
+                      {expanded.has(folder) && (filesByFolder().get(folder) ?? []).filter(f => f.name !== '.gitkeep').map(f => (
+                        <div key={f.path} className="w-row"
+                          draggable onDragStart={() => setDraggingFile(f)} onDragEnd={() => { setDraggingFile(null); setDragOverFolder(null) }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px 4px 16px', borderRadius: 7, cursor: 'pointer', marginBottom: 1, background: f.path === activeFile?.path ? accent+'18' : 'transparent', border: `1px solid ${f.path === activeFile?.path ? accent+'30' : 'transparent'}` }}
+                          onClick={() => clickFile(f)}>
+                          <span style={{ fontSize: 13, color: getFileColor(f.type), flexShrink: 0 }}>{getFileIcon(f.name, f.type)}</span>
+                          <span style={{ fontSize: 12, color: f.path === activeFile?.path ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
+                          {f.size ? <span style={{ fontSize: 9, color: D.txtSec }}>{fmtSize(f.size)}</span> : null}
+                          <div className="w-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
+                            {f.type !== 'img' && (
+                              <button onClick={e => { e.stopPropagation(); setSplitView(true); openInSplit(f) }}
+                                style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 10, borderRadius: 4 }} title="Otevřít v druhém editoru">⊞</button>
+                            )}
+                            <button onClick={e => { e.stopPropagation(); setRenameModal(f); setRenameVal(f.name.split('.')[0]) }}
+                              style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11, borderRadius: 4 }} title="Přejmenovat">✏</button>
+                            <button onClick={e => { e.stopPropagation(); setDeleteModal(f) }}
+                              style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11, borderRadius: 4 }} title="Smazat">🗑</button>
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
                   ))
             }
           </div>
         </div>
 
-        {/* ══ RIGHT: Editors + Preview ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        {/* ══ RIGHT: Editor + Preview ══ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
           {/* Toolbar */}
           <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
-            {/* Active project breadcrumb */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-              <span style={{ color: D.txtSec }}>🌐</span>
-              <span style={{ color: D.txtPri, fontWeight: 600 }}>{activeProject?.name ?? '—'}</span>
-              {isDirty && <span style={{ color: D.warning, fontSize: 10 }}>●</span>}
-            </div>
-            {/* Panel toggles */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {(['html', 'css', 'js'] as const).map(p => (
-                <button key={p} onClick={() => toggleCollapse(p)}
-                  style={{ padding: '3px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, background: collapsed[p] ? 'rgba(255,255,255,.06)' : PANEL_COLORS[p]+'25', color: collapsed[p] ? D.txtSec : PANEL_COLORS[p], transition: 'all .15s' }}>
-                  {collapsed[p] ? '+ ' : ''}{PANEL_LABELS[p]}
-                </button>
-              ))}
-            </div>
+            {/* Active file tab */}
+            {activeFile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px', background: D.bgMid, borderRadius: 7, fontSize: 12 }}>
+                <span style={{ color: getFileColor(activeFile.type) }}>{getFileIcon(activeFile.name, activeFile.type)}</span>
+                <span style={{ color: D.txtPri, fontWeight: 600 }}>{activeFile.folder ? activeFile.folder + '/' : ''}{activeFile.name}</span>
+                {isDirty && <span style={{ color: D.warning, fontSize: 10 }}>●</span>}
+              </div>
+            )}
             <div style={{ flex: 1 }} />
-            <button onClick={downloadHtml} disabled={!activeProject}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 12, cursor: activeProject ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeProject ? 1 : .4 }}>
-              ⬇️ Stáhnout
+            {/* Split view */}
+            <button onClick={() => { if (splitView) { setSplitView(false); setSplitFile(null) } else { setSplitView(true) } }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: splitView ? accent+'20' : 'rgba(255,255,255,.04)', color: splitView ? accent : D.txtSec, border: `1px solid ${splitView ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ⊞ {splitView ? 'Split ON' : 'Split OFF'}
             </button>
-            <button onClick={() => { setLivePreview(p => !p) }}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: livePreview ? accent+'18' : 'rgba(255,255,255,.04)', color: livePreview ? accent : D.txtSec, border: `1px solid ${livePreview ? accent+'30' : D.border}`, borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={() => setLivePreview(p => !p)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: livePreview ? D.success+'18' : 'rgba(255,255,255,.04)', color: livePreview ? D.success : D.txtSec, border: `1px solid ${livePreview ? D.success+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
               {livePreview ? '⚡ Live' : '⏸ Live'}
             </button>
-            <button onClick={saveProject} disabled={!activeProject || saving}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeProject || saving ? .4 : 1 }}>
+            {!livePreview && (
+              <button onClick={() => updatePreview()}
+                style={{ padding: '5px 12px', background: accent+'20', color: accent, border: `1px solid ${accent}40`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>▶ Obnovit</button>
+            )}
+            <button id="html-save-btn" onClick={saveActiveFile} disabled={!activeFile || saving}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeFile || saving ? .4 : 1 }}>
               {saving ? '…' : '💾 Uložit'}
             </button>
           </div>
 
-          {/* Editor row — fixed px height, not % (% heights cause Monaco resize loops) */}
-          <div className="editor-row" style={{ display: 'flex', height: '340px', flexShrink: 0, border: `1px solid ${D.border}`, borderTop: 'none', background: '#1E1E1E', overflow: 'hidden' }}>
-            {(['html', 'css', 'js'] as const).map((panel, idx) => {
-              const ref = panel === 'html' ? htmlContainerRef : panel === 'css' ? cssContainerRef : jsContainerRef
-              const color = PANEL_COLORS[panel]
-              const label = PANEL_LABELS[panel]
-              const col = collapsed[panel]
-              return (
-                <>
-                  <div key={panel} style={{ display: 'flex', flexDirection: 'column', width: col ? '32px' : `${panelWidths[idx]}%`, minWidth: col ? 32 : 60, flexShrink: 0, transition: col ? 'width .2s' : 'none', overflow: 'hidden', borderRight: idx < 2 ? `1px solid rgba(255,255,255,.08)` : 'none' }}>
-                    {/* Panel header */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#252526', borderBottom: `2px solid ${color}`, flexShrink: 0, cursor: col ? 'pointer' : 'default' }} onClick={() => col && toggleCollapse(panel)}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                      {!col && <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</span>}
-                      <div style={{ flex: 1 }} />
-                      <button onClick={e => { e.stopPropagation(); toggleCollapse(panel) }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 13, padding: '0 2px', lineHeight: 1 }} title={col ? 'Rozbalit' : 'Sbalit'}>
-                        {col ? '→' : '←'}
-                      </button>
-                    </div>
-                    {!col && <div ref={ref} style={{ height: 'calc(100% - 30px)', overflow: 'hidden' }} />}
+          {/* Editor area */}
+          <div style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden' }}>
+            {/* Primary editor */}
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, borderRight: splitView ? `1px solid rgba(255,255,255,.1)` : 'none' }}>
+              {activeFile?.type === 'img'
+                ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#252526', flexDirection: 'column', gap: 12 }}>
+                    {contents.get(activeFile.path)
+                      ? <img src={contents.get(activeFile.path)} alt={activeFile.name} style={{ maxWidth: '80%', maxHeight: 300, borderRadius: 8, border: `1px solid ${D.border}` }} />
+                      : <div style={{ fontSize: 13, color: D.txtSec }}>Načítám obrázek…</div>}
+                    <div style={{ fontSize: 12, color: D.txtSec }}>{activeFile.name}</div>
                   </div>
-                  {idx < 2 && !col && (
-                    <div className="divider" onMouseDown={e => onDividerMouseDown(e, idx as 0 | 1)}
-                      style={{ width: 5, background: 'transparent', cursor: 'col-resize', flexShrink: 0 }} />
-                  )}
-                </>
-              )
-            })}
+                : <div ref={editorContainerRef} style={{ flex: 1, overflow: 'hidden' }} />
+              }
+            </div>
+            {/* Split editor */}
+            {splitView && (
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                {/* Split header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#252526', borderBottom: '1px solid rgba(255,255,255,.08)', flexShrink: 0 }}>
+                  {splitFile
+                    ? <><span style={{ fontSize: 12, color: getFileColor(splitFile.type) }}>{getFileIcon(splitFile.name, splitFile.type)}</span>
+                       <span style={{ fontSize: 11, color: D.txtSec }}>{splitFile.name}</span></>
+                    : <span style={{ fontSize: 11, color: D.txtSec }}>Druhý editor</span>
+                  }
+                  <button onClick={() => setSplitPickOpen(true)}
+                    style={{ marginLeft: 'auto', padding: '2px 8px', background: accent+'20', color: accent, border: 'none', borderRadius: 5, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Otevřít soubor
+                  </button>
+                </div>
+                <div ref={splitContainerRef} style={{ flex: 1, overflow: 'hidden' }} />
+              </div>
+            )}
           </div>
 
-          {/* Preview — fixed height */}
+          {/* Preview */}
           <div style={{ height: '280px', display: 'flex', flexDirection: 'column', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: D.bgCard, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: D.bgCard, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 5 }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF5F56' }} />
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FFBD2E' }} />
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#27C93F' }} />
+                <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF5F56' }} />
+                <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FFBD2E' }} />
+                <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#27C93F' }} />
               </div>
               <span style={{ fontSize: 11, color: D.txtSec, flex: 1, textAlign: 'center' as const }}>
                 {activeProject ? `${activeProject.name} — náhled` : 'Náhled'}
               </span>
-              {!livePreview && (
-                <button onClick={updatePreview}
-                  style={{ padding: '3px 10px', background: accent+'20', color: accent, border: `1px solid ${accent}30`, borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  ▶ Obnovit
-                </button>
-              )}
+              <button onClick={() => updatePreview()} style={{ padding: '2px 8px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 5, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>↺ Obnovit</button>
             </div>
-            <iframe
-              ref={previewRef}
-              sandbox="allow-scripts"
-              style={{ flex: 1, border: 'none', background: '#fff' }}
-              title="HTML Preview"
-            />
+            <iframe ref={previewRef} sandbox="allow-scripts" style={{ flex: 1, border: 'none', background: '#fff' }} title="HTML Preview" />
           </div>
         </div>
       </div>
     </DarkLayout>
   )
-
-  function toggleExpand(key: string) {
-    setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
-  }
 }
