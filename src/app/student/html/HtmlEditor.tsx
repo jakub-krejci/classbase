@@ -178,7 +178,8 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           theme: 'vs-dark', fontSize: 13,
           fontFamily: "'JetBrains Mono','Fira Code',monospace",
           minimap: { enabled: false }, lineNumbers: 'on' as const, wordWrap: 'on' as const,
-          automaticLayout: true, scrollBeyondLastLine: false,
+          automaticLayout: false,   // ← MUST be false: true causes infinite resize loop
+          scrollBeyondLastLine: false,
           renderLineHighlight: 'line' as const, padding: { top: 12, bottom: 12 },
           bracketPairColorization: { enabled: true },
         }
@@ -200,6 +201,19 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     document.head.appendChild(s)
     return () => { htmlEditorRef.current?.dispose(); cssEditorRef.current?.dispose(); jsEditorRef.current?.dispose() }
   }, [])
+
+  // ── Re-layout Monaco editors when panels resize or collapse ──────────────
+  // Must NOT use automaticLayout:true (causes infinite loop with % widths).
+  // Instead we call layout() once after each deliberate state change.
+  useEffect(() => {
+    if (!monacoReady) return
+    const raf = requestAnimationFrame(() => {
+      htmlEditorRef.current?.layout()
+      cssEditorRef.current?.layout()
+      jsEditorRef.current?.layout()
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [panelWidths, collapsed, monacoReady])
 
   // ── Init: load projects ───────────────────────────────────────────────────
   useEffect(() => {
@@ -532,10 +546,10 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       </div>
 
       {/* ── 2-col: sidebar + main ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 14, height: 'calc(100vh - 200px)', minHeight: 600, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 14, alignItems: 'start' }}>
 
         {/* ══ LEFT: Sidebar ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
           {/* File actions */}
           <div style={card({ padding: '13px' })}>
@@ -633,7 +647,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         </div>
 
         {/* ══ RIGHT: Editors + Preview ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
 
           {/* Toolbar */}
           <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
@@ -667,8 +681,8 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             </button>
           </div>
 
-          {/* Editor row */}
-          <div className="editor-row" style={{ display: 'flex', height: '55%', minHeight: 280, border: `1px solid ${D.border}`, borderTop: 'none', background: '#1E1E1E' }}>
+          {/* Editor row — fixed px height, not % (% heights cause Monaco resize loops) */}
+          <div className="editor-row" style={{ display: 'flex', height: '340px', flexShrink: 0, border: `1px solid ${D.border}`, borderTop: 'none', background: '#1E1E1E', overflow: 'hidden' }}>
             {(['html', 'css', 'js'] as const).map((panel, idx) => {
               const ref = panel === 'html' ? htmlContainerRef : panel === 'css' ? cssContainerRef : jsContainerRef
               const color = PANEL_COLORS[panel]
@@ -687,7 +701,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                         {col ? '→' : '←'}
                       </button>
                     </div>
-                    {!col && <div ref={ref} style={{ flex: 1, overflow: 'hidden' }} />}
+                    {!col && <div ref={ref} style={{ height: 'calc(100% - 30px)', overflow: 'hidden' }} />}
                   </div>
                   {idx < 2 && !col && (
                     <div className="divider" onMouseDown={e => onDividerMouseDown(e, idx as 0 | 1)}
@@ -698,8 +712,8 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             })}
           </div>
 
-          {/* Preview */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden', minHeight: 160 }}>
+          {/* Preview — fixed height */}
+          <div style={{ height: '280px', display: 'flex', flexDirection: 'column', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: D.bgCard, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 5 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF5F56' }} />
