@@ -13,8 +13,18 @@ const LS_RECENT    = 'cb_py_recent'
 const LS_LAST      = 'cb_py_last'
 
 // zaci/{uid}/{project}/{filename}
+// Supabase storage keys must be ASCII — sanitize Czech characters
+function sanitizeKey(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // strip diacritics
+    .replace(/[^a-zA-Z0-9._\-]/g, '_') // replace non-ASCII/special with _
+    .replace(/_+/g, '_')               // collapse multiple underscores
+    .replace(/^_|_$/g, '')             // trim leading/trailing underscores
+    || 'soubor'
+}
 function fp(uid: string, proj: string, name: string) {
-  return `zaci/${uid}/${proj}/${name}`
+  return `zaci/${uid}/${sanitizeKey(proj)}/${sanitizeKey(name)}`
 }
 
 interface PyFile     { path: string; name: string; project: string; size?: number; updatedAt: string }
@@ -59,7 +69,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
   const [deleteProjModal, setDeleteProjModal] = useState<string | null>(null)
   const [newFileModal, setNewFileModal]     = useState(false)
   const [newFileName, setNewFileName]       = useState('')
-  const [newFileProj, setNewFileProj]       = useState(DEFAULT_PROJ)
+  const [newFileProj, setNewFileProj]       = useState('')  // set from projects on load
   const [saveAsModal, setSaveAsModal]       = useState(false)
   const [saveAsName, setSaveAsName]         = useState('')
   const [saveAsProj, setSaveAsProj]         = useState('')
@@ -133,6 +143,10 @@ export default function PythonEditor({ profile }: { profile: any }) {
     }
     setProjects(result)
     setLoadingProj(false)
+    // Initialize newFileProj to first real project name if not set yet
+    if (result.length > 0) {
+      setNewFileProj(prev => prev || result[0].name)
+    }
     return result
   }, [uid])
 
@@ -350,11 +364,27 @@ export default function PythonEditor({ profile }: { profile: any }) {
   async function runCode() {
     setRunning(true); clearOutput(); setHasRun(true)
     const code = editorRef.current?.getValue() ?? ''
+
+    // Load all other .py files in the same project into Pyodide's FS
+    // so `import other_module` works between files in the same project
+    const extraFiles: Record<string, string> = {}
+    if (activeFile) {
+      const proj = projects.find(p => p.name === activeFile.project)
+      if (proj) {
+        const siblings = proj.files.filter(f => f.path !== activeFile.path)
+        await Promise.all(siblings.map(async sibling => {
+          const content = await fetchContent(sibling.path)
+          if (content) extraFiles[sibling.name] = content
+        }))
+      }
+    }
+
     const lines: string[] = []
     try {
       const result = await runPython(code,
         (l: string) => { lines.push(l); setOutputLines([...lines]) },
-        (s: string) => setPyStatus(s)
+        (s: string) => setPyStatus(s),
+        extraFiles
       )
       setOutputLines(result.output ? result.output.split('\n') : lines)
       setRunError(result.error); setFigures(result.images ?? [])
@@ -426,7 +456,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 9999, width: '100%', maxWidth: 400, padding: '0 16px' }}>
             <div style={{ background: D.bgCard, borderRadius: D.radius, padding: '28px 24px', border: `1px solid ${D.border}`, boxShadow: '0 28px 70px rgba(0,0,0,.75)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: accent + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🐍</div>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#3B82F615', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><img src="/icons/python.png" alt="Python" style={{ width: 22, height: 22, objectFit: 'contain' }} /></div>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: D.txtPri }}>Vstup programu</div>
                   <div style={{ fontSize: 11, color: D.txtSec }}>Python čeká na váš vstup</div>
@@ -496,7 +526,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
                           <div key={f.path} onClick={() => { openFile(f); setOpenProjModal(false) }}
                             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 8px 20px', borderRadius: 8, cursor: 'pointer', marginBottom: 2, background: f.path === activeFile?.path ? accent+'15' : 'transparent' }}
                             className="py-row">
-                            <span>🐍</span>
+                            <img src="/icons/python.png" alt="" style={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }} />
                             <span style={{ fontSize: 13, color: f.path === activeFile?.path ? accent : D.txtPri, fontWeight: f.path === activeFile?.path ? 600 : 400, flex: 1 }}>{f.name}</span>
                             <span style={{ fontSize: 10, color: D.txtSec }}>{fmtDate(f.updatedAt)}</span>
                           </div>
@@ -584,7 +614,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
           {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
-          <span style={{ fontSize: 11, padding: '3px 9px', background: '#3B82F612', color: '#60A5FA', borderRadius: 20, fontWeight: 600 }}>🐍 Python 3.11</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '3px 9px', background: '#3B82F612', color: '#60A5FA', borderRadius: 20, fontWeight: 600 }}><img src="/icons/python.png" alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} /> Python 3.11</span>
         </div>
       </div>
 
@@ -627,7 +657,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
                       if (f) await openFile(f)
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 7px', borderRadius: D.radiusSm, cursor: 'pointer', background: r.path === activeFile?.path ? accent+'15' : 'transparent', marginBottom: 2 }}>
-                    <span style={{ fontSize: 13 }}>🐍</span>
+                    <img src="/icons/python.png" alt="" style={{ width: 16, height: 16, objectFit: 'contain', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: r.path === activeFile?.path ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
                       <div style={{ fontSize: 10, color: D.txtSec }}>{r.project} · {fmtDate(r.openedAt)}</div>
@@ -679,7 +709,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
                             </div>
                           ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 7px', cursor: 'pointer' }} onClick={() => openFile(f)}>
-                              <span style={{ fontSize: 12 }}>🐍</span>
+                              <img src="/icons/python.png" alt="" style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />
                               <span style={{ flex: 1, fontSize: 11, color: f.path === activeFile?.path ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
                               {f.size ? <span style={{ fontSize: 9, color: D.txtSec }}>{fmtSize(f.size)}</span> : null}
                               <div className="py-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
@@ -780,7 +810,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, lineHeight: 1.7 }}>
               {!hasRun && (
                 <div style={{ color: D.txtSec, display: 'flex', alignItems: 'center', gap: 14, padding: '6px 0' }}>
-                  <div style={{ fontSize: 26, opacity: .3 }}>🐍</div>
+                  <img src="/icons/python.png" alt="" style={{ width: 26, height: 26, objectFit: 'contain', opacity: .35, flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 12 }}>Stiskni ▶ Spustit nebo Ctrl+Enter</div>
                     <div style={{ fontSize: 11, opacity: .55 }}>Výstup print(), grafy matplotlib a chyby se zobrazí zde</div>

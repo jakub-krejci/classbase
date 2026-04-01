@@ -40,7 +40,10 @@ export type RunResult = {
 export async function runPython(
   code: string,
   onOutput: (line: string) => void,
-  onStatus?: (msg: string) => void
+  onStatus?: (msg: string) => void,
+  // Optional: extra .py files to write into Pyodide's virtual FS for import support
+  // Key = module filename (e.g. 'utils.py'), value = source code
+  extraFiles?: Record<string, string>
 ): Promise<RunResult> {
   const lines: string[] = []
   const images: string[] = []
@@ -87,6 +90,24 @@ except ImportError:
     pass
 `
     try { await py.runPythonAsync(matplotlibShim) } catch {}
+
+    // Write extra project files into Pyodide's virtual filesystem so cross-file
+    // imports like `from prvni import funkce` work within a project.
+    if (extraFiles && Object.keys(extraFiles).length > 0) {
+      for (const [filename, src] of Object.entries(extraFiles)) {
+        try {
+          py.FS.writeFile('/' + filename, src)
+        } catch {}
+      }
+      // Ensure the root dir is in sys.path (it usually is, but be explicit)
+      try {
+        await py.runPythonAsync(`
+import sys
+if '/' not in sys.path:
+    sys.path.insert(0, '/')
+`)
+      } catch {}
+    }
 
     // Override input() as async — works because runPythonAsync supports top-level await.
     // We also transform user code to add 'await' before every input() call so it works
