@@ -353,7 +353,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
                     { icon: '/icons/python.png',   label: 'Spustit Python editor',   href: '/student/python' },
                     { icon: '/icons/jupyter.png',  label: 'Otevřít Jupyter Notebook', href: '/student/jupyter' },
                     { icon: '/icons/html.png',     label: 'Spustit HTML editor',      href: '/student/html' },
-                    { icon: '/icons/database.png', label: 'Spustit SQL editor',       href: '#' },
+                    { icon: '/icons/database.png', label: 'Spustit SQL editor',       href: '/student/sql' },
                   ].map(({ icon, label, href }) => (
                     <a key={label} href={href} className="bento-hover"
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`, borderRadius: D.radiusSm, color: D.txtSec, fontSize: 13, fontWeight: 500, textDecoration: 'none', width: '100%' }}>
