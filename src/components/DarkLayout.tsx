@@ -74,6 +74,7 @@ export function DarkLayout({ profile, activeRoute, children, wide = false }: {
     { icon: '🌐', label: 'HTML',    href: '/student/html' },
     { icon: '/icons/jupyter.png', label: 'Jupyter', href: '/student/jupyter' },
     { icon: '/icons/database.png', label: 'SQL', href: '/student/sql' },
+    { icon: '📁', label: 'Moje soubory', href: '/student/files' },
   ]
 
   const initials = (profile?.full_name || '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()

@@ -369,7 +369,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
                 <SectionLabel>Další nástroje</SectionLabel>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   {[
-                    { icon: '📁', label: 'Moje soubory', href: '#' },
+                    { icon: '📁', label: 'Moje soubory', href: '/student/files' },
                     { icon: '🔖', label: 'Záložky',       href: '/student/bookmarks' },
                     { icon: '💬', label: 'Chat',           href: '#' },
                   ].map(({ icon, label, href }) => (
