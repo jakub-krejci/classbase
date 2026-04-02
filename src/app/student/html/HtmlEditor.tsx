@@ -206,8 +206,21 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   async function fetchAsDataUrl(path: string): Promise<string> {
     const { data } = await supabase.storage.from(BUCKET).download(path)
     if (!data) return ''
+    // Supabase returns blobs with content-type 'application/octet-stream' for images
+    // uploaded that way. Browsers won't render <img src="data:application/octet-stream...">.
+    // We must re-type the blob using the file extension so the data URL has the right MIME.
+    const ext = path.split('.').pop()?.toLowerCase() ?? ''
+    const mimeMap: Record<string, string> = {
+      png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+      gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+      ico: 'image/x-icon', bmp: 'image/bmp',
+    }
+    const mime = mimeMap[ext] ?? data.type
+    const correctBlob = mime !== data.type ? new Blob([data], { type: mime }) : data
     return new Promise(resolve => {
-      const r = new FileReader(); r.onload = () => resolve(r.result as string); r.readAsDataURL(data)
+      const r = new FileReader()
+      r.onload = () => resolve(r.result as string)
+      r.readAsDataURL(correctBlob)
     })
   }
 
