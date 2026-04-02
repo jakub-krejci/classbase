@@ -2,21 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-
-// ── Design tokens (z verze 1) ─────────────────────────────────────────────────
-const D = {
-    bgMain: "#090B10",
-    bgCard: "#14171F",
-    bgMid: "#1E2230",
-    bgHover: "#1A1E28",
-    txtPri: "#FFFFFF",
-    txtSec: "#A1A7B3",
-    border: "rgba(255,255,255,0.06)",
-    success: "#22C55E",
-    warning: "#FBBF24",
-    danger: "#EF4444",
-    radius: "16px",
-};
+import { DarkLayout, D } from "@/components/DarkLayout"; // Import layoutu a tokenů z verze 2
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function ytEmbedUrl(url: string): string | null {
@@ -158,7 +144,7 @@ export default function VideoLessonViewer({
     const [status, setStatus] = useState(completionStatus);
     const [completing, setCompleting] = useState(false);
 
-    // Q&A state (z verze 2)
+    // Q&A state
     const [qaRows, setQaRows] = useState<QARow[]>([]);
     const [qaLoading, setQaLoading] = useState(true);
     const [qaText, setQaText] = useState("");
@@ -180,7 +166,7 @@ export default function VideoLessonViewer({
         });
     }, [activeLineIdx]);
 
-    // ── Logic: Load Notes ──
+    // Logic: Load Notes
     useEffect(() => {
         supabase
             .from("lesson_progress")
@@ -193,7 +179,7 @@ export default function VideoLessonViewer({
             });
     }, [lesson.id, studentId, supabase]);
 
-    // ── Logic: Save Notes ──
+    // Logic: Save Notes
     const saveNotes = useCallback(async () => {
         setNotesSaving(true);
         await supabase.from("lesson_progress").upsert(
@@ -210,7 +196,7 @@ export default function VideoLessonViewer({
         setTimeout(() => setNotesSaved(false), 2000);
     }, [notes, status, studentId, lesson.id, supabase]);
 
-    // ── Logic: Q&A (lesson_qa table) ──
+    // Logic: Q&A
     useEffect(() => {
         loadQA();
     }, [lesson.id]);
@@ -254,7 +240,7 @@ export default function VideoLessonViewer({
         setQaRows((prev) => prev.filter((r) => r.id !== id));
     }
 
-    // ── Logic: Completion ──
+    // Logic: Completion
     async function toggleComplete() {
         setCompleting(true);
         const newStatus = status === "completed" ? "bookmark" : "completed";
@@ -278,43 +264,33 @@ export default function VideoLessonViewer({
     }
 
     return (
-        <>
+        <DarkLayout profile={profile}>
             <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { background: ${D.bgMain}; color: ${D.txtPri}; font-family: 'DM Sans', system-ui, sans-serif; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
         .vl-lesson:hover { background: rgba(255,255,255,.05) !important; }
-        .vl-tab { transition: all .15s; cursor: pointer; border: none; background: none; fontFamily: inherit; }
+        .vl-tab { transition: all .15s; cursor: pointer; border: none; background: none; font-family: inherit; }
         .vl-tab:hover { color: #fff !important; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
       `}</style>
 
-            {/* Grid layout z verze 1 */}
+            {/* Grid layout: Hlavní obsah vlevo, panel lekcí vpravo */}
             <div
                 style={{
-                    minHeight: "100vh",
-                    background: D.bgMain,
                     display: "grid",
-                    gridTemplateColumns: "1fr 300px",
-                    gap: 0,
+                    gridTemplateColumns: "1fr 320px",
+                    minHeight: "calc(100vh - 0px)",
+                    background: D.bgMain,
                 }}
             >
-                {/* ══ MAIN ══════════════════════════════════════════════════════════ */}
-                <div
-                    style={{
-                        padding: "28px 24px 40px",
-                        minWidth: 0,
-                        overflowX: "hidden",
-                    }}
-                >
+                {/* ══ STŘEDOVÝ PANEL (Video + Obsah) ══════════════════════════════ */}
+                <div style={{ padding: "32px 40px", overflowY: "auto" }}>
                     {/* Breadcrumb */}
                     <div
                         style={{
                             display: "flex",
                             alignItems: "center",
                             gap: 8,
-                            marginBottom: 18,
+                            marginBottom: 20,
                             fontSize: 12,
                             color: D.txtSec,
                         }}
@@ -338,53 +314,38 @@ export default function VideoLessonViewer({
                         </span>
                     </div>
 
-                    {/* Title + meta */}
                     <h1
                         style={{
-                            fontSize: 22,
+                            fontSize: 26,
                             fontWeight: 800,
                             color: D.txtPri,
-                            marginBottom: 6,
+                            marginBottom: 8,
                         }}
                     >
                         {lesson.title}
                     </h1>
-                    {(lesson.video_author || lesson.description) && (
-                        <div style={{ marginBottom: 18 }}>
-                            {lesson.video_author && (
-                                <div
-                                    style={{
-                                        fontSize: 13,
-                                        color: D.txtSec,
-                                        marginBottom: 4,
-                                    }}
-                                >
-                                    👤 {lesson.video_author}
-                                </div>
-                            )}
-                            {lesson.description && (
-                                <div
-                                    style={{
-                                        fontSize: 13,
-                                        color: D.txtSec,
-                                        lineHeight: 1.6,
-                                    }}
-                                >
-                                    {lesson.description}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    <p
+                        style={{
+                            fontSize: 14,
+                            color: D.txtSec,
+                            marginBottom: 24,
+                            lineHeight: 1.6,
+                            maxWidth: 800,
+                        }}
+                    >
+                        {lesson.description}
+                    </p>
 
                     {/* Video Player Area */}
                     <div
                         style={{
                             position: "relative",
                             background: "#000",
-                            borderRadius: 14,
+                            borderRadius: 16,
                             overflow: "hidden",
-                            marginBottom: 20,
+                            marginBottom: 24,
                             aspectRatio: "16/9",
+                            boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
                         }}
                     >
                         {ytUrl && (
@@ -394,7 +355,6 @@ export default function VideoLessonViewer({
                                     width: "100%",
                                     height: "100%",
                                     border: "none",
-                                    display: "block",
                                 }}
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                                 allowFullScreen
@@ -407,7 +367,6 @@ export default function VideoLessonViewer({
                                     width: "100%",
                                     height: "100%",
                                     border: "none",
-                                    display: "block",
                                 }}
                                 allowFullScreen
                             />
@@ -417,12 +376,7 @@ export default function VideoLessonViewer({
                                 ref={videoRef}
                                 src={lesson.video_url}
                                 controls
-                                style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "contain",
-                                    display: "block",
-                                }}
+                                style={{ width: "100%", height: "100%" }}
                                 onTimeUpdate={() => {
                                     if (videoRef.current)
                                         setCurrentTime(
@@ -431,31 +385,15 @@ export default function VideoLessonViewer({
                                 }}
                             />
                         )}
-                        {!ytUrl &&
-                            !isSP(lesson.video_url ?? "") &&
-                            !isDirect(lesson.video_url ?? "") && (
-                                <div
-                                    style={{
-                                        width: "100%",
-                                        height: "100%",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        color: D.txtSec,
-                                    }}
-                                >
-                                    Nepodporovaný formát videa
-                                </div>
-                            )}
                     </div>
 
-                    {/* Tabs header */}
+                    {/* Tabs */}
                     <div
                         style={{
                             display: "flex",
                             gap: 0,
                             borderBottom: `1px solid ${D.border}`,
-                            marginBottom: 16,
+                            marginBottom: 20,
                         }}
                     >
                         {[
@@ -471,8 +409,8 @@ export default function VideoLessonViewer({
                                 className="vl-tab"
                                 onClick={() => setActiveTab(tab.id)}
                                 style={{
-                                    padding: "10px 18px",
-                                    fontSize: 13,
+                                    padding: "12px 20px",
+                                    fontSize: 14,
                                     fontWeight:
                                         activeTab === tab.id ? 700 : 400,
                                     color:
@@ -487,405 +425,277 @@ export default function VideoLessonViewer({
                         ))}
                     </div>
 
-                    {/* Tab Content: Transcript */}
-                    {activeTab === "transcript" && (
-                        <div
-                            style={{
-                                maxHeight: 320,
-                                overflowY: "auto",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 2,
-                            }}
-                        >
-                            {transcriptLines.length === 0 ? (
-                                <p
-                                    style={{
-                                        color: D.txtSec,
-                                        fontSize: 13,
-                                        textAlign: "center",
-                                        padding: "20px 0",
-                                    }}
-                                >
-                                    Žádný transcript není k dispozici.
-                                </p>
-                            ) : (
-                                transcriptLines.map((line, i) => (
-                                    <div
-                                        key={i}
-                                        ref={
-                                            i === activeLineIdx
-                                                ? activeLineRef
-                                                : undefined
-                                        }
-                                        style={{
-                                            display: "flex",
-                                            gap: 12,
-                                            padding: "6px 10px",
-                                            borderRadius: 8,
-                                            background:
-                                                i === activeLineIdx
-                                                    ? accent + "20"
-                                                    : "transparent",
-                                            transition: "background .2s",
-                                        }}
-                                    >
-                                        {line.time !== null && (
-                                            <span
-                                                style={{
-                                                    fontSize: 11,
-                                                    color:
-                                                        i === activeLineIdx
-                                                            ? accent
-                                                            : D.txtSec,
-                                                    fontFamily: "monospace",
-                                                    flexShrink: 0,
-                                                    paddingTop: 2,
-                                                }}
-                                            >
-                                                {fmt(line.time)}
-                                            </span>
-                                        )}
-                                        <span
-                                            style={{
-                                                fontSize: 13,
-                                                color:
-                                                    i === activeLineIdx
-                                                        ? D.txtPri
-                                                        : D.txtSec,
-                                                lineHeight: 1.6,
-                                            }}
-                                        >
-                                            {line.text}
-                                        </span>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    )}
-
-                    {/* Tab Content: Notes */}
-                    {activeTab === "notes" && (
-                        <div>
-                            <textarea
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                                rows={10}
-                                placeholder="Pište si poznámky k lekci…"
-                                style={{
-                                    width: "100%",
-                                    padding: "13px 15px",
-                                    background: D.bgCard,
-                                    border: `1px solid ${D.border}`,
-                                    borderRadius: 12,
-                                    fontSize: 13,
-                                    color: D.txtPri,
-                                    fontFamily: "inherit",
-                                    outline: "none",
-                                    resize: "vertical",
-                                    lineHeight: 1.7,
-                                }}
-                            />
+                    {/* Tab Content */}
+                    <div style={{ minHeight: 300 }}>
+                        {activeTab === "transcript" && (
                             <div
                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 10,
-                                    marginTop: 10,
+                                    maxHeight: 400,
+                                    overflowY: "auto",
+                                    paddingRight: 10,
                                 }}
                             >
+                                {transcriptLines.length === 0 ? (
+                                    <p style={{ color: D.txtSec }}>
+                                        Transcript není k dispozici.
+                                    </p>
+                                ) : (
+                                    transcriptLines.map((line, i) => (
+                                        <div
+                                            key={i}
+                                            ref={
+                                                i === activeLineIdx
+                                                    ? activeLineRef
+                                                    : undefined
+                                            }
+                                            style={{
+                                                display: "flex",
+                                                gap: 14,
+                                                padding: "8px 12px",
+                                                borderRadius: 10,
+                                                background:
+                                                    i === activeLineIdx
+                                                        ? accent + "15"
+                                                        : "transparent",
+                                                marginBottom: 2,
+                                            }}
+                                        >
+                                            {line.time !== null && (
+                                                <span
+                                                    style={{
+                                                        fontSize: 12,
+                                                        color:
+                                                            i === activeLineIdx
+                                                                ? accent
+                                                                : D.txtSec,
+                                                        fontFamily: "monospace",
+                                                        width: 45,
+                                                    }}
+                                                >
+                                                    {fmt(line.time)}
+                                                </span>
+                                            )}
+                                            <span
+                                                style={{
+                                                    fontSize: 14,
+                                                    color:
+                                                        i === activeLineIdx
+                                                            ? D.txtPri
+                                                            : D.txtSec,
+                                                    lineHeight: 1.6,
+                                                }}
+                                            >
+                                                {line.text}
+                                            </span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === "notes" && (
+                            <div>
+                                <textarea
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    rows={8}
+                                    placeholder="Vaše poznámky..."
+                                    style={{
+                                        width: "100%",
+                                        padding: "16px",
+                                        background: D.bgCard,
+                                        border: `1px solid ${D.border}`,
+                                        borderRadius: 12,
+                                        color: "#fff",
+                                        outline: "none",
+                                        resize: "vertical",
+                                    }}
+                                />
                                 <button
                                     onClick={saveNotes}
                                     disabled={notesSaving}
                                     style={{
-                                        padding: "8px 18px",
+                                        marginTop: 12,
+                                        padding: "10px 20px",
                                         background: accent,
                                         color: "#fff",
                                         border: "none",
-                                        borderRadius: 8,
-                                        fontSize: 13,
+                                        borderRadius: 10,
                                         fontWeight: 600,
                                         cursor: "pointer",
-                                        fontFamily: "inherit",
                                     }}
                                 >
                                     {notesSaving
-                                        ? "Ukládám…"
-                                        : "💾 Uložit poznámky"}
+                                        ? "Ukládám..."
+                                        : "Uložit poznámky"}
                                 </button>
-                                {notesSaved && (
-                                    <span
-                                        style={{
-                                            fontSize: 12,
-                                            color: D.success,
-                                        }}
-                                    >
-                                        ✓ Uloženo
-                                    </span>
-                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* Tab Content: Q&A */}
-                    {activeTab === "qa" && (
-                        <div>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    gap: 10,
-                                    marginBottom: 20,
-                                    alignItems: "flex-start",
-                                }}
-                            >
-                                <Avatar
-                                    src={profile?.avatar_url}
-                                    name={profile?.full_name ?? "Já"}
-                                    size={34}
-                                    accent={accent}
-                                />
+                        {activeTab === "qa" && (
+                            <div>
                                 <div
-                                    style={{ flex: 1, display: "flex", gap: 8 }}
+                                    style={{
+                                        display: "flex",
+                                        gap: 12,
+                                        marginBottom: 24,
+                                    }}
                                 >
+                                    <Avatar
+                                        src={profile?.avatar_url}
+                                        name={profile?.full_name}
+                                        size={36}
+                                        accent={accent}
+                                    />
                                     <input
                                         value={qaText}
                                         onChange={(e) =>
                                             setQaText(e.target.value)
                                         }
-                                        onKeyDown={(e) => {
-                                            if (
-                                                e.key === "Enter" &&
-                                                !e.shiftKey
-                                            ) {
-                                                e.preventDefault();
-                                                postQuestion();
-                                            }
-                                        }}
-                                        placeholder="Napište otázku k lekci…"
+                                        onKeyDown={(e) =>
+                                            e.key === "Enter" && postQuestion()
+                                        }
+                                        placeholder="Zeptejte se na něco..."
                                         style={{
                                             flex: 1,
-                                            padding: "10px 13px",
+                                            padding: "12px 16px",
                                             background: D.bgCard,
                                             border: `1px solid ${D.border}`,
-                                            borderRadius: 10,
-                                            fontSize: 13,
-                                            color: D.txtPri,
-                                            fontFamily: "inherit",
+                                            borderRadius: 12,
+                                            color: "#fff",
                                             outline: "none",
                                         }}
                                     />
                                     <button
                                         onClick={postQuestion}
-                                        disabled={qaPosting || !qaText.trim()}
+                                        disabled={qaPosting}
                                         style={{
-                                            padding: "10px 16px",
+                                            padding: "0 20px",
                                             background: accent,
                                             color: "#fff",
                                             border: "none",
-                                            borderRadius: 10,
-                                            fontSize: 13,
+                                            borderRadius: 12,
                                             fontWeight: 600,
                                             cursor: "pointer",
-                                            fontFamily: "inherit",
-                                            opacity:
-                                                qaPosting || !qaText.trim()
-                                                    ? 0.5
-                                                    : 1,
                                         }}
                                     >
-                                        Odeslat
+                                        Poslat
                                     </button>
                                 </div>
-                            </div>
-
-                            {qaLoading ? (
-                                <p
-                                    style={{
-                                        color: D.txtSec,
-                                        fontSize: 13,
-                                        textAlign: "center",
-                                    }}
-                                >
-                                    Načítám…
-                                </p>
-                            ) : qaRows.length === 0 ? (
-                                <p
-                                    style={{
-                                        color: D.txtSec,
-                                        fontSize: 13,
-                                        textAlign: "center",
-                                    }}
-                                >
-                                    Zatím žádné otázky.
-                                </p>
-                            ) : (
-                                qaRows.map((row) => {
-                                    const prof = Array.isArray(row.profiles)
-                                        ? row.profiles[0]
-                                        : row.profiles;
-                                    const isOwn = row.student_id === studentId;
-                                    return (
-                                        <div
-                                            key={row.id}
-                                            style={{
-                                                display: "flex",
-                                                gap: 10,
-                                                padding: "14px 16px",
-                                                background: D.bgCard,
-                                                border: `1px solid ${D.border}`,
-                                                borderRadius: 12,
-                                                marginBottom: 10,
-                                            }}
-                                        >
-                                            <Avatar
-                                                src={prof?.avatar_url}
-                                                name={
-                                                    prof?.full_name ?? "Student"
-                                                }
-                                                size={32}
-                                                accent={
-                                                    prof?.accent_color ??
-                                                    "#7C3AED"
-                                                }
-                                            />
+                                {qaRows.map((row) => (
+                                    <div
+                                        key={row.id}
+                                        style={{
+                                            display: "flex",
+                                            gap: 12,
+                                            padding: "16px",
+                                            background: D.bgCard,
+                                            borderRadius: 12,
+                                            marginBottom: 12,
+                                            border: `1px solid ${D.border}`,
+                                        }}
+                                    >
+                                        <Avatar
+                                            src={row.profiles?.avatar_url}
+                                            name={row.profiles?.full_name}
+                                            size={32}
+                                            accent={row.profiles?.accent_color}
+                                        />
+                                        <div style={{ flex: 1 }}>
                                             <div
-                                                style={{ flex: 1, minWidth: 0 }}
+                                                style={{
+                                                    display: "flex",
+                                                    justifyContent:
+                                                        "space-between",
+                                                    marginBottom: 4,
+                                                }}
                                             >
-                                                <div
+                                                <span
                                                     style={{
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 8,
-                                                        marginBottom: 4,
+                                                        fontSize: 13,
+                                                        fontWeight: 700,
                                                     }}
                                                 >
-                                                    <span
+                                                    {row.profiles?.full_name}
+                                                </span>
+                                                {row.student_id ===
+                                                    studentId && (
+                                                    <button
+                                                        onClick={() =>
+                                                            deleteQuestion(
+                                                                row.id,
+                                                            )
+                                                        }
                                                         style={{
-                                                            fontSize: 13,
-                                                            fontWeight: 600,
-                                                            color: D.txtPri,
+                                                            background: "none",
+                                                            border: "none",
+                                                            color: D.danger,
+                                                            fontSize: 11,
+                                                            cursor: "pointer",
                                                         }}
                                                     >
-                                                        {prof?.full_name ??
-                                                            "Student"}
-                                                    </span>
-                                                    <span
-                                                        style={{
-                                                            fontSize: 10,
-                                                            color: D.txtSec,
-                                                        }}
-                                                    >
-                                                        {row.created_at
-                                                            ? new Date(
-                                                                  row.created_at,
-                                                              ).toLocaleDateString(
-                                                                  "cs-CZ",
-                                                                  {
-                                                                      day: "numeric",
-                                                                      month: "short",
-                                                                  },
-                                                              )
-                                                            : ""}
-                                                    </span>
-                                                    {isOwn && (
-                                                        <button
-                                                            onClick={() =>
-                                                                deleteQuestion(
-                                                                    row.id,
-                                                                )
-                                                            }
-                                                            style={{
-                                                                marginLeft:
-                                                                    "auto",
-                                                                padding:
-                                                                    "1px 8px",
-                                                                background:
-                                                                    "rgba(239,68,68,.12)",
-                                                                color: D.danger,
-                                                                border: "none",
-                                                                borderRadius: 5,
-                                                                fontSize: 10,
-                                                                cursor: "pointer",
-                                                            }}
-                                                        >
-                                                            Smazat
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <p
-                                                    style={{
-                                                        fontSize: 14,
-                                                        color: D.txtPri,
-                                                        lineHeight: 1.6,
-                                                        margin: 0,
-                                                    }}
-                                                >
-                                                    {row.question}
-                                                </p>
+                                                        Smazat
+                                                    </button>
+                                                )}
                                             </div>
+                                            <p
+                                                style={{
+                                                    fontSize: 14,
+                                                    color: D.txtPri,
+                                                    margin: 0,
+                                                }}
+                                            >
+                                                {row.question}
+                                            </p>
                                         </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* ══ RIGHT PANEL (z verze 1 - sticky a full height) ════════════════ */}
+                {/* ══ PRAVÝ PANEL (Seznam lekcí) ═══════════════════════════════════ */}
                 <div
                     style={{
                         borderLeft: `1px solid ${D.border}`,
                         background: D.bgCard,
                         display: "flex",
                         flexDirection: "column",
-                        minHeight: "100vh",
+                        height: "calc(100vh - 0px)",
                         position: "sticky",
                         top: 0,
                     }}
                 >
-                    {/* Module Header */}
                     <div
                         style={{
-                            padding: "20px 18px 14px",
+                            padding: "24px 20px",
                             borderBottom: `1px solid ${D.border}`,
                         }}
                     >
-                        <a
-                            href={`/student/modules/${moduleId}`}
+                        <div
                             style={{
                                 fontSize: 11,
                                 color: D.txtSec,
-                                textDecoration: "none",
-                                display: "block",
-                                marginBottom: 6,
+                                textTransform: "uppercase",
+                                letterSpacing: 1,
+                                marginBottom: 4,
                             }}
                         >
-                            ← Zpět na modul
-                        </a>
+                            Aktuální modul
+                        </div>
                         <div
                             style={{
-                                fontSize: 14,
-                                fontWeight: 700,
+                                fontSize: 15,
+                                fontWeight: 800,
                                 color: D.txtPri,
                             }}
                         >
                             {lesson.module_title}
                         </div>
-                        <div
-                            style={{
-                                fontSize: 11,
-                                color: D.txtSec,
-                                marginTop: 3,
-                            }}
-                        >
-                            {allLessons.length} lekcí
-                        </div>
                     </div>
 
-                    {/* Lesson List */}
-                    <div
-                        style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}
-                    >
+                    <div style={{ flex: 1, overflowY: "auto" }}>
                         {allLessons.map((l, i) => {
                             const isActive = l.id === lesson.id;
                             const isDone =
@@ -899,16 +709,13 @@ export default function VideoLessonViewer({
                                     style={{
                                         display: "flex",
                                         alignItems: "center",
-                                        gap: 10,
-                                        padding: "10px 18px",
+                                        gap: 12,
+                                        padding: "14px 20px",
                                         textDecoration: "none",
+                                        borderLeft: `3px solid ${isActive ? accent : "transparent"}`,
                                         background: isActive
-                                            ? accent + "15"
+                                            ? accent + "10"
                                             : "transparent",
-                                        borderLeft: isActive
-                                            ? `3px solid ${accent}`
-                                            : "3px solid transparent",
-                                        transition: "all .15s",
                                     }}
                                 >
                                     <div
@@ -918,19 +725,15 @@ export default function VideoLessonViewer({
                                             borderRadius: "50%",
                                             background: isDone
                                                 ? D.success + "20"
-                                                : isActive
-                                                  ? accent + "20"
-                                                  : "rgba(255,255,255,.06)",
+                                                : D.bgMid,
                                             color: isDone
                                                 ? D.success
-                                                : isActive
-                                                  ? accent
-                                                  : D.txtSec,
+                                                : D.txtSec,
                                             display: "flex",
                                             alignItems: "center",
                                             justifyContent: "center",
-                                            fontSize: 11,
-                                            fontWeight: 700,
+                                            fontSize: 10,
+                                            fontWeight: 800,
                                             flexShrink: 0,
                                         }}
                                     >
@@ -938,13 +741,9 @@ export default function VideoLessonViewer({
                                     </div>
                                     <span
                                         style={{
-                                            fontSize: 12,
-                                            color: isActive
-                                                ? D.txtPri
-                                                : D.txtSec,
+                                            fontSize: 13,
+                                            color: isActive ? "#fff" : D.txtSec,
                                             fontWeight: isActive ? 600 : 400,
-                                            lineHeight: 1.4,
-                                            flex: 1,
                                         }}
                                     >
                                         {l.title}
@@ -954,78 +753,40 @@ export default function VideoLessonViewer({
                         })}
                     </div>
 
-                    {/* Footer with Toggle Button */}
                     <div
                         style={{
-                            padding: "16px 18px",
+                            padding: "20px",
                             borderTop: `1px solid ${D.border}`,
                         }}
                     >
-                        {status === "completed" ? (
-                            <div
-                                style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 8,
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 8,
-                                        padding: "12px 16px",
-                                        background: D.success + "15",
-                                        border: `1px solid ${D.success}30`,
-                                        borderRadius: 10,
-                                        color: D.success,
-                                        fontSize: 13,
-                                        fontWeight: 600,
-                                    }}
-                                >
-                                    <span>✓</span> Dokončeno
-                                </div>
-                                <button
-                                    onClick={toggleComplete}
-                                    disabled={completing}
-                                    style={{
-                                        padding: "7px",
-                                        background: "transparent",
-                                        color: D.txtSec,
-                                        border: `1px solid ${D.border}`,
-                                        borderRadius: 8,
-                                        fontSize: 11,
-                                        cursor: "pointer",
-                                    }}
-                                >
-                                    {completing
-                                        ? "…"
-                                        : "↩ Označit jako nedokončenou"}
-                                </button>
-                            </div>
-                        ) : (
-                            <button
-                                onClick={toggleComplete}
-                                disabled={completing}
-                                style={{
-                                    width: "100%",
-                                    padding: "12px",
-                                    background: accent,
-                                    color: "#fff",
-                                    border: "none",
-                                    borderRadius: 10,
-                                    fontSize: 14,
-                                    fontWeight: 700,
-                                    cursor: "pointer",
-                                    opacity: completing ? 0.7 : 1,
-                                }}
-                            >
-                                {completing ? "…" : "Dokončit a pokračovat →"}
-                            </button>
-                        )}
+                        <button
+                            onClick={toggleComplete}
+                            disabled={completing}
+                            style={{
+                                width: "100%",
+                                padding: "14px",
+                                background:
+                                    status === "completed"
+                                        ? "transparent"
+                                        : accent,
+                                color: "#fff",
+                                border:
+                                    status === "completed"
+                                        ? `1px solid ${D.border}`
+                                        : "none",
+                                borderRadius: 12,
+                                fontSize: 14,
+                                fontWeight: 700,
+                                cursor: "pointer",
+                            }}
+                        >
+                            {status === "completed"
+                                ? "↩ Označit jako nedokončené"
+                                : "Dokončit lekci"}
+                        </button>
                     </div>
                 </div>
             </div>
-        </>
+        </DarkLayout>
     );
 }
