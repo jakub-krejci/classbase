@@ -13,12 +13,14 @@ export default async function BookmarksPage() {
   const profile = pd as any
   if (profile?.role !== 'student') redirect('/teacher/dashboard')
 
-  const { data: bookmarks } = await admin
+  const { data: bookmarks, error } = await admin
     .from('lesson_progress')
-    .select('lesson_id, updated_at, lessons(id, title, content, module_id, position, modules(id, title, tag))')
+    .select('lesson_id, completed_at, lessons(id, title, module_id, position, modules(id, title, tag))')
     .eq('student_id', (user as any).id)
     .eq('status', 'bookmark')
-    .order('updated_at', { ascending: false })
+    .order('completed_at', { ascending: false })
+
+  if (error) console.error('Bookmarks query error:', error)
 
   return <BookmarksClient profile={profile} bookmarks={(bookmarks ?? []) as any[]} />
 }

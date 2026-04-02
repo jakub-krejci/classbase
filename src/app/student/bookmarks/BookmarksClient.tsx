@@ -7,7 +7,7 @@ import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface NormalizedBookmark {
   lesson_id: string
-  updated_at: string
+  completed_at: string
   lesson: { id: string; title: string; content?: string; module_id: string; position: number }
   module: { id: string; title: string; tag?: string; color?: string }
 }
@@ -18,7 +18,7 @@ function normalize(b: any): NormalizedBookmark | null {
   if (!lesson) return null
   const mod = Array.isArray(lesson.modules) ? lesson.modules[0] : lesson.modules
   if (!mod) return null
-  return { lesson_id: b.lesson_id, updated_at: b.updated_at, lesson, module: mod }
+  return { lesson_id: b.lesson_id, completed_at: b.completed_at, lesson, module: mod }
 }
 
 function fmtDate(iso: string) {
@@ -217,7 +217,7 @@ export default function BookmarksClient({ profile, bookmarks: initial }: { profi
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 10, color: D.txtSec }}>Lekce {lesson.position}</span>
                             <span style={{ fontSize: 10, color: 'rgba(255,255,255,.15)' }}>·</span>
-                            <span style={{ fontSize: 10, color: D.txtSec }}>Uloženo: {fmtDate(b.updated_at)}</span>
+                            <span style={{ fontSize: 10, color: D.txtSec }}>Uloženo: {fmtDate(b.completed_at)}</span>
                           </div>
                         </div>
                         {/* Actions */}
