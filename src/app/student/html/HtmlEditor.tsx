@@ -163,6 +163,8 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   const previewRef          = useRef<HTMLIFrameElement>(null)
   const [previewHeight, setPreviewHeight] = useState(280)
   const previewDragRef = useRef<{ startY: number; startH: number } | null>(null)
+  // Responsive preview: null = full width, otherwise px width
+  const [previewWidth, setPreviewWidth]   = useState<number | null>(null)
   const previewTimer        = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -286,7 +288,27 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           bracketPairColorization: { enabled: true },
         }
         if (editorContainerRef.current) {
-          editorRef.current = monaco.editor.create(editorContainerRef.current, { ...commonOpts, value: DEFAULT_HTML, language: 'html', wordWrap: 'off', scrollbar: { horizontal: 'auto', vertical: 'auto' } })
+          // Enable Emmet for HTML and CSS (Monaco built-in)
+          monaco.languages.html.htmlDefaults.setOptions({ format: { wrapLineLength: 0 } })
+          editorRef.current = monaco.editor.create(editorContainerRef.current, { ...commonOpts, value: DEFAULT_HTML, language: 'html', wordWrap: 'off', scrollbar: { horizontal: 'auto', vertical: 'auto' }, emptySelectionClipboard: true })
+          // Register Emmet Tab key handler for primary editor
+          editorRef.current.addCommand(monaco.KeyCode.Tab, () => {
+            const ed = editorRef.current
+            if (!ed) return
+            const model = ed.getModel()
+            if (!model) return
+            const pos = ed.getPosition()
+            if (!pos) return
+            const lineContent = model.getLineContent(pos.lineNumber)
+            const textBefore = lineContent.substring(0, pos.column - 1).trimStart()
+            // Only expand if there's an Emmet-like abbreviation (no spaces, ends with tag char)
+            if (textBefore && /^[a-zA-Z.#>+*\[\]{}()^$@:"'0-9]+$/.test(textBefore.split(' ').pop() ?? '')) {
+              // Trigger Emmet expand via suggestion widget or manual expansion
+              ed.trigger('emmet', 'editor.emmet.action.expandAbbreviation', {})
+            } else {
+              ed.trigger('keyboard', 'tab', {})
+            }
+          }, 'editorTextFocus && !editorTabMovesFocus && !hasMultipleSelections')
           editorRef.current.onDidChangeModelContent(() => {
             const path = editorFilePath.current
             if (!path) return
@@ -1099,12 +1121,35 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FFBD2E' }} />
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#27C93F' }} />
               </div>
+              {/* Responsive viewport buttons */}
+              <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
+                {([
+                  { label: '📱', title: 'Mobil (375px)', w: 375 },
+                  { label: '📟', title: 'Tablet (768px)', w: 768 },
+                  { label: '🖥', title: 'Desktop (100%)', w: null },
+                ] as { label: string; title: string; w: number | null }[]).map(({ label, title, w }) => (
+                  <button key={title} onClick={() => setPreviewWidth(w)} title={title}
+                    style={{ padding: '2px 7px', background: previewWidth === w ? accent+'25' : 'none', color: previewWidth === w ? accent : D.txtSec, border: `1px solid ${previewWidth === w ? accent+'40' : D.border}`, borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <span style={{ fontSize: 11, color: D.txtSec, flex: 1, textAlign: 'center' as const }}>
-                {activeProject ? `${activeProject.name} — náhled` : 'Náhled'}
+                {activeProject ? `${activeProject.name}${previewWidth ? ` — ${previewWidth}px` : ' — desktop'}` : 'Náhled'}
               </span>
               <button onClick={() => updatePreview()} style={{ padding: '2px 8px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 5, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>↺ Obnovit</button>
             </div>
-            <iframe ref={previewRef} sandbox="allow-scripts" style={{ flex: 1, border: 'none', background: '#fff' }} title="HTML Preview" />
+            {/* Responsive preview container */}
+            <div style={{ flex: 1, overflow: 'auto', background: previewWidth ? '#1a1a2a' : '#fff', display: 'flex', justifyContent: 'center' }}>
+              <iframe ref={previewRef} sandbox="allow-scripts"
+                style={{ border: 'none', background: '#fff', display: 'block',
+                  width: previewWidth ? `${previewWidth}px` : '100%',
+                  height: '100%',
+                  flexShrink: 0,
+                  boxShadow: previewWidth ? '0 0 0 1px rgba(255,255,255,.1), 0 8px 32px rgba(0,0,0,.5)' : 'none',
+                }}
+                title="HTML Preview" />
+            </div>
           </div>
         </div>
       </div>
