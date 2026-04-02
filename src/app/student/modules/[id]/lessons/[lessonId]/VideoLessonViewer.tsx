@@ -290,7 +290,7 @@ export default function VideoLessonViewer({ lesson, moduleId, studentId, complet
 
             {/* Custom controls overlay — shown for YouTube and direct video */}
             {(ytId || isDirect) && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: showControls ? 'linear-gradient(to top, rgba(0,0,0,.85) 0%, transparent 50%)' : 'transparent', transition: 'background .3s', opacity: showControls ? 1 : 0, pointerEvents: showControls ? 'auto' : 'none', transition: 'opacity .3s' as any }}>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: showControls ? 'linear-gradient(to top, rgba(0,0,0,.85) 0%, transparent 50%)' : 'transparent', opacity: showControls ? 1 : 0, pointerEvents: showControls ? 'auto' : 'none', transition: 'opacity .3s, background .3s' }}>
 
                 {/* Big play button in center */}
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
