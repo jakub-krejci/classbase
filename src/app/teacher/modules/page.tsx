@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import AppShell from '@/components/AppShell'
 import TeacherModulesClient from './TeacherModulesClient'
 
 export default async function TeacherModulesPage() {
@@ -14,14 +13,16 @@ export default async function TeacherModulesPage() {
   const profile = pd as any
   if (profile?.role !== 'teacher') redirect('/student/modules')
 
+  // Only select columns that actually exist
   const { data: mods } = await admin
     .from('modules')
-    .select('id,title,description,tag,access_code,unlock_mode,created_at,archived,status')
+    .select('id,title,description,tag,access_code,unlock_mode,created_at,updated_at')
     .eq('teacher_id', (user as any).id)
     .order('created_at', { ascending: false })
+
   const modules = (mods ?? []) as any[]
 
-  // Counts per module
+  // Lesson + enrollment counts per module
   const counts: Record<string, { lessons: number; enrollments: number }> = {}
   await Promise.all(modules.map(async (m: any) => {
     const [l, e] = await Promise.all([
@@ -31,13 +32,5 @@ export default async function TeacherModulesPage() {
     counts[m.id] = { lessons: l.count ?? 0, enrollments: e.count ?? 0 }
   }))
 
-  return (
-    <AppShell user={profile} role="teacher" wide>
-      <TeacherModulesClient
-        profile={profile}
-        modules={modules}
-        counts={counts}
-      />
-    </AppShell>
-  )
+  return <TeacherModulesClient profile={profile} modules={modules} counts={counts} />
 }
