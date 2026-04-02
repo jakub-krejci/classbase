@@ -1,29 +1,39 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react'
-import { Tag, BackLink, Breadcrumb, Pill } from '@/components/ui'
-import { useIsMobile } from '@/lib/useIsMobile'
+import { createClient } from '@/lib/supabase/client'
+import { DarkLayout, D, card, ProgressBar, SectionLabel } from '@/components/DarkLayout'
 
-export default function StudentModuleView({ module, lessons, assignments, completedIds, bookmarkedIds, submissions, studentId, classmates = [] }: {
-  module: any; lessons: any[]; assignments: any[]; completedIds: string[]; bookmarkedIds: string[]; submissions: any[]; studentId: string; classmates?: any[]
+// ── Tag colour map ──────────────────────────────────────────────────────────────
+const TAG_COLORS: Record<string, string> = {
+  Math: '#6366F1', Programming: '#3B82F6', Science: '#10B981',
+  Language: '#F59E0B', History: '#EF4444', Art: '#EC4899', Other: '#8B5CF6',
+}
+function tagColor(tag?: string) { return TAG_COLORS[tag ?? ''] ?? TAG_COLORS.Other }
+
+function Avatar({ src, name, size = 32, accent = '#7C3AED' }: { src?: string; name: string; size?: number; accent?: string }) {
+  const initials = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  if (src) return <img src={src} alt={name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+  return <div style={{ width: size, height: size, borderRadius: '50%', background: accent + '30', color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * .34, fontWeight: 700, flexShrink: 0 }}>{initials}</div>
+}
+
+export default function StudentModuleView({ module, lessons, assignments, completedIds, bookmarkedIds, submissions, studentId, classmates = [], profile }: {
+  module: any; lessons: any[]; assignments: any[]; completedIds: string[]; bookmarkedIds: string[]
+  submissions: any[]; studentId: string; classmates?: any[]; profile?: any
 }) {
-  const isMobile = useIsMobile()
-  const [tab, setTab] = useState<'lessons' | 'assignments'>('lessons')
+  const supabase = createClient()
+  const accent   = profile?.accent_color ?? '#7C3AED'
+
+  const [tab, setTab]       = useState<'lessons' | 'assignments'>('lessons')
   const [search, setSearch] = useState('')
-  const done = new Set(completedIds)
+
+  const done      = new Set(completedIds)
   const bookmarked = new Set(bookmarkedIds)
-  // Show all top-level lessons (sub-lessons appear as tabs inside their parent)
-  // Locked lessons appear in the list but are non-clickable
   const visibleLessons = lessons.filter((l: any) => !l.parent_lesson_id)
   const pct = visibleLessons.length > 0 ? Math.round(done.size / visibleLessons.length * 100) : 0
   const filteredLessons = search.trim()
     ? visibleLessons.filter((l: any) => l.title.toLowerCase().includes(search.toLowerCase()))
     : visibleLessons
-
-  const tabStyle = (t: string): React.CSSProperties => ({
-    padding: '8px 14px', fontSize: 13, cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'inherit',
-    color: tab === t ? '#111' : '#888', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', fontWeight: tab === t ? 600 : 400
-  })
 
   function isUnlocked(i: number): boolean {
     if (module.unlock_mode !== 'sequential') return true
@@ -34,126 +44,163 @@ export default function StudentModuleView({ module, lessons, assignments, comple
   const subMap: Record<string, any> = {}
   submissions.forEach((s: any) => { subMap[s.assignment_id] = s })
 
-  const aTypePill: any = { quiz: 'blue', test: 'blue', homework: 'amber' }
-  const aTypeLabel: any = { quiz: 'Quiz', test: 'Test', homework: 'Homework' }
+  const tc = tagColor(module.tag)
+
+  const statusOfAssignment = (a: any) => {
+    const sub = subMap[a.id]
+    if (!sub) return { label: 'Neodevzdáno', color: D.txtSec, bg: 'rgba(255,255,255,.06)' }
+    if (sub.grade !== null && sub.grade !== undefined) return { label: `Hodnocení: ${sub.grade}`, color: D.success, bg: D.success + '15' }
+    return { label: 'Odevzdáno', color: D.warning, bg: D.warning + '15' }
+  }
 
   return (
-    <div>
-      <Breadcrumb items={[{ label: 'Modules', href: '/student/modules' }, { label: module.title }]} />
-      <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'flex-start', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', gap: isMobile ? 6 : 0, marginBottom: 6 }}>
-        <div>
-          <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 600, marginBottom: 3 }}>{module.title}</h1>
-          <p style={{ fontSize: 13, color: '#888' }}>{module.description}</p>
+    <DarkLayout profile={profile} activeRoute="/student/modules">
+      <style>{`
+        .smv-row { transition: background .12s, border-color .12s; }
+        .smv-row:hover { background: rgba(255,255,255,.04) !important; border-color: rgba(255,255,255,.12) !important; }
+        .smv-chip { transition: all .15s; }
+        .smv-chip:hover { background: rgba(255,255,255,.08) !important; }
+      `}</style>
+
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+            <a href="/student/modules" style={{ fontSize: 12, color: D.txtSec, textDecoration: 'none' }}>← Moduly</a>
+            {module.tag && (
+              <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: tc + '20', color: tc, fontWeight: 700 }}>
+                {module.tag}
+              </span>
+            )}
+            {module.unlock_mode === 'sequential' && (
+              <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 20, background: 'rgba(255,255,255,.06)', color: D.txtSec }}>🔒 Sekvenční</span>
+            )}
+          </div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: D.txtPri, marginBottom: 6, lineHeight: 1.3 }}>{module.title}</h1>
+          {module.description && <p style={{ fontSize: 13, color: D.txtSec, lineHeight: 1.6 }}>{module.description}</p>}
         </div>
-        <Tag tag={module.tag} />
       </div>
 
-      {/* Progress bar */}
-      <div style={{ background: '#f3f4f6', borderRadius: 10, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, width: isMobile ? '100%' : 'auto', boxSizing: 'border-box', minWidth: isMobile ? 0 : 200 }}>
+      {/* ── Progress card ── */}
+      <div style={{ ...card({ padding: '18px 22px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }) }}>
         <div>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>Your progress</div>
-          <div style={{ fontSize: 20, fontWeight: 600 }}>{pct}%</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: D.txtPri, lineHeight: 1 }}>{pct}<span style={{ fontSize: 18, color: D.txtSec }}>%</span></div>
+          <div style={{ fontSize: 11, color: D.txtSec, marginTop: 3 }}>dokončeno</div>
         </div>
-        <div style={{ flex: 1, minWidth: 80, height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: pct + '%', background: 'var(--accent)', borderRadius: 3, transition: 'width .3s' }} />
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <ProgressBar pct={pct} color={accent} height={8} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+            <span style={{ fontSize: 11, color: D.txtSec }}>{done.size} splněno</span>
+            <span style={{ fontSize: 11, color: D.txtSec }}>{visibleLessons.length - done.size} zbývá</span>
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: '#888' }}>{done.size}/{lessons.length}</div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '0.5px solid #e5e7eb', marginBottom: 16 }}>
-        <button style={tabStyle('lessons')} onClick={() => setTab('lessons')}>Lessons</button>
-        <button style={tabStyle('assignments')} onClick={() => setTab('assignments')}>Assignments</button>
-      </div>
-
-      {/* Lessons */}
-      {tab === 'lessons' && (
-        <div>
-          {lessons.length > 4 && (
-            <div style={{ marginBottom: 12, position: 'relative' }}>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search lessons…"
-                style={{ width: '100%', padding: '8px 12px 8px 32px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
-              />
-              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: 14, pointerEvents: 'none' }}>🔍</span>
-              {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: 14 }}>✕</button>}
+        <div style={{ display: 'flex', gap: 16, flexShrink: 0, flexWrap: 'wrap' }}>
+          <div style={{ textAlign: 'center' as const }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: D.txtPri }}>{visibleLessons.length}</div>
+            <div style={{ fontSize: 10, color: D.txtSec }}>lekcí</div>
+          </div>
+          <div style={{ textAlign: 'center' as const }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: D.txtPri }}>{assignments.length}</div>
+            <div style={{ fontSize: 10, color: D.txtSec }}>úkolů</div>
+          </div>
+          {classmates.length > 0 && (
+            <div style={{ textAlign: 'center' as const }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: D.txtPri }}>{classmates.length}</div>
+              <div style={{ fontSize: 10, color: D.txtSec }}>spolužáků</div>
             </div>
           )}
-          {filteredLessons.length === 0 && search && <p style={{ color: '#aaa', fontSize: 13 }}>No lessons match "{search}"</p>}
-          {lessons.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No lessons yet.</p>}
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+        {([
+          { id: 'lessons',     label: `📖 Lekce (${visibleLessons.length})` },
+          { id: 'assignments', label: `📝 Úkoly (${assignments.length})` },
+        ] as const).map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            style={{ padding: '8px 18px', borderRadius: 20, border: `1px solid ${tab === t.id ? accent + '60' : D.border}`, background: tab === t.id ? accent + '18' : 'transparent', color: tab === t.id ? accent : D.txtSec, fontSize: 13, fontWeight: tab === t.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Search (lessons only) ── */}
+      {tab === 'lessons' && visibleLessons.length > 4 && (
+        <div style={{ position: 'relative', marginBottom: 16, maxWidth: 360 }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: D.txtSec, pointerEvents: 'none' }}>🔍</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Hledat lekce…"
+            style={{ width: '100%', padding: '9px 12px 9px 36px', background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: 10, fontSize: 13, color: D.txtPri, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const }} />
+          {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 14 }}>✕</button>}
+        </div>
+      )}
+
+      {/* ── Lessons tab ── */}
+      {tab === 'lessons' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filteredLessons.length === 0 && (
+            <div style={{ ...card({ padding: '32px', textAlign: 'center' as const, color: D.txtSec, fontSize: 13 }) }}>
+              Žádné lekce neodpovídají hledání.
+            </div>
+          )}
           {filteredLessons.map((l: any, i: number) => {
-            const realIndex = visibleLessons.findIndex((x: any) => x.id === l.id)
-            const completed = done.has(l.id)
-            const unlocked = isUnlocked(realIndex)
+            const idx      = visibleLessons.indexOf(l)
+            const unlocked = isUnlocked(idx)
+            const isDone   = done.has(l.id)
+            const isBm     = bookmarked.has(l.id)
+            const isVideo  = l.lesson_type === 'video'
+            const href     = unlocked ? `/student/modules/${module.id}/lessons/${l.id}` : undefined
+
             return (
-              <div key={l.id}>
-                {l.locked ? (
-                  // Locked: visible in list but not clickable
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fafafa', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, cursor: 'not-allowed' }}>
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f3f4f6', color: '#bbb', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🔒</div>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#aaa' }}>{l.title}</span>
-                    <span style={{ fontSize: 11, color: '#bbb', background: '#f3f4f6', padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>Not available</span>
+              <div key={l.id} className="smv-row"
+                style={{ ...card({ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, opacity: unlocked ? 1 : .5, cursor: href ? 'pointer' : 'default', textDecoration: 'none' }) }}
+                onClick={() => href && (window.location.href = href)}>
+                {/* Status circle */}
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: isDone ? D.success + '20' : isBm ? D.warning + '20' : unlocked ? accent + '15' : 'rgba(255,255,255,.06)', color: isDone ? D.success : isBm ? D.warning : unlocked ? accent : D.txtSec, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isDone ? 16 : 13, fontWeight: 700, flexShrink: 0 }}>
+                  {!unlocked ? '🔒' : isDone ? '✓' : isBm ? '🔖' : isVideo ? '▶' : idx + 1}
+                </div>
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.title}</div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                    {isVideo && <span style={{ fontSize: 10, color: '#F59E0B', background: '#F59E0B18', padding: '1px 7px', borderRadius: 10, fontWeight: 600 }}>🎬 Video</span>}
+                    {isDone && <span style={{ fontSize: 10, color: D.success }}>Splněno</span>}
+                    {isBm && !isDone && <span style={{ fontSize: 10, color: D.warning }}>Uloženo na později</span>}
+                    {!unlocked && <span style={{ fontSize: 10, color: D.txtSec }}>Dokončete předchozí lekci</span>}
                   </div>
-                ) : !unlocked ? (
-                  // Sequentially locked
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#f9fafb', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, opacity: 0.6 }}>
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f3f4f6', color: '#aaa', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🔒</div>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#888' }}>{l.title}</span>
-                    <Pill label="Locked" color="gray" />
-                  </div>
-                ) : (
-                  <a href={'/student/modules/' + module.id + '/lessons/' + l.id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, marginBottom: 6, textDecoration: 'none', color: 'inherit' }}>
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: completed ? '#EAF3DE' : bookmarked.has(l.id) ? '#FFF3CD' : '#E6F1FB', color: completed ? '#27500A' : bookmarked.has(l.id) ? '#856404' : '#0C447C', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {completed ? '✓' : bookmarked.has(l.id) ? '🔖' : (realIndex + 1)}
-                    </div>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{l.title}</span>
-                    {completed && <Pill label="Done" color="green" />}
-                    {!completed && bookmarked.has(l.id) && <Pill label="Not completed" color="amber" />}
-                    {!completed && !bookmarked.has(l.id) && <Pill label="Read" color="blue" />}
-                  </a>
-                )}
+                </div>
+                {/* Arrow */}
+                {href && <span style={{ color: D.txtSec, fontSize: 16, flexShrink: 0 }}>→</span>}
               </div>
             )
           })}
         </div>
       )}
 
-      {/* Assignments */}
+      {/* ── Assignments tab ── */}
       {tab === 'assignments' && (
-        <div>
-          {assignments.length === 0 && <p style={{ color: '#aaa', fontSize: 13 }}>No assignments yet.</p>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {assignments.length === 0 && (
+            <div style={{ ...card({ padding: '32px', textAlign: 'center' as const, color: D.txtSec, fontSize: 13 }) }}>
+              Žádné úkoly v tomto modulu.
+            </div>
+          )}
           {assignments.map((a: any) => {
-            const sub = subMap[a.id]
-            const isGraded = sub?.status === 'graded'
-            const isSubmitted = !!sub
-            const dueStr = a.deadline ? ' · Due ' + new Date(a.deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''
+            const st = statusOfAssignment(a)
             return (
-              <div key={a.id} style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 500, fontSize: 14 }}>{a.title}</div>
-                    <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{aTypeLabel[a.type] ?? a.type}{dueStr}</div>
-                  </div>
-                  <Pill
-                    label={isGraded ? 'Graded: ' + sub.teacher_score + '%' : isSubmitted ? 'Submitted' : aTypeLabel[a.type] ?? a.type}
-                    color={isGraded ? 'green' : isSubmitted ? 'gray' : aTypePill[a.type] ?? 'blue'}
-                  />
+              <a key={a.id} href={`/student/modules/${module.id}/assignments/${a.id}`} className="smv-row"
+                style={{ ...card({ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none' }) }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: accent + '15', color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                  {a.type === 'homework' ? '📝' : a.type === 'quiz' ? '🧩' : '🧪'}
                 </div>
-                {isGraded && sub.teacher_feedback && (
-                  <div style={{ fontSize: 12, padding: '6px 10px', background: '#EAF3DE', color: '#27500A', borderRadius: 8, marginBottom: 8 }}>
-                    Feedback: {sub.teacher_feedback}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</div>
+                  <div style={{ fontSize: 11, color: D.txtSec, marginTop: 3, display: 'flex', gap: 8 }}>
+                    <span style={{ padding: '1px 7px', borderRadius: 10, background: st.bg, color: st.color, fontWeight: 600 }}>{st.label}</span>
                   </div>
-                )}
-                {!isSubmitted && (
-                  <a href={'/student/modules/' + module.id + '/assignments/' + a.id}
-                    style={{ display: 'inline-flex', padding: '5px 12px', background: 'var(--accent)', color: '#E6F1FB', borderRadius: 8, fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
-                    Start
-                  </a>
-                )}
-              </div>
+                </div>
+                <span style={{ color: D.txtSec, fontSize: 16 }}>→</span>
+              </a>
             )
           })}
         </div>
@@ -161,31 +208,23 @@ export default function StudentModuleView({ module, lessons, assignments, comple
 
       {/* ── Classmates ── */}
       {classmates.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#111', marginBottom: 12 }}>
-            👥 Spolužáci v tomto modulu ({classmates.length})
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {classmates.map(c => {
-              const initials = (c.full_name ?? '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-              const accent = c.accent_color ?? 'var(--accent)'
-              return (
-                <a key={c.id} href={`/student/profile/${c.id}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 30, textDecoration: 'none', color: '#111', fontSize: 12, fontWeight: 500 }}>
-                  {c.avatar_url
-                    ? <img src={c.avatar_url} alt={c.full_name} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                    : <div style={{ width: 26, height: 26, borderRadius: '50%', background: accent + '20', color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{initials}</div>
-                  }
-                  <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.full_name}</span>
-                  {c.show_status && c.custom_status && (
-                    <span style={{ fontSize: 11, color: '#888', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.custom_status}</span>
-                  )}
-                </a>
-              )
-            })}
+        <div style={{ ...card({ padding: '18px 22px', marginTop: 24 }) }}>
+          <SectionLabel>Spolužáci v modulu</SectionLabel>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {classmates.map((c: any) => (
+              <a key={c.id} href={`/student/profile/${c.id}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 10, textDecoration: 'none', transition: 'all .15s' }}
+                className="smv-chip">
+                <Avatar src={c.avatar_url} name={c.full_name} size={28} accent={c.accent_color ?? '#7C3AED'} />
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: D.txtPri }}>{c.full_name}</div>
+                  {c.student_class && <div style={{ fontSize: 10, color: D.txtSec }}>{c.student_class}</div>}
+                </div>
+              </a>
+            ))}
           </div>
         </div>
       )}
-    </div>
+    </DarkLayout>
   )
 }

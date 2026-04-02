@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import AppShell from '@/components/AppShell'
 import StudentModuleView from './StudentModuleView'
 
 export default async function StudentModuleDetailPage({ params }: { params: any }) {
@@ -58,17 +57,16 @@ export default async function StudentModuleDetailPage({ params }: { params: any 
     : { data: [] }
 
   return (
-    <AppShell user={profile} role="student">
-      <StudentModuleView
-        module={mod as any}
-        lessons={(lessons ?? []) as any[]}
-        assignments={(assignments ?? []) as any[]}
-        completedIds={Array.from(completedIds) as string[]}
-        bookmarkedIds={Array.from(bookmarkedIds) as string[]}
-        submissions={(submissions ?? []) as any[]}
-        studentId={(user as any).id}
-        classmates={(classmates ?? []) as any[]}
-      />
-    </AppShell>
+    <StudentModuleView
+      module={mod as any}
+      lessons={(lessons ?? []) as any[]}
+      assignments={(assignments ?? []) as any[]}
+      completedIds={Array.from(completedIds) as string[]}
+      bookmarkedIds={Array.from(bookmarkedIds) as string[]}
+      submissions={(submissions ?? []) as any[]}
+      studentId={(user as any).id}
+      classmates={(classmates ?? []) as any[]}
+      profile={profile}
+    />
   )
 }
