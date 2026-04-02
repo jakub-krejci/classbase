@@ -351,7 +351,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {[
                     { icon: '/icons/python.png',   label: 'Spustit Python editor',   href: '/student/python' },
-                    { icon: '/icons/jupyter.png',  label: 'Otevřít Jupyter Notebook', href: '#' },
+                    { icon: '/icons/jupyter.png',  label: 'Otevřít Jupyter Notebook', href: '/student/jupyter' },
                     { icon: '/icons/html.png',     label: 'Spustit HTML editor',      href: '/student/html' },
                     { icon: '/icons/database.png', label: 'Spustit SQL editor',       href: '#' },
                   ].map(({ icon, label, href }) => (
