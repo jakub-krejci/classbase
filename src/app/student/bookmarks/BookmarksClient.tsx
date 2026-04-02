@@ -64,7 +64,7 @@ export default function BookmarksClient({ profile, bookmarks: initial }: { profi
     setRemoving(prev => new Set([...prev, lessonId]))
     const { error } = await supabase
       .from('lesson_progress')
-      .update({ status: 'not_started' })
+      .update({ status: 'completed' })
       .eq('student_id', profile.id)
       .eq('lesson_id', lessonId)
     if (error) { flash('❌ Chyba při odebírání záložky'); setRemoving(prev => { const n = new Set(prev); n.delete(lessonId); return n }); return }

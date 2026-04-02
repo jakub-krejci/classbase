@@ -15,7 +15,7 @@ export default async function BookmarksPage() {
 
   const { data: bookmarks } = await admin
     .from('lesson_progress')
-    .select('lesson_id, updated_at, lessons(id, title, content, module_id, position, modules(id, title, tag, color))')
+    .select('lesson_id, updated_at, lessons(id, title, content, module_id, position, modules(id, title, tag))')
     .eq('student_id', (user as any).id)
     .eq('status', 'bookmark')
     .order('updated_at', { ascending: false })
