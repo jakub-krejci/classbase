@@ -525,7 +525,7 @@ export default function JupyterEditor({ profile }: { profile: any }) {
 
     // Before running: write all folder files to Pyodide's virtual filesystem
     // so that pd.read_csv('data/file.csv') works as expected
-    const activeProj = activeProjectRef.current
+    const activeProj = activeProject
     if (activeProj?.folders.length) {
       const { loadPyodide: getPy } = await import('@/lib/pyodide-runner')
       try {
