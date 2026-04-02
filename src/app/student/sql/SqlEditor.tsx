@@ -760,7 +760,7 @@ export default function SqlEditor({ profile }: { profile: any }) {
                             {schema.map(t => (
                               <div key={t.name} style={{ marginBottom: 2 }}>
                                 <div className="sql-row" onClick={() => { editorRef.current?.trigger('', 'type', { text: t.name }) }}
-                                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 7px', borderRadius: 5, cursor: 'pointer', title: `Vložit název tabulky` }}>
+                                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 7px', borderRadius: 5, cursor: 'pointer' }} title="Vložit název tabulky">
                                   <span style={{ fontSize: 10 }}>📊</span>
                                   <span style={{ fontSize: 11, color: '#60A5FA', fontWeight: 600, flex: 1 }}>{t.name}</span>
                                   <span style={{ fontSize: 9, color: D.txtSec }}>{t.columns.length}</span>
