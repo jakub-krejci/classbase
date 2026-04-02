@@ -58,12 +58,22 @@ export async function runPython(
     // downloads any Pyodide-bundled packages that aren't loaded yet.
     // This is the official API — handles matplotlib, numpy, pandas, scipy etc.
     try {
-      onStatus?.('Loading packages…')
+      onStatus?.('Načítám balíčky…')
       await py.loadPackagesFromImports(code)
+      // If code imports pandas, also load pyarrow to avoid DeprecationWarning
+      // (Pyodide 0.26 includes pyarrow, pandas needs it in next major version)
+      if (/\bimport\s+pandas|\bfrom\s+pandas\b/.test(code)) {
+        try { await py.loadPackage('pyarrow') } catch {}
+      }
       onStatus?.('')
     } catch {
       // Non-fatal: package may already be loaded or not available
     }
+
+    // Suppress common DeprecationWarnings that pollute output
+    try {
+      await py.runPythonAsync('import warnings; warnings.filterwarnings("ignore", category=DeprecationWarning)')
+    } catch {}
 
     // Matplotlib backend + plt.show() capture shim
     const matplotlibShim = `

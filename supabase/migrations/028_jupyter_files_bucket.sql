@@ -11,8 +11,10 @@ DROP POLICY IF EXISTS "view_jupyter_buckets"  ON storage.buckets;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'jupyter-files', 'jupyter-files', false, 10485760,
-  ARRAY['text/plain','application/json','application/octet-stream',
-        'image/png','image/jpeg','image/gif','image/webp','image/svg+xml']
+  ARRAY['text/plain','text/csv','application/json','application/octet-stream',
+        'image/png','image/jpeg','image/gif','image/webp','image/svg+xml',
+        'text/x-python','application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 ) ON CONFLICT (id) DO NOTHING;
 
 CREATE POLICY "view_jupyter_buckets" ON storage.buckets

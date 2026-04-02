@@ -34,7 +34,9 @@ interface Notebook {
   nbformat_minor: number
 }
 interface NbFile { path: string; name: string; project: string; updatedAt: string }
-interface Project { name: string; key: string; files: NbFile[]; folders: string[] }
+interface FolderFile { name: string; path: string; size?: number }
+interface FolderInfo  { name: string; files: FolderFile[] }
+interface Project { name: string; key: string; files: NbFile[]; folders: FolderInfo[] }
 interface RecentEntry { path: string; name: string; project: string; openedAt: string }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -117,6 +119,8 @@ export default function JupyterEditor({ profile }: { profile: any }) {
   const [selectedCell, setSelectedCell] = useState<string | null>(null)
   const [editingCell, setEditingCell]   = useState<string | null>(null)
   const kernelRunning                   = useRef(false)
+  const monacoRef    = useRef<any>(null)
+  const [monacoLoaded, setMonacoLoaded] = useState(false)
 
   // ── Projects ────────────────────────────────────────────────────────────────
   const [projects, setProjects]         = useState<Project[]>([])
@@ -144,6 +148,11 @@ export default function JupyterEditor({ profile }: { profile: any }) {
   const [deleteProjModal, setDeleteProjModal] = useState<Project | null>(null)
   const [renameProjModal, setRenameProjModal] = useState<Project | null>(null)
   const [renameProjVal, setRenameProjVal]   = useState('')
+  const [renameFileModal, setRenameFileModal] = useState<NbFile | null>(null)
+  const [renameFileVal, setRenameFileVal]   = useState('')
+  const [renameFolderModal, setRenameFolderModal] = useState<{ proj: string; folder: FolderInfo } | null>(null)
+  const [renameFolderVal, setRenameFolderVal] = useState('')
+  const [deleteFolderModal, setDeleteFolderModal] = useState<{ proj: string; folder: FolderInfo } | null>(null)
 
   // ── Storage helpers ─────────────────────────────────────────────────────────
   async function pushText(path: string, content: string): Promise<string | null> {
@@ -168,10 +177,15 @@ export default function JupyterEditor({ profile }: { profile: any }) {
       if ((item.metadata !== null && item.metadata !== undefined) || item.name.includes('.')) continue
       const { data: rootFiles } = await supabase.storage.from(BUCKET).list(`zaci/${uid}/${item.name}`, { limit: 200 })
       const files: NbFile[] = []
-      const folders: string[] = []
+      const folders: FolderInfo[] = []
       for (const f of rootFiles ?? []) {
         if (f.metadata === null || f.metadata === undefined) {
-          if (!f.name.includes('.')) folders.push(f.name)
+          if (!f.name.includes('.')) {
+            // List folder contents
+            const { data: folderFiles } = await supabase.storage.from(BUCKET).list(`zaci/${uid}/${item.name}/${f.name}`, { limit: 200 })
+            const fItems = (folderFiles ?? []).filter(x => x.name !== '.gitkeep' && x.metadata !== null)
+            folders.push({ name: f.name, files: fItems.map(x => ({ name: x.name, path: `zaci/${uid}/${item.name}/${f.name}/${x.name}`, size: x.metadata?.size })) })
+          }
         } else if (f.name.endsWith('.ipynb')) {
           files.push({ path: `zaci/${uid}/${item.name}/${f.name}`, name: f.name, project: item.name, updatedAt: f.updated_at ?? '' })
         }
@@ -198,6 +212,22 @@ export default function JupyterEditor({ profile }: { profile: any }) {
     setExpandedProj(prev => new Set([...prev, file.project]))
     setOpenModal(false)
   }
+
+  // ── Load Monaco ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js'
+    s.onload = () => {
+      const w = window as any
+      w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
+      w.require(['vs/editor/editor.main'], (monaco: any) => {
+        monacoRef.current = monaco
+        setMonacoLoaded(true)
+      })
+    }
+    document.head.appendChild(s)
+  }, [])
 
   // ── Init ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -340,6 +370,63 @@ export default function JupyterEditor({ profile }: { profile: any }) {
     }
     setRecent(prev => { const n = prev.filter(r => r.path !== file.path); try { localStorage.setItem(LS_RECENT, JSON.stringify(n)) } catch {}; return n })
     setDeleteFileModal(null); setSaving(false)
+  }
+
+  // ── Rename notebook file ───────────────────────────────────────────────────
+  async function doRenameFile(file: NbFile) {
+    let name = renameFileVal.trim()
+    if (!name) { setRenameFileModal(null); return }
+    if (!name.endsWith('.ipynb')) name += '.ipynb'
+    if (name === file.name) { setRenameFileModal(null); return }
+    const newPath = `zaci/${uid}/${file.project}/${sanitizeKey(name)}`
+    setSaving(true)
+    const content = await fetchText(file.path)
+    await pushText(newPath, content)
+    await supabase.storage.from(BUCKET).remove([file.path])
+    const projs = await refreshProjects()
+    if (activeFile?.path === file.path) {
+      const renamed = projs.flatMap(p => p.files).find(f => f.path === newPath)
+      if (renamed) {
+        setActiveFile(renamed)
+        setRecent(prev => { const n = prev.map(r => r.path === file.path ? { ...r, path: newPath, name } : r); try { localStorage.setItem(LS_RECENT, JSON.stringify(n)) } catch {}; return n })
+        try { localStorage.setItem(LS_LAST, newPath) } catch {}
+      }
+    }
+    setRenameFileModal(null); setSaving(false)
+  }
+
+  // ── Rename folder ───────────────────────────────────────────────────────────
+  async function doRenameFolder(projKey: string, folder: FolderInfo) {
+    const newName = sanitizeKey(renameFolderVal.trim() || folder.name)
+    if (newName === folder.name) { setRenameFolderModal(null); return }
+    setSaving(true)
+    // Move all files inside
+    for (const f of folder.files) {
+      const newPath = `zaci/${uid}/${projKey}/${newName}/${f.name}`
+      const { data } = await supabase.storage.from(BUCKET).download(f.path)
+      if (data) {
+        await supabase.storage.from(BUCKET).remove([newPath])
+        await supabase.storage.from(BUCKET).upload(newPath, data, { contentType: 'application/octet-stream', cacheControl: '0' })
+        await supabase.storage.from(BUCKET).remove([f.path])
+      }
+    }
+    // If folder was empty, create gitkeep in new location
+    if (folder.files.length === 0) {
+      await pushText(`zaci/${uid}/${projKey}/${newName}/.gitkeep`, '')
+    }
+    // Remove old gitkeep
+    await supabase.storage.from(BUCKET).remove([`zaci/${uid}/${projKey}/${folder.name}/.gitkeep`])
+    await refreshProjects()
+    setRenameFolderModal(null); setSaving(false)
+  }
+
+  // ── Delete folder ───────────────────────────────────────────────────────────
+  async function doDeleteFolder(projKey: string, folder: FolderInfo) {
+    setSaving(true)
+    const paths = [...folder.files.map(f => f.path), `zaci/${uid}/${projKey}/${folder.name}/.gitkeep`]
+    await supabase.storage.from(BUCKET).remove(paths)
+    await refreshProjects()
+    setDeleteFolderModal(null); setSaving(false)
   }
 
   // ── Cell operations ─────────────────────────────────────────────────────────
@@ -556,6 +643,25 @@ export default function JupyterEditor({ profile }: { profile: any }) {
           <MBtns onOk={() => doDeleteFile(deleteFileModal)} onCancel={() => setDeleteFileModal(null)} label="Smazat" danger />
         </Modal>
       )}
+      {renameFileModal && (
+        <Modal title="✏ Přejmenovat notebook" onClose={() => setRenameFileModal(null)}>
+          <input value={renameFileVal} onChange={e => setRenameFileVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && renameFileVal.trim() && doRenameFile(renameFileModal)} autoFocus placeholder={renameFileModal.name} style={{ ...modalInp, marginBottom: 14 }} />
+          <MBtns onOk={() => doRenameFile(renameFileModal)} onCancel={() => setRenameFileModal(null)} label="Přejmenovat" disabled={!renameFileVal.trim()} />
+        </Modal>
+      )}
+      {renameFolderModal && (
+        <Modal title="✏ Přejmenovat složku" onClose={() => setRenameFolderModal(null)}>
+          <input value={renameFolderVal} onChange={e => setRenameFolderVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && renameFolderVal.trim() && doRenameFolder(renameFolderModal.proj, renameFolderModal.folder)} autoFocus placeholder={renameFolderModal.folder.name} style={{ ...modalInp, marginBottom: 14 }} />
+          <MBtns onOk={() => doRenameFolder(renameFolderModal.proj, renameFolderModal.folder)} onCancel={() => setRenameFolderModal(null)} label="Přejmenovat" disabled={!renameFolderVal.trim()} />
+        </Modal>
+      )}
+      {deleteFolderModal && (
+        <Modal title="🗑 Smazat složku" onClose={() => setDeleteFolderModal(null)}>
+          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 6 }}>Smazat složku <strong style={{ color: D.txtPri }}>{deleteFolderModal.folder.name}</strong> a všechny soubory v ní?</p>
+          <p style={{ fontSize: 12, color: D.danger, marginBottom: 18 }}>Tato akce je nevratná.</p>
+          <MBtns onOk={() => doDeleteFolder(deleteFolderModal.proj, deleteFolderModal.folder)} onCancel={() => setDeleteFolderModal(null)} label="Smazat" danger />
+        </Modal>
+      )}
       {newFolderModal && (
         <Modal title="📁 Nová složka" onClose={() => setNewFolderModal(null)}>
           <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 10 }}>Název složky pro soubory/obrázky</p>
@@ -671,20 +777,36 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                               <span style={{ fontSize: 13 }}>📓</span>
                               <span style={{ fontSize: 11, color: f.path === activeFile?.path ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
                               <div className="jup-acts" style={{ display: 'flex', gap: 1, opacity: 0 }}>
+                                <button onClick={e => { e.stopPropagation(); setRenameFileModal(f); setRenameFileVal(f.name.replace(/\.ipynb$/, '')) }}
+                                  style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přejmenovat">✏</button>
                                 <button onClick={e => { e.stopPropagation(); setDeleteFileModal(f) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat">🗑</button>
                               </div>
                             </div>
                           ))}
                           {/* Folders */}
-                          {proj.folders.filter(f => f !== '.gitkeep').map(folder => (
-                            <div key={folder} className="jup-row"
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 7px', borderRadius: 6, marginBottom: 1 }}>
-                              <span style={{ fontSize: 12 }}>📂</span>
-                              <span style={{ fontSize: 11, color: D.txtSec, flex: 1 }}>{folder}</span>
-                              <button onClick={e => { e.stopPropagation(); uploadFolderTarget.current = `${proj.key}::${folder}`; imgInputRef.current?.click() }}
-                                style={{ padding: '1px 5px', background: accent+'20', color: accent, border: 'none', borderRadius: 4, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }} title="Nahrát soubory">
-                                {uploadingFile ? '…' : '⬆'}
-                              </button>
+                          {proj.folders.map(folder => (
+                            <div key={folder.name} style={{ marginBottom: 3 }}>
+                              <div className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 7px', borderRadius: 6 }}>
+                                <span style={{ fontSize: 12 }}>📂</span>
+                                <span style={{ fontSize: 11, color: D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
+                                <div className="jup-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
+                                  <button onClick={e => { e.stopPropagation(); uploadFolderTarget.current = `${proj.key}::${folder.name}`; imgInputRef.current?.click() }}
+                                    style={{ padding: '1px 5px', background: accent+'20', color: accent, border: 'none', borderRadius: 4, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }} title="Nahrát soubory">
+                                    {uploadingFile ? '…' : '⬆'}
+                                  </button>
+                                  <button onClick={e => { e.stopPropagation(); setRenameFolderModal({ proj: proj.key, folder }); setRenameFolderVal(folder.name) }}
+                                    style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 10 }} title="Přejmenovat">✏</button>
+                                  <button onClick={e => { e.stopPropagation(); setDeleteFolderModal({ proj: proj.key, folder }) }}
+                                    style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 10 }} title="Smazat složku">🗑</button>
+                                </div>
+                              </div>
+                              {folder.files.map(f => (
+                                <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 7px 2px 22px', borderRadius: 5, marginBottom: 1 }}>
+                                  <span style={{ fontSize: 10 }}>📄</span>
+                                  <span style={{ fontSize: 10, color: D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.name}>{f.name}</span>
+                                  {f.size && <span style={{ fontSize: 9, color: D.txtSec, opacity: .7 }}>{f.size < 1024 ? f.size + 'B' : (f.size/1024).toFixed(1) + 'kB'}</span>}
+                                </div>
+                              ))}
                             </div>
                           ))}
                         </div>
@@ -740,6 +862,7 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                 isSelected={selectedCell === cell.id}
                 isEditing={editingCell === cell.id}
                 accent={accent}
+                monaco={monacoRef.current}
                 onSelect={() => setSelectedCell(cell.id)}
                 onEdit={() => { setSelectedCell(cell.id); setEditingCell(cell.id) }}
                 onBlur={() => setEditingCell(null)}
@@ -772,29 +895,75 @@ export default function JupyterEditor({ profile }: { profile: any }) {
 }
 
 // ── Cell component ────────────────────────────────────────────────────────────
-function CellView({ cell, idx, isSelected, isEditing, accent, onSelect, onEdit, onBlur, onChange, onRun, onKeyDown, onDelete, onMoveUp, onMoveDown, onAddAfter, onToggleType }: {
-  cell: Cell; idx: number; isSelected: boolean; isEditing: boolean; accent: string
+function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, onEdit, onBlur, onChange, onRun, onKeyDown, onDelete, onMoveUp, onMoveDown, onAddAfter, onToggleType }: {
+  cell: Cell; idx: number; isSelected: boolean; isEditing: boolean; accent: string; monaco: any
   onSelect: () => void; onEdit: () => void; onBlur: () => void
   onChange: (s: string) => void; onRun: () => void
   onKeyDown: (e: React.KeyboardEvent) => void
   onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
   onAddAfter: (t: CellType) => void; onToggleType: () => void
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef   = useRef<HTMLTextAreaElement>(null)
+  const monacoContRef = useRef<HTMLDivElement>(null)
+  const monacoEdRef   = useRef<any>(null)
   const isCode = cell.type === 'code'
   const statusColor = cell.status === 'running' ? D.warning : cell.status === 'error' ? D.danger : cell.status === 'done' ? D.success : 'transparent'
 
-  // Auto-resize textarea
+  // Auto-resize textarea (markdown only)
   function autoResize(el: HTMLTextAreaElement) {
     el.style.height = 'auto'
     el.style.height = Math.max(48, el.scrollHeight) + 'px'
   }
+
+  // Monaco editor for code cells
   useEffect(() => {
-    if (isEditing && textareaRef.current) {
+    if (!isEditing || !isCode || !monaco || !monacoContRef.current) return
+    if (monacoEdRef.current) return // already created
+    const lines = cell.source.split('\n').length
+    const height = Math.max(52, lines * 20 + 24)
+    monacoContRef.current.style.height = height + 'px'
+    const ed = monaco.editor.create(monacoContRef.current, {
+      value: cell.source,
+      language: 'python',
+      theme: 'vs-dark',
+      fontSize: 13,
+      fontFamily: "'JetBrains Mono','Fira Code',monospace",
+      minimap: { enabled: false },
+      lineNumbers: 'off' as const,
+      wordWrap: 'on' as const,
+      automaticLayout: true,
+      scrollBeyondLastLine: false,
+      padding: { top: 10, bottom: 10 },
+      scrollbar: { vertical: 'hidden', horizontal: 'hidden', alwaysConsumeMouseWheel: false },
+      overviewRulerLanes: 0,
+      glyphMargin: false,
+      folding: false,
+      renderLineHighlight: 'none' as const,
+    })
+    monacoEdRef.current = ed
+    // Auto-resize on content change
+    ed.onDidChangeModelContent(() => {
+      const val = ed.getValue()
+      onChange(val)
+      const newLines = val.split('\n').length
+      const newH = Math.max(52, newLines * 20 + 24)
+      if (monacoContRef.current) monacoContRef.current.style.height = newH + 'px'
+      ed.layout()
+    })
+    // Ctrl+Enter → run
+    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => { onRun() })
+    // Escape → blur
+    ed.addCommand(monaco.KeyCode.Escape, () => { onBlur() })
+    ed.focus()
+    return () => { ed.dispose(); monacoEdRef.current = null }
+  }, [isEditing, isCode, monaco])
+
+  useEffect(() => {
+    if (isEditing && !isCode && textareaRef.current) {
       textareaRef.current.focus()
       autoResize(textareaRef.current)
     }
-  }, [isEditing])
+  }, [isEditing, isCode])
 
   const cellClasses = ['jup-cell', isSelected ? 'selected' : '', cell.status === 'running' ? 'running' : '', cell.status === 'error' ? 'error' : ''].filter(Boolean).join(' ')
 
@@ -843,23 +1012,15 @@ function CellView({ cell, idx, isSelected, isEditing, accent, onSelect, onEdit, 
       {/* Cell body */}
       {isCode ? (
         <div>
-          {isEditing
-            ? <textarea
-                ref={textareaRef}
-                className="jup-ta"
-                value={cell.source}
-                onChange={e => { onChange(e.target.value); autoResize(e.target) }}
-                onKeyDown={onKeyDown}
-                onBlur={onBlur}
-                spellCheck={false}
-                style={{ minHeight: 48 }}
-              />
-            : <div
-                onClick={onEdit}
-                style={{ padding: '12px 14px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 13, lineHeight: 1.6, color: '#cdd6f4', background: '#1e1e2e', minHeight: 48, cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {cell.source || <span style={{ color: 'rgba(255,255,255,.2)', fontStyle: 'italic' }}>Klikněte pro editaci…</span>}
-              </div>
-          }
+          {/* Monaco container — always rendered when editing, hidden otherwise */}
+          <div ref={monacoContRef} style={{ display: isEditing ? 'block' : 'none', minHeight: 52, background: '#1e1e2e' }} />
+          {!isEditing && (
+            <div
+              onClick={onEdit}
+              style={{ padding: '12px 14px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 13, lineHeight: 1.6, color: '#cdd6f4', background: '#1e1e2e', minHeight: 48, cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {cell.source || <span style={{ color: 'rgba(255,255,255,.2)', fontStyle: 'italic' }}>Klikněte pro editaci…</span>}
+            </div>
+          )}
           {/* Outputs */}
           {cell.outputs.length > 0 && (
             <div style={{ borderTop: `1px solid rgba(255,255,255,.07)`, background: '#0d0e14' }}>
