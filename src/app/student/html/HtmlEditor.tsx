@@ -389,11 +389,17 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     splitEditorFilePath.current = ''
     setExpanded(new Set(['', 'img']))
 
-    // Preload all text files
+    // Preload all text files AND images (images as data URLs for preview)
     const newContents = new Map<string, string>()
-    await Promise.all(proj.files.filter(f => f.type !== 'img').map(async f => {
-      const text = await fetchText(f.path)
-      newContents.set(f.path, text)
+    await Promise.all(proj.files.map(async f => {
+      if (f.name === '.gitkeep') return
+      if (f.type === 'img') {
+        const dataUrl = await fetchAsDataUrl(f.path)
+        if (dataUrl) newContents.set(f.path, dataUrl)
+      } else {
+        const text = await fetchText(f.path)
+        newContents.set(f.path, text)
+      }
     }))
     setContents(newContents)
     contentsRef.current = newContents
@@ -559,14 +565,26 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     const finalName = newName.includes('.') ? newName : `${newName}.${file.name.split('.').pop()}`
     const newPath = storagePath(uid, activeProject.key, file.folder, finalName)
     setSaving(true)
-    const content = file.type === 'img' ? null : (contents.get(file.path) ?? await fetchText(file.path))
-    if (content !== null) await pushFile(newPath, content)
+    if (file.type === 'img') {
+      // For images: download raw blob and re-upload under new name
+      const { data: imgData } = await supabase.storage.from(BUCKET).download(file.path)
+      if (imgData) {
+        await supabase.storage.from(BUCKET).remove([newPath])
+        await supabase.storage.from(BUCKET).upload(newPath, imgData, { contentType: 'application/octet-stream', cacheControl: '0' })
+      }
+    } else {
+      const content = contents.get(file.path) ?? await fetchText(file.path)
+      await pushFile(newPath, content)
+      // Update contents cache
+      setContents(prev => { const n = new Map(prev); n.set(newPath, content); n.delete(file.path); return n })
+      contentsRef.current.set(newPath, content); contentsRef.current.delete(file.path)
+    }
     await supabase.storage.from(BUCKET).remove([file.path])
     const projs = await refreshProjects()
     const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
     if (activeFile?.path === file.path) {
       const newFile = p?.files.find(f => f.path === newPath)
-      if (newFile) { setActiveFile(newFile); editorFilePath.current = newPath; setContents(prev => { const n = new Map(prev); if (content) n.set(newPath, content); n.delete(file.path); return n }) }
+      if (newFile) { setActiveFile(newFile); editorFilePath.current = newPath }
     }
     setRenameModal(null); setSaving(false)
   }
@@ -602,7 +620,13 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     if (uploadErrors.length > 0) { flash('❌ ' + uploadErrors[0]); setUploadingImg(false); return }
     const projs = await refreshProjects()
     const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
-    flash(`✓ ${files.length} obrázek nahrán`)
+    // Load newly uploaded images as data URLs so preview can use them
+    for (const file of Array.from(files)) {
+      const path = storagePath(uid, activeProject.key, 'img', file.name)
+      const dataUrl = await fetchAsDataUrl(path)
+      if (dataUrl) { contentsRef.current.set(path, dataUrl); setContents(prev => { const n = new Map(prev); n.set(path, dataUrl); return n }) }
+    }
+    flash(`✓ ${files.length === 1 ? '1 obrázek nahrán' : files.length + ' obrázky nahrány'}`)
     setUploadingImg(false)
   }
 
@@ -611,8 +635,21 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     if (!activeProject || file.folder === targetFolder) return
     setSaving(true)
     const newPath = storagePath(uid, activeProject.key, targetFolder, file.name)
-    const content = file.type === 'img' ? null : (contents.get(file.path) ?? await fetchText(file.path))
-    if (content !== null) await pushFile(newPath, content)
+    if (file.type === 'img') {
+      const { data: imgData } = await supabase.storage.from(BUCKET).download(file.path)
+      if (imgData) {
+        await supabase.storage.from(BUCKET).remove([newPath])
+        await supabase.storage.from(BUCKET).upload(newPath, imgData, { contentType: 'application/octet-stream', cacheControl: '0' })
+        // Update contents cache with new path (keep data URL)
+        const dataUrl = contentsRef.current.get(file.path)
+        if (dataUrl) { contentsRef.current.set(newPath, dataUrl); contentsRef.current.delete(file.path) }
+      }
+    } else {
+      const content = contents.get(file.path) ?? await fetchText(file.path)
+      await pushFile(newPath, content)
+      setContents(prev => { const n = new Map(prev); n.set(newPath, content); n.delete(file.path); return n })
+      contentsRef.current.set(newPath, content); contentsRef.current.delete(file.path)
+    }
     await supabase.storage.from(BUCKET).remove([file.path])
     const projs = await refreshProjects()
     const p = projs.find(x => x.key === activeProject.key); if (p) setActiveProject(p)
@@ -627,12 +664,18 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     if (!w.JSZip) {
       try {
         const res = await fetch('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js')
-        if (!res.ok) throw new Error('fetch failed')
+        if (!res.ok) throw new Error('HTTP ' + res.status)
         const code = await res.text()
-        // eslint-disable-next-line no-new-func
-        // eslint-disable-next-line no-new-func
-        const f = new Function('self','window', code + ';return typeof JSZip!=="undefined"?JSZip:null')
-        const cls = f(w, w); if (cls) w.JSZip = cls
+        // Monaco registers window.define (AMD loader). JSZip detects it and tries to use
+        // define() causing "only one anonymous define" error. Temporarily hide define.
+        const savedDefine = w.define
+        w.define = undefined
+        try {
+          // eslint-disable-next-line no-new-func
+          new Function(code)()
+        } finally {
+          w.define = savedDefine
+        }
       } catch (e: any) {
         flash('❌ JSZip chyba: ' + (e?.message ?? '')); return
       }
