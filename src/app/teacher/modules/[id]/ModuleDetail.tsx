@@ -214,7 +214,7 @@ export default function ModuleDetail({ module, lessons, assignments, enrollments
               </button>
             </div>
           )})}
-          <Btn href={"/teacher/modules/" + module.id + "/lessons/new"} variant="primary" style={{ marginTop: 6 }}>+ Add lesson</Btn>
+          <Btn href={"/teacher/modules/" + module.id + "/lessons/new"} variant="primary" style={{ marginTop: 6, marginRight: 8 }}>+ Add lesson</Btn><Btn href={"/teacher/modules/" + module.id + "/lessons/new-video"} variant="secondary" style={{ marginTop: 6 }}>🎬 Video lekce</Btn>
         </div>
       )}
 

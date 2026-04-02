@@ -198,12 +198,13 @@ export default function TeacherModulesClient({ profile, modules, counts }: {
                 {/* Quick action footer */}
                 <div style={{ display: 'flex', borderTop: `1px solid ${D.border}`, background: D.bgMid }}>
                   {[
-                    { href: `/teacher/modules/${m.id}/lessons/new`, label: '+ Lekce',  color: accent },
-                    { href: `/teacher/modules/${m.id}/edit`,        label: '✏ Upravit', color: D.txtSec },
-                    { href: `/teacher/modules/${m.id}`,             label: '⚙ Detail',  color: D.txtSec },
+                    { href: `/teacher/modules/${m.id}/lessons/new`,       label: '+ Lekce',  color: accent },
+                    { href: `/teacher/modules/${m.id}/lessons/new-video`, label: '🎬 Video',  color: '#F59E0B' },
+                    { href: `/teacher/modules/${m.id}/edit`,               label: '✏ Upravit', color: D.txtSec },
+                    { href: `/teacher/modules/${m.id}`,                    label: '⚙ Detail',  color: D.txtSec },
                   ].map((action, i) => (
                     <a key={i} href={action.href} className="mod-action"
-                      style={{ flex: 1, padding: '10px 0', textAlign: 'center' as const, fontSize: 12, fontWeight: i === 0 ? 700 : 400, color: action.color, textDecoration: 'none', borderRight: i < 2 ? `1px solid ${D.border}` : 'none' }}>
+                      style={{ flex: 1, padding: '10px 0', textAlign: 'center' as const, fontSize: 12, fontWeight: i === 0 ? 700 : 400, color: action.color, textDecoration: 'none', borderRight: i < 3 ? `1px solid ${D.border}` : 'none' }}>
                       {action.label}
                     </a>
                   ))}
