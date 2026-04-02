@@ -229,7 +229,9 @@ export default function SqlEditor({ profile }: { profile: any }) {
 
   // ── Storage helpers ────────────────────────────────────────────────────────
   async function pushBinary(path: string, data: Uint8Array): Promise<string | null> {
-    const blob = new Blob([data], { type: 'application/octet-stream' })
+    // Copy into a plain ArrayBuffer to satisfy TypeScript's strict BlobPart types
+    const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+    const blob = new Blob([buf], { type: 'application/octet-stream' })
     await supabase.storage.from(BUCKET).remove([path])
     const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'application/octet-stream', cacheControl: '0' })
     return error ? error.message : null
