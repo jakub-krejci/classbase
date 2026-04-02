@@ -153,6 +153,9 @@ export default function JupyterEditor({ profile }: { profile: any }) {
   const [renameFolderModal, setRenameFolderModal] = useState<{ proj: string; folder: FolderInfo } | null>(null)
   const [renameFolderVal, setRenameFolderVal] = useState('')
   const [deleteFolderModal, setDeleteFolderModal] = useState<{ proj: string; folder: FolderInfo } | null>(null)
+  const [renameFolderFileModal, setRenameFolderFileModal] = useState<{ proj: string; folder: string; file: FolderFile } | null>(null)
+  const [renameFolderFileVal, setRenameFolderFileVal] = useState('')
+  const [deleteFolderFileModal, setDeleteFolderFileModal] = useState<{ proj: string; folder: string; file: FolderFile } | null>(null)
 
   // ── Storage helpers ─────────────────────────────────────────────────────────
   async function pushText(path: string, content: string): Promise<string | null> {
@@ -429,6 +432,30 @@ export default function JupyterEditor({ profile }: { profile: any }) {
     setDeleteFolderModal(null); setSaving(false)
   }
 
+  // ── Rename file inside folder ──────────────────────────────────────────────
+  async function doRenameFolderFile(projKey: string, folder: string, file: FolderFile) {
+    const newName = renameFolderFileVal.trim()
+    if (!newName || newName === file.name) { setRenameFolderFileModal(null); return }
+    const newPath = `zaci/${uid}/${projKey}/${folder}/${newName}`
+    setSaving(true)
+    const { data: blob } = await supabase.storage.from(BUCKET).download(file.path)
+    if (blob) {
+      await supabase.storage.from(BUCKET).remove([newPath])
+      await supabase.storage.from(BUCKET).upload(newPath, blob, { contentType: 'application/octet-stream', cacheControl: '0' })
+      await supabase.storage.from(BUCKET).remove([file.path])
+    }
+    await refreshProjects()
+    setRenameFolderFileModal(null); setSaving(false)
+  }
+
+  // ── Delete file inside folder ───────────────────────────────────────────────
+  async function doDeleteFolderFile(projKey: string, folder: string, file: FolderFile) {
+    setSaving(true)
+    await supabase.storage.from(BUCKET).remove([file.path])
+    await refreshProjects()
+    setDeleteFolderFileModal(null); setSaving(false)
+  }
+
   // ── Cell operations ─────────────────────────────────────────────────────────
   function updateCell(id: string, patch: Partial<Cell>) {
     setNotebook(prev => ({ ...prev, cells: prev.cells.map(c => c.id === id ? { ...c, ...patch } : c) }))
@@ -496,9 +523,30 @@ export default function JupyterEditor({ profile }: { profile: any }) {
     const order = executionOrder + 1
     setExecOrder(order)
 
-    // Gather all other code cells for import support (cross-cell variables won't work in Pyodide
-    // without a shared namespace, but we can at least run imports/defs from previous cells)
-    // Build extraFiles from notebook name for module support
+    // Before running: write all folder files to Pyodide's virtual filesystem
+    // so that pd.read_csv('data/file.csv') works as expected
+    const activeProj = activeProjectRef.current
+    if (activeProj?.folders.length) {
+      const { loadPyodide: getPy } = await import('@/lib/pyodide-runner')
+      try {
+        const py = await getPy()
+        for (const folder of activeProj.folders) {
+          // Ensure folder exists in FS
+          try { py.FS.mkdir(folder.name) } catch {}
+          for (const f of folder.files) {
+            try {
+              const { data } = await supabase.storage.from(BUCKET).download(f.path)
+              if (data) {
+                const buf = await data.arrayBuffer()
+                const bytes = new Uint8Array(buf)
+                py.FS.writeFile(`${folder.name}/${f.name}`, bytes)
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
     try {
       const result = await runPython(
         cell.source,
@@ -662,6 +710,19 @@ export default function JupyterEditor({ profile }: { profile: any }) {
           <MBtns onOk={() => doDeleteFolder(deleteFolderModal.proj, deleteFolderModal.folder)} onCancel={() => setDeleteFolderModal(null)} label="Smazat" danger />
         </Modal>
       )}
+      {renameFolderFileModal && (
+        <Modal title="✏ Přejmenovat soubor" onClose={() => setRenameFolderFileModal(null)}>
+          <input value={renameFolderFileVal} onChange={e => setRenameFolderFileVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && renameFolderFileVal.trim() && doRenameFolderFile(renameFolderFileModal.proj, renameFolderFileModal.folder, renameFolderFileModal.file)} autoFocus placeholder={renameFolderFileModal.file.name} style={{ ...modalInp, marginBottom: 14 }} />
+          <MBtns onOk={() => doRenameFolderFile(renameFolderFileModal.proj, renameFolderFileModal.folder, renameFolderFileModal.file)} onCancel={() => setRenameFolderFileModal(null)} label="Přejmenovat" disabled={!renameFolderFileVal.trim()} />
+        </Modal>
+      )}
+      {deleteFolderFileModal && (
+        <Modal title="🗑 Smazat soubor" onClose={() => setDeleteFolderFileModal(null)}>
+          <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 6 }}>Smazat soubor <strong style={{ color: D.txtPri }}>{deleteFolderFileModal.file.name}</strong>?</p>
+          <p style={{ fontSize: 12, color: D.danger, marginBottom: 18 }}>Tato akce je nevratná.</p>
+          <MBtns onOk={() => doDeleteFolderFile(deleteFolderFileModal.proj, deleteFolderFileModal.folder, deleteFolderFileModal.file)} onCancel={() => setDeleteFolderFileModal(null)} label="Smazat" danger />
+        </Modal>
+      )}
       {newFolderModal && (
         <Modal title="📁 Nová složka" onClose={() => setNewFolderModal(null)}>
           <p style={{ fontSize: 13, color: D.txtSec, marginBottom: 10 }}>Název složky pro soubory/obrázky</p>
@@ -801,10 +862,16 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                                 </div>
                               </div>
                               {folder.files.map(f => (
-                                <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 7px 2px 22px', borderRadius: 5, marginBottom: 1 }}>
+                                <div key={f.path} className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 7px 2px 22px', borderRadius: 5, marginBottom: 1 }}>
                                   <span style={{ fontSize: 10 }}>📄</span>
                                   <span style={{ fontSize: 10, color: D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.name}>{f.name}</span>
                                   {f.size && <span style={{ fontSize: 9, color: D.txtSec, opacity: .7 }}>{f.size < 1024 ? f.size + 'B' : (f.size/1024).toFixed(1) + 'kB'}</span>}
+                                  <div className="jup-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
+                                    <button onClick={e => { e.stopPropagation(); setRenameFolderFileModal({ proj: proj.key, folder: folder.name, file: f }); setRenameFolderFileVal(f.name) }}
+                                      style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 9 }} title="Přejmenovat">✏</button>
+                                    <button onClick={e => { e.stopPropagation(); setDeleteFolderFileModal({ proj: proj.key, folder: folder.name, file: f }) }}
+                                      style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 9 }} title="Smazat">🗑</button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -915,9 +982,9 @@ function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, 
     el.style.height = Math.max(48, el.scrollHeight) + 'px'
   }
 
-  // Monaco editor for code cells
+  // Monaco editor for code cells — created once, kept alive, readOnly when not editing
   useEffect(() => {
-    if (!isEditing || !isCode || !monaco || !monacoContRef.current) return
+    if (!isCode || !monaco || !monacoContRef.current) return
     if (monacoEdRef.current) return // already created
     const lines = cell.source.split('\n').length
     const height = Math.max(52, lines * 20 + 24)
@@ -933,15 +1000,16 @@ function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, 
       wordWrap: 'on' as const,
       automaticLayout: true,
       scrollBeyondLastLine: false,
+      readOnly: !isEditing,
       padding: { top: 10, bottom: 10 },
       scrollbar: { vertical: 'hidden', horizontal: 'hidden', alwaysConsumeMouseWheel: false },
       overviewRulerLanes: 0,
       glyphMargin: false,
       folding: false,
       renderLineHighlight: 'none' as const,
+      cursorBlinking: 'blink' as const,
     })
     monacoEdRef.current = ed
-    // Auto-resize on content change
     ed.onDidChangeModelContent(() => {
       const val = ed.getValue()
       onChange(val)
@@ -950,13 +1018,29 @@ function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, 
       if (monacoContRef.current) monacoContRef.current.style.height = newH + 'px'
       ed.layout()
     })
-    // Ctrl+Enter → run
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => { onRun() })
-    // Escape → blur
     ed.addCommand(monaco.KeyCode.Escape, () => { onBlur() })
-    ed.focus()
+    // Clicking the editor switches to edit mode
+    ed.onMouseDown(() => { if (!isEditing) { /* parent click handler handles this */ } })
     return () => { ed.dispose(); monacoEdRef.current = null }
-  }, [isEditing, isCode, monaco])
+  }, [isCode, monaco])  // only create once
+
+  // Sync readOnly and focus when isEditing changes
+  useEffect(() => {
+    if (!monacoEdRef.current) return
+    monacoEdRef.current.updateOptions({ readOnly: !isEditing })
+    if (isEditing) {
+      setTimeout(() => monacoEdRef.current?.focus(), 50)
+    }
+  }, [isEditing])
+
+  // Sync value when source changes externally (e.g. cell loaded from storage)
+  useEffect(() => {
+    const ed = monacoEdRef.current
+    if (!ed || isEditing) return
+    const cur = ed.getValue()
+    if (cur !== cell.source) ed.setValue(cell.source)
+  }, [cell.source, isEditing])
 
   useEffect(() => {
     if (isEditing && !isCode && textareaRef.current) {
@@ -1012,15 +1096,18 @@ function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, 
       {/* Cell body */}
       {isCode ? (
         <div>
-          {/* Monaco container — always rendered when editing, hidden otherwise */}
-          <div ref={monacoContRef} style={{ display: isEditing ? 'block' : 'none', minHeight: 52, background: '#1e1e2e' }} />
-          {!isEditing && (
-            <div
-              onClick={onEdit}
-              style={{ padding: '12px 14px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 13, lineHeight: 1.6, color: '#cdd6f4', background: '#1e1e2e', minHeight: 48, cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {cell.source || <span style={{ color: 'rgba(255,255,255,.2)', fontStyle: 'italic' }}>Klikněte pro editaci…</span>}
-            </div>
-          )}
+          {/* Monaco container — always visible, readOnly when not editing */}
+          <div
+            ref={monacoContRef}
+            onClick={onEdit}
+            style={{ minHeight: 52, background: '#1e1e2e', cursor: isEditing ? 'text' : 'pointer' }}
+          >
+            {!monaco && (
+              <div style={{ padding: '12px 14px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 13, lineHeight: 1.6, color: '#cdd6f4', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {cell.source || <span style={{ color: 'rgba(255,255,255,.2)', fontStyle: 'italic' }}>Klikněte pro editaci…</span>}
+              </div>
+            )}
+          </div>
           {/* Outputs */}
           {cell.outputs.length > 0 && (
             <div style={{ borderTop: `1px solid rgba(255,255,255,.07)`, background: '#0d0e14' }}>
