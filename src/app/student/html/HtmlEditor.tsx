@@ -103,20 +103,21 @@ function buildPreview(files: WebFile[], contents: Map<string, string>): string {
     )
   }
 
-  // Inline all images as base64 data URLs
-  // Matches src="img/photo.png", src="photo.png", src='./img/photo.png' etc.
+  // Inline images: replace src references with base64 data URLs
   for (const f of files.filter(f => f.type === 'img')) {
     const dataUrl = contents.get(f.path)
     if (!dataUrl || !dataUrl.startsWith('data:')) continue
-    const refPaths = [
-      reEsc(f.name),
-      f.folder ? reEsc(f.folder + '/' + f.name) : null,
-      f.folder ? reEsc('./' + f.folder + '/' + f.name) : null,
-    ].filter(Boolean).join('|')
-    html = html.replace(
-      new RegExp(`(src=["']?)(?:[^"']*[\\/])?(?:${refPaths})(["']?)`, 'gi'),
-      `$1${dataUrl}$2`
-    )
+    const refs: string[] = [f.name]
+    if (f.folder) {
+      refs.push(f.folder + '/' + f.name)
+      refs.push('./' + f.folder + '/' + f.name)
+    }
+    for (const ref of refs) {
+      const esc = reEsc(ref)
+      // Use string concat to avoid template literal escaping issues
+      html = html.replace(new RegExp('src="' + esc + '"', 'gi'), 'src="' + dataUrl + '"')
+      html = html.replace(new RegExp("src='" + esc + "'", 'gi'), 'src="' + dataUrl + '"')
+    }
   }
 
   return html
@@ -138,6 +139,9 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   const [activeFile, setActiveFile]     = useState<WebFile | null>(null)
   const [splitFile, setSplitFile]       = useState<WebFile | null>(null)
   const [splitView, setSplitView]       = useState(false)
+  const [splitRatio, setSplitRatio]     = useState(50)
+  const splitDragRef   = useRef<{ startX: number; startRatio: number } | null>(null)
+  const editorAreaRef  = useRef<HTMLDivElement>(null)
   const [isDirty, setIsDirty]           = useState(false)
   const contentsRef      = useRef<Map<string, string>>(new Map())
   const livePreviewRef   = useRef(true)    // mirror of livePreview for closures
@@ -157,6 +161,8 @@ export default function HtmlEditor({ profile }: { profile: any }) {
 
   // ── Preview ───────────────────────────────────────────────────────────────
   const previewRef          = useRef<HTMLIFrameElement>(null)
+  const [previewHeight, setPreviewHeight] = useState(280)
+  const previewDragRef = useRef<{ startY: number; startH: number } | null>(null)
   const previewTimer        = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -624,9 +630,11 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         if (!res.ok) throw new Error('fetch failed')
         const code = await res.text()
         // eslint-disable-next-line no-new-func
-        new Function(code)()
-      } catch {
-        flash('❌ JSZip se nepodařilo načíst'); return
+        // eslint-disable-next-line no-new-func
+        const f = new Function('self','window', code + ';return typeof JSZip!=="undefined"?JSZip:null')
+        const cls = f(w, w); if (cls) w.JSZip = cls
+      } catch (e: any) {
+        flash('❌ JSZip chyba: ' + (e?.message ?? '')); return
       }
     }
     if (!w.JSZip) { flash('❌ JSZip nedostupný'); return }
@@ -711,6 +719,22 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     return m
   }
   const folders = activeProject ? [...new Set(activeProject.files.map(f => f.folder))].sort() : []
+
+  function onSplitDividerDown(e: React.MouseEvent) {
+    e.preventDefault()
+    const areaW = editorAreaRef.current?.clientWidth ?? 800
+    splitDragRef.current = { startX: e.clientX, startRatio: splitRatio }
+    const mv = (ev: MouseEvent) => { if (!splitDragRef.current) return; const r = Math.min(80,Math.max(20, splitDragRef.current.startRatio+((ev.clientX-splitDragRef.current.startX)/areaW)*100)); setSplitRatio(r); requestAnimationFrame(()=>{ editorRef.current?.layout(); splitEditorRef.current?.layout() }) }
+    const up = () => { splitDragRef.current=null; window.removeEventListener('mousemove',mv); window.removeEventListener('mouseup',up) }
+    window.addEventListener('mousemove',mv); window.addEventListener('mouseup',up)
+  }
+  function onPreviewDividerDown(e: React.MouseEvent) {
+    e.preventDefault()
+    previewDragRef.current = { startY: e.clientY, startH: previewHeight }
+    const mv = (ev: MouseEvent) => { if (!previewDragRef.current) return; setPreviewHeight(Math.min(700,Math.max(100, previewDragRef.current.startH+(previewDragRef.current.startY-ev.clientY)))) }
+    const up = () => { previewDragRef.current=null; window.removeEventListener('mousemove',mv); window.removeEventListener('mouseup',up) }
+    window.addEventListener('mousemove',mv); window.addEventListener('mouseup',up)
+  }
 
   return (
     <DarkLayout profile={profile} activeRoute="/student/html">
@@ -964,9 +988,9 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           </div>
 
           {/* Editor area */}
-          <div style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden', width: '100%', boxSizing: 'border-box' as const }}>
+          <div ref={editorAreaRef} style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden', width: '100%', boxSizing: 'border-box' as const }}>
             {/* Primary editor */}
-            <div style={{ display: 'flex', flexDirection: 'column', width: splitView ? '50%' : '100%', flexShrink: 0, overflow: 'hidden', borderRight: splitView ? `1px solid rgba(255,255,255,.1)` : 'none' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', width: splitView ? `${splitRatio}%` : '100%', flexShrink: 0, overflow: 'hidden' }}>
               {activeFile?.type === 'img'
                 ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#252526', flexDirection: 'column', gap: 12 }}>
                     {contents.get(activeFile.path)
@@ -977,13 +1001,20 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                 : <div ref={editorContainerRef} style={{ flex: 1, overflow: 'hidden' }} />
               }
             </div>
+            {/* Split divider */}
+            {splitView && (
+              <div onMouseDown={onSplitDividerDown}
+                style={{ width: 5, flexShrink: 0, cursor: 'col-resize', background: 'rgba(255,255,255,.07)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = accent+'80')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.07)')} />
+            )}
             {/* Split editor */}
             {splitView && (
-              <div style={{ display: 'flex', flexDirection: 'column', width: '50%', flexShrink: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
                 {/* Split header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#252526', borderBottom: '1px solid rgba(255,255,255,.08)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#252526', borderBottom: '1px solid rgba(255,255,255,.08)', borderLeft: '1px solid rgba(255,255,255,.06)', flexShrink: 0 }}>
                   {splitFile
-                    ? <><span style={{ fontSize: 12 }}>{splitFile.type === 'img' ? '🖼' : ''}</span>{splitFile.type !== 'img' && <img src={`/icons/${splitFile.type}.png`} alt={splitFile.type} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
+                    ? <><img src={`/icons/${splitFile.type}.png`} alt={splitFile.type} style={{ width: 13, height: 13, objectFit: 'contain', flexShrink: 0 }} onError={e=>{(e.target as HTMLImageElement).style.display='none'}} />
                        <span style={{ fontSize: 11, color: D.txtSec }}>{splitFile.name}</span></>
                     : <span style={{ fontSize: 11, color: D.txtSec }}>Druhý editor</span>
                   }
@@ -992,13 +1023,20 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                     Otevřít soubor
                   </button>
                 </div>
-                <div ref={splitContainerRef} style={{ flex: 1, overflow: 'hidden' }} />
+                <div ref={splitContainerRef} style={{ height: 'calc(100% - 30px)', overflow: 'hidden' }} />
               </div>
             )}
           </div>
 
+          {/* Preview resize handle */}
+          <div onMouseDown={onPreviewDividerDown} title="Táhněte pro změnu výšky"
+            style={{ height: 7, cursor: 'ns-resize', background: 'rgba(255,255,255,.03)', border: `1px solid ${D.border}`, borderTop: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.background = accent+'22')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.03)')}>
+            <div style={{ width: 28, height: 2, borderRadius: 2, background: 'rgba(255,255,255,.15)' }} />
+          </div>
           {/* Preview */}
-          <div style={{ height: '280px', display: 'flex', flexDirection: 'column', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden' }}>
+          <div style={{ height: `${previewHeight}px`, display: 'flex', flexDirection: 'column', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: D.bgCard, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 5 }}>
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF5F56' }} />
