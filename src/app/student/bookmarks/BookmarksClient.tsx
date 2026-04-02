@@ -5,17 +5,20 @@ import { createClient } from '@/lib/supabase/client'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-interface Bookmark {
+interface NormalizedBookmark {
   lesson_id: string
   updated_at: string
-  lessons: {
-    id: string
-    title: string
-    content?: string
-    module_id: string
-    position: number
-    modules: { id: string; title: string; tag?: string; color?: string }
-  }
+  lesson: { id: string; title: string; content?: string; module_id: string; position: number }
+  module: { id: string; title: string; tag?: string; color?: string }
+}
+type Bookmark = NormalizedBookmark  // alias
+
+function normalize(b: any): NormalizedBookmark | null {
+  const lesson = Array.isArray(b.lessons) ? b.lessons[0] : b.lessons
+  if (!lesson) return null
+  const mod = Array.isArray(lesson.modules) ? lesson.modules[0] : lesson.modules
+  if (!mod) return null
+  return { lesson_id: b.lesson_id, updated_at: b.updated_at, lesson, module: mod }
 }
 
 function fmtDate(iso: string) {
@@ -48,7 +51,7 @@ export default function BookmarksClient({ profile, bookmarks: initial }: { profi
   const supabase = createClient()
   const accent   = profile?.accent_color ?? '#7C3AED'
 
-  const [bookmarks, setBookmarks]   = useState<Bookmark[]>(initial)
+  const [bookmarks, setBookmarks]   = useState<NormalizedBookmark[]>((initial as any[]).map(normalize).filter(Boolean) as NormalizedBookmark[])
   const [removing, setRemoving]     = useState<Set<string>>(new Set())
   const [search, setSearch]         = useState('')
   const [filterModule, setFilterModule] = useState<string>('all')
@@ -73,28 +76,27 @@ export default function BookmarksClient({ profile, bookmarks: initial }: { profi
   // Unique modules for filter
   const modules = useMemo(() => {
     const map = new Map<string, string>()
-    bookmarks.forEach(b => { if (b.lessons?.modules) map.set(b.lessons.modules.id, b.lessons.modules.title) })
+    bookmarks.forEach(b => map.set(b.module.id, b.module.title))
     return [...map.entries()]
   }, [bookmarks])
 
   // Filtered & searched bookmarks
   const filtered = useMemo(() => {
-    let items = bookmarks.filter(b => b.lessons)
-    if (filterModule !== 'all') items = items.filter(b => b.lessons.modules.id === filterModule)
+    let items = [...bookmarks]
+    if (filterModule !== 'all') items = items.filter(b => b.module.id === filterModule)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
-      items = items.filter(b => b.lessons.title.toLowerCase().includes(q) || b.lessons.modules.title.toLowerCase().includes(q))
+      items = items.filter(b => b.lesson.title.toLowerCase().includes(q) || b.module.title.toLowerCase().includes(q))
     }
     return items
   }, [bookmarks, filterModule, search])
 
   // Group by module
   const grouped = useMemo(() => {
-    const map = new Map<string, { module: { id: string; title: string; tag?: string; color?: string }; items: Bookmark[] }>()
+    const map = new Map<string, { module: { id: string; title: string; tag?: string; color?: string }; items: NormalizedBookmark[] }>()
     filtered.forEach(b => {
-      const mod = b.lessons.modules
-      if (!map.has(mod.id)) map.set(mod.id, { module: mod, items: [] })
-      map.get(mod.id)!.items.push(b)
+      if (!map.has(b.module.id)) map.set(b.module.id, { module: b.module, items: [] })
+      map.get(b.module.id)!.items.push(b)
     })
     return [...map.values()]
   }, [filtered])
@@ -162,7 +164,7 @@ export default function BookmarksClient({ profile, bookmarks: initial }: { profi
                     {opt.title}
                     {opt.id !== 'all' && (
                       <span style={{ marginLeft: 5, fontSize: 10, padding: '1px 5px', background: active ? accent + '30' : 'rgba(255,255,255,.08)', borderRadius: 10, color: 'inherit' }}>
-                        {bookmarks.filter(b => b.lessons.modules.id === opt.id).length}
+                        {bookmarks.filter(b => b.module.id === opt.id).length}
                       </span>
                     )}
                   </button>
@@ -198,7 +200,7 @@ export default function BookmarksClient({ profile, bookmarks: initial }: { profi
                 {/* Bookmark cards */}
                 <div style={{ display: 'grid', gap: 8 }}>
                   {items.map(b => {
-                    const lesson = b.lessons
+                    const lesson = b.lesson
                     const isRemoving = removing.has(b.lesson_id)
                     const ex = excerpt(lesson.content)
                     return (

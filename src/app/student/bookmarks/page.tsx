@@ -20,5 +20,5 @@ export default async function BookmarksPage() {
     .eq('status', 'bookmark')
     .order('updated_at', { ascending: false })
 
-  return <BookmarksClient profile={profile} bookmarks={bookmarks ?? []} />
+  return <BookmarksClient profile={profile} bookmarks={(bookmarks ?? []) as any[]} />
 }
