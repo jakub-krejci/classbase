@@ -52,6 +52,17 @@ function SideIcon({ icon, active, href, label, accent }: { icon: string; active?
   )
 }
 
+function SideIconImg({ src, href, label, accent }: { src: string; href: string; label: string; accent: string }) {
+  return (
+    <a href={href} title={label}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: D.radiusSm, background: 'transparent', textDecoration: 'none', transition: 'all .2s', flexShrink: 0 }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.07)'; const img = (e.currentTarget as HTMLElement).querySelector('img'); if (img) img.style.filter = 'brightness(1)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; const img = (e.currentTarget as HTMLElement).querySelector('img'); if (img) img.style.filter = 'brightness(0.55)' }}>
+      <img src={src} alt={label} style={{ width: 22, height: 22, objectFit: 'contain', filter: 'brightness(0.55)', transition: 'filter .2s' }} />
+    </a>
+  )
+}
+
 function SectionLabel({ children }: { children: string }) {
   return <div style={{ fontSize: 11, color: D.txtSec, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.07em', marginBottom: 10 }}>{children}</div>
 }
@@ -288,12 +299,20 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
             <img src="/logo_male.png" alt="ClassBase" style={{ width: 36, height: 36, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none'; (e.target as HTMLImageElement).insertAdjacentHTML('afterend','<div style="width:36px;height:36px;border-radius:10px;background:'+accent+';display:flex;align-items:center;justify-content:center;font-size:18px">📚</div>') }} />
           </a>
           {/* Nav icons */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflowY: 'auto' }}>
             <SideIcon icon="🏠" active href="/student/dashboard" label="Domů" accent={accent} />
             <SideIcon icon="📖" href="/student/modules" label="Moduly" accent={accent} />
             <SideIcon icon="🧪" href="/student/tests" label="Testy" accent={accent} />
             <SideIcon icon="📊" href="/student/progress" label="Pokrok" accent={accent} />
             <SideIcon icon="🔖" href="/student/bookmarks" label="Záložky" accent={accent} />
+            {/* Divider */}
+            <div style={{ height: 1, background: 'rgba(255,255,255,.07)', margin: '4px 8px', flexShrink: 0 }} />
+            {/* Editors */}
+            <SideIconImg src="/icons/python.png" href="/student/python" label="Python editor" accent={accent} />
+            <SideIconImg src="/icons/html.png" href="/student/html" label="HTML editor" accent={accent} />
+            <SideIconImg src="/icons/jupyter.png" href="/student/jupyter" label="Jupyter Notebook" accent={accent} />
+            <SideIconImg src="/icons/database.png" href="/student/sql" label="SQL editor" accent={accent} />
+            <SideIcon icon="📁" href="/student/files" label="Moje soubory" accent={accent} />
           </div>
           {/* Bottom: logout only */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
