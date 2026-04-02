@@ -42,12 +42,28 @@ export function ProgressBar({ pct, color = 'var(--accent)', height = 5 }: { pct:
 function SideIcon({ icon, active, href, label, accent, isImg }: { icon: string; active?: boolean; href: string; label: string; accent: string; isImg?: boolean }) {
   const bg    = active ? accent + '25' : 'transparent'
   const color = active ? accent : D.txtSec
+  // For image icons: active = full colour, inactive = 60% brightness, hover = full colour
+  const imgFilter = active ? 'brightness(1)' : 'brightness(0.6)'
   return (
     <a href={href} title={label}
       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: D.radiusSm, background: bg, color, textDecoration: 'none', fontSize: 18, transition: 'all .2s', flexShrink: 0 }}
-      onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.07)'; (e.currentTarget as HTMLElement).style.color = '#fff' } }}
-      onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = D.txtSec } }}>
-      {isImg ? <img src={icon} alt={label} style={{ width: 22, height: 22, objectFit: 'contain', filter: 'brightness(0) invert(0.6)' }} /> : icon}
+      onMouseEnter={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.07)'
+          const img = (e.currentTarget as HTMLElement).querySelector('img')
+          if (img) img.style.filter = 'brightness(1)'
+        }
+      }}
+      onMouseLeave={e => {
+        if (!active) {
+          (e.currentTarget as HTMLElement).style.background = 'transparent'
+          const img = (e.currentTarget as HTMLElement).querySelector('img')
+          if (img) img.style.filter = imgFilter
+        }
+      }}>
+      {isImg
+        ? <img src={icon} alt={label} style={{ width: 22, height: 22, objectFit: 'contain', filter: imgFilter, transition: 'filter .2s' }} />
+        : icon}
     </a>
   )
 }
@@ -65,16 +81,16 @@ export function DarkLayout({ profile, activeRoute, children, wide = false }: {
   }
 
   const navItems = [
-    { icon: '🏠', label: 'Domů',    href: '/student/dashboard' },
-    { icon: '📖', label: 'Moduly',  href: '/student/modules' },
-    { icon: '🧪', label: 'Testy',   href: '/student/tests' },
-    { icon: '📊', label: 'Pokrok',  href: '/student/progress' },
-    { icon: '🔖', label: 'Záložky', href: '/student/bookmarks' },
-    { icon: '🐍', label: 'Python',  href: '/student/python' },
-    { icon: '🌐', label: 'HTML',    href: '/student/html' },
-    { icon: '/icons/jupyter.png', label: 'Jupyter', href: '/student/jupyter' },
-    { icon: '/icons/database.png', label: 'SQL', href: '/student/sql' },
-    { icon: '📁', label: 'Moje soubory', href: '/student/files' },
+    { icon: '🏠',                    label: 'Domů',         href: '/student/dashboard' },
+    { icon: '📖',                    label: 'Moduly',       href: '/student/modules' },
+    { icon: '🧪',                    label: 'Testy',        href: '/student/tests' },
+    { icon: '📊',                    label: 'Pokrok',       href: '/student/progress' },
+    { icon: '🔖',                    label: 'Záložky',      href: '/student/bookmarks' },
+    { icon: '/icons/python.png',     label: 'Python',       href: '/student/python' },
+    { icon: '/icons/html.png',       label: 'HTML',         href: '/student/html' },
+    { icon: '/icons/jupyter.png',    label: 'Jupyter',      href: '/student/jupyter' },
+    { icon: '/icons/database.png',   label: 'SQL',          href: '/student/sql' },
+    { icon: '📁',                    label: 'Moje soubory', href: '/student/files' },
   ]
 
   const initials = (profile?.full_name || '?').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
@@ -106,7 +122,8 @@ export function DarkLayout({ profile, activeRoute, children, wide = false }: {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
             {navItems.map(({ icon, label, href }) => (
               <SideIcon key={href} icon={icon} label={label} href={href} accent={accent}
-                active={href === activeRoute || (activeRoute === href)} />
+                active={href === activeRoute}
+                isImg={icon.startsWith('/')} />
             ))}
           </div>
           <button onClick={logout} title="Odhlásit se" className="icon-btn">↩</button>

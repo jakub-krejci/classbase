@@ -94,6 +94,8 @@ export default function FilesManager({ profile }: { profile: any }) {
   const [projects, setProjects]           = useState<Project[]>([])
   const [loading, setLoading]             = useState(true)
   const [search, setSearch]               = useState('')
+  const [filterEditor, setFilterEditor]   = useState<EditorType | 'all'>('all')
+  const [sortBy, setSortBy]               = useState<'name' | 'size' | 'date'>('name')
   const [expandedProj, setExpandedProj]   = useState<Set<string>>(new Set())
   const [recentPaths, setRecentPaths]     = useState<Record<string, string>>({})
   const [totalSize, setTotalSize]         = useState(0)
@@ -237,14 +239,21 @@ export default function FilesManager({ profile }: { profile: any }) {
     await loadAll()
   }
 
-  // ── Filtered files for search ───────────────────────────────────────────────
+  // ── Filtered & sorted projects ──────────────────────────────────────────────
   const q = search.trim().toLowerCase()
-  const filteredProjects = q
-    ? projects.map(p => ({ ...p, files: p.files.filter(f => f.name.toLowerCase().includes(q) || f.project.toLowerCase().includes(q)) })).filter(p => p.files.length > 0)
-    : projects
+  const filteredProjects = projects
+    .filter(p => filterEditor === 'all' || p.editor === filterEditor)
+    .map(p => ({ ...p, files: q ? p.files.filter(f => f.name.toLowerCase().includes(q) || f.project.toLowerCase().includes(q)) : p.files }))
+    .filter(p => !q || p.files.length > 0)
+    .sort((a, b) => {
+      if (sortBy === 'size') return b.totalSize - a.totalSize
+      if (sortBy === 'date') return (b.files[0]?.updatedAt ?? '').localeCompare(a.files[0]?.updatedAt ?? '')
+      return a.name.localeCompare(b.name)
+    })
 
-  // Group by section
-  const bySection = SECTIONS.map(sec => ({
+  // Group by section (respects filterEditor)
+  const activeSections = filterEditor === 'all' ? SECTIONS : SECTIONS.filter(s => s.id === filterEditor)
+  const bySection = activeSections.map(sec => ({
     section: sec,
     projects: filteredProjects.filter(p => p.editor === sec.id),
     totalSize: sectionSizes[sec.id],
@@ -414,6 +423,38 @@ export default function FilesManager({ profile }: { profile: any }) {
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: sec.color, flexShrink: 0 }} />
                     <span style={{ fontSize: 10, color: D.txtSec }}>{sec.label.split(' ')[0]} · {fmtSize(sectionSizes[sec.id]) || '0 B'}</span>
                   </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Filter & sort bar ── */}
+          {!loading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              {/* Editor filter chips */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+                {([{ id: 'all' as const, label: 'Vše', icon: null }] as any[]).concat(SECTIONS.map(s => ({ id: s.id, label: s.label.split(' ')[0], icon: s.icon, color: s.color }))).map(opt => (
+                  <button key={opt.id} onClick={() => setFilterEditor(opt.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 20, border: `1px solid ${filterEditor === opt.id ? (opt.color ?? accent) + '70' : D.border}`, background: filterEditor === opt.id ? (opt.color ?? accent) + '18' : 'transparent', color: filterEditor === opt.id ? (opt.color ?? accent) : D.txtSec, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', fontWeight: filterEditor === opt.id ? 700 : 400, transition: 'all .15s' }}>
+                    {opt.icon && <img src={opt.icon} alt="" style={{ width: 13, height: 13, objectFit: 'contain', filter: filterEditor === opt.id ? 'none' : 'brightness(.6)' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />}
+                    {!opt.icon && opt.id === 'all' && <span style={{ fontSize: 12 }}>📂</span>}
+                    {opt.label}
+                    {opt.id !== 'all' && (
+                      <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 10, background: filterEditor === opt.id ? (opt.color ?? accent) + '30' : 'rgba(255,255,255,.07)', color: 'inherit' }}>
+                        {projects.filter(p => p.editor === opt.id).length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {/* Sort */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 11, color: D.txtSec }}>Řadit:</span>
+                {(['name', 'size', 'date'] as const).map(opt => (
+                  <button key={opt} onClick={() => setSortBy(opt)}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${sortBy === opt ? accent+'50' : D.border}`, background: sortBy === opt ? accent+'15' : 'transparent', color: sortBy === opt ? accent : D.txtSec, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: sortBy === opt ? 700 : 400, transition: 'all .15s' }}>
+                    {opt === 'name' ? 'A–Z' : opt === 'size' ? 'Velikost' : 'Datum'}
+                  </button>
                 ))}
               </div>
             </div>
