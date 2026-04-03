@@ -1030,17 +1030,21 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .lv-ai-btn:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(124,58,237,.65); }
         .lv-ai-btn.active { background: linear-gradient(135deg,#4f46e5,#7c3aed); }
 
-        /* ── Left ToC mini sidebar ── */
-        .lv-toc-sidebar {
-          position: sticky; top: 24px; width: 4px; overflow: hidden;
-          padding: 20px 0; transition: width .25s ease; cursor: pointer;
-        }
-        .lv-toc-sidebar:hover { width: 200px; overflow: visible; }
-        .lv-toc-sidebar::before {
-          content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-          background: rgba(255,255,255,.08); border-radius: 2px;
-        }
-        div:hover > .lv-toc-sidebar { width: 200px; }
+        /* ── Progress dots (left of main content) ── */
+        .lv-dots { position:sticky; top:80px; width:20px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:0; padding-top:4px; }
+        .lv-dot { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.12); cursor:pointer; flex-shrink:0; transition:all .2s; position:relative; }
+        .lv-dot.h2 { width:5px; height:5px; }
+        .lv-dot.h3 { width:4px; height:4px; }
+        .lv-dot.active { background:var(--accent); box-shadow:0 0 6px var(--accent); transform:scale(1.3); }
+        .lv-dot:hover { background:rgba(255,255,255,.5); transform:scale(1.4); }
+        .lv-dot-line { width:1px; height:14px; background:rgba(255,255,255,.07); flex-shrink:0; }
+        /* Tooltip on hover */
+        .lv-dot::after { content:attr(data-title); position:absolute; left:14px; top:50%; transform:translateY(-50%); white-space:nowrap; background:#14171F; color:rgba(255,255,255,.75); font-size:11px; padding:4px 9px; border-radius:7px; border:1px solid rgba(255,255,255,.1); pointer-events:none; opacity:0; transition:opacity .15s; z-index:20; font-family:'DM Sans',system-ui,sans-serif; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+        .lv-dot:hover::after { opacity:1; }
+
+        /* ── Right panel ToC section ── */
+        .lv-rp-toc-item { display:block; width:100%; text-align:left; border:none; background:none; cursor:pointer; font-family:inherit; transition:all .12s; }
+        .lv-rp-toc-item:hover { background:rgba(255,255,255,.04) !important; }
 
         /* ── AI Tutor slide panel ── */
         .cb-ai-panel { position:fixed; bottom:60px; right:88px; width:380px; height:520px;
@@ -1122,20 +1126,24 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
       {/* All inside fullContent flex container from DarkLayout */}
       <div style={{ display:'flex', flex:1, minHeight:0, overflow:'hidden', width:'100%' }}>
 
-      {/* ── ToC mini sidebar (left of main) ── */}
+      {/* ── Progress dots (left of main, sticky) ── */}
       {tocItems.length > 1 && (
-        <div style={{ width:4, flexShrink:0, background:'transparent', position:'relative' }}>
-          {/* Hover expand to full ToC */}
-          <div className="lv-toc-sidebar">
-            <div style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,.3)', textTransform:'uppercase', letterSpacing:'.07em', padding:'0 0 10px', marginBottom:4 }}>Obsah</div>
-            {tocItems.map(item => (
-              <button key={item.id}
-                onClick={() => { const el=document.getElementById(item.id); const main=document.querySelector('.lv-main') as HTMLElement; if(el&&main) main.scrollTo({top:el.offsetTop-40,behavior:'smooth'}); setTocActiveId(item.id) }}
-                style={{ display:'block', width:'100%', textAlign:'left', padding:item.level===1?'4px 0':item.level===2?'3px 0 3px 10px':'3px 0 3px 18px', fontSize:11, fontWeight:tocActiveId===item.id?700:400, color:tocActiveId===item.id?'var(--accent)':'rgba(255,255,255,.45)', background:'none', border:'none', borderLeft:`2px solid ${tocActiveId===item.id?'var(--accent)':'transparent'}`, cursor:'pointer', lineHeight:1.5, fontFamily:'inherit', paddingLeft: item.level===1?0:item.level===2?10:18 }}>
-                {item.text}
-              </button>
-            ))}
-          </div>
+        <div className="lv-dots">
+          {tocItems.map((item, i) => (
+            <React.Fragment key={item.id}>
+              {i > 0 && <div className="lv-dot-line" />}
+              <div
+                className={`lv-dot${item.level===2?' h2':item.level===3?' h3':''}${tocActiveId===item.id?' active':''}`}
+                data-title={item.text}
+                onClick={() => {
+                  const el = document.getElementById(item.id)
+                  const main = document.querySelector('.lv-main') as HTMLElement
+                  if (el && main) main.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' })
+                  setTocActiveId(item.id)
+                }}
+              />
+            </React.Fragment>
+          ))}
         </div>
       )}
 
@@ -1382,6 +1390,27 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
             )
           })}
         </div>
+
+        {/* ToC in right panel — always visible when lesson has headings */}
+        {tocItems.length > 1 && (
+          <div style={{ borderTop:`1px solid ${D.border}`, flexShrink:0, maxHeight:220, overflowY:'auto' }}>
+            <div style={{ padding:'10px 16px 6px', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.3)', textTransform:'uppercase', letterSpacing:'.07em', display:'flex', alignItems:'center', gap:6 }}>
+              <span>≡</span> Obsah lekce
+            </div>
+            {tocItems.map(item => (
+              <button key={item.id} className="lv-rp-toc-item"
+                onClick={() => {
+                  const el = document.getElementById(item.id)
+                  const main = document.querySelector('.lv-main') as HTMLElement
+                  if (el && main) main.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' })
+                  setTocActiveId(item.id)
+                }}
+                style={{ padding: item.level===1 ? '5px 16px' : item.level===2 ? '4px 16px 4px 26px' : '3px 16px 3px 36px', fontSize:11, fontWeight: tocActiveId===item.id ? 600 : 400, color: tocActiveId===item.id ? 'var(--accent)' : 'rgba(255,255,255,.45)', borderLeft:`2px solid ${tocActiveId===item.id ? 'var(--accent)' : 'transparent'}` }}>
+                {item.text}
+              </button>
+            ))}
+          </div>
+        )}
 
       </div>
 
