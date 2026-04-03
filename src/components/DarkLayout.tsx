@@ -68,8 +68,8 @@ function SideIcon({ icon, active, href, label, accent, isImg }: { icon: string; 
   )
 }
 
-export function DarkLayout({ profile, activeRoute, children, wide = false }: {
-  profile: any; activeRoute: string; children: React.ReactNode; wide?: boolean
+export function DarkLayout({ profile, activeRoute, children, wide = false, fullContent = false }: {
+  profile: any; activeRoute: string; children: React.ReactNode; wide?: boolean; fullContent?: boolean
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -148,7 +148,7 @@ export function DarkLayout({ profile, activeRoute, children, wide = false }: {
           </div>
 
           {/* Content */}
-          <div style={{ flex: 1, padding: '28px', maxWidth: wide ? '100%' : 1000, width: '100%', margin: '0 auto', alignSelf: wide ? 'stretch' : undefined }}>
+          <div style={{ flex: 1, display: fullContent ? 'flex' : 'block', flexDirection: 'column', padding: fullContent ? 0 : '28px', maxWidth: fullContent ? 'none' : (wide ? '100%' : 1000), width: '100%', margin: fullContent ? 0 : '0 auto', alignSelf: (wide || fullContent) ? 'stretch' : undefined, minWidth: 0, overflow: fullContent ? 'hidden' : undefined }}>
             {children}
           </div>
         </div>
