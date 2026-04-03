@@ -482,11 +482,11 @@ const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
 })
 
 // ── Main viewer ───────────────────────────────────────────────────────────────
-export default function LessonViewer({ lesson, moduleId, studentId, completionStatus, allLessons, completedIds, authorName, subLessons = [] }: {
+export default function LessonViewer({ lesson, moduleId, studentId, completionStatus, allLessons, completedIds, authorName, subLessons = [], profile }: {
   lesson: any; moduleId: string; studentId: string
   completionStatus: 'completed' | 'bookmark' | 'none'
   allLessons: any[]; completedIds: string[]; authorName: string
-  subLessons?: any[]
+  subLessons?: any[]; profile?: any
 }) {
   const supabase = createClient()
   const isMobile = useIsMobile()
@@ -746,7 +746,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }
 
   return (
-    <DarkLayout profile={null} activeRoute="/student/modules" fullContent>
+    <DarkLayout profile={profile} activeRoute="/student/modules" fullContent>
     <style>{PYTHON_CSS}{`
         /* ─────────────────────────────────────────────────────────────
            LESSON CONTENT TYPOGRAPHY
@@ -1008,13 +1008,47 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .cb-float-btn:hover { background:rgba(255,255,255,.14)!important; color:#fff!important; }
         .cb-float-btn.ai-active { background:rgba(139,92,246,.2)!important; border-color:rgba(139,92,246,.4)!important; color:#C4B5FD!important; }
 
+        /* ── Fixed bottom footer (progress actions) ── */
+        .lv-footer {
+          position: fixed; bottom: 0; left: 64px; right: 272px;
+          height: 56px; background: rgba(9,11,16,.92); backdrop-filter: blur(12px);
+          border-top: 1px solid rgba(255,255,255,.08); z-index: 50;
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          padding: 0 24px;
+        }
+
+        /* ── Fixed AI Tutor button (bottom right, offset from right panel) ── */
+        .lv-ai-btn {
+          position: fixed; bottom: 70px; right: 288px; z-index: 60;
+          width: 48px; height: 48px; border-radius: 50%;
+          background: linear-gradient(135deg,#7c3aed,#4f46e5);
+          border: none; cursor: pointer; font-size: 22px;
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 4px 20px rgba(124,58,237,.5);
+          transition: transform .15s, box-shadow .15s;
+        }
+        .lv-ai-btn:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(124,58,237,.65); }
+        .lv-ai-btn.active { background: linear-gradient(135deg,#4f46e5,#7c3aed); }
+
+        /* ── Left ToC mini sidebar ── */
+        .lv-toc-sidebar {
+          position: sticky; top: 24px; width: 4px; overflow: hidden;
+          padding: 20px 0; transition: width .25s ease; cursor: pointer;
+        }
+        .lv-toc-sidebar:hover { width: 200px; overflow: visible; }
+        .lv-toc-sidebar::before {
+          content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+          background: rgba(255,255,255,.08); border-radius: 2px;
+        }
+        div:hover > .lv-toc-sidebar { width: 200px; }
+
         /* ── AI Tutor slide panel ── */
-        .cb-ai-panel { position:fixed; bottom:0; right:272px; width:380px; height:520px;
+        .cb-ai-panel { position:fixed; bottom:60px; right:88px; width:380px; height:520px;
           background:#0D0F16; border:1px solid rgba(255,255,255,.08); border-bottom:none;
-          border-radius:16px 16px 0 0; display:flex; flex-direction:column;
+          border-radius:16px; display:flex; flex-direction:column;
           box-shadow:0 -8px 40px rgba(0,0,0,.6); z-index:100;
-          transform:translateY(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow:hidden; }
-        .cb-ai-panel.open { transform:translateY(0); }
+          transform:scale(.9); opacity:0; pointer-events:none; transition:all .25s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+        .cb-ai-panel.open { transform:scale(1); opacity:1; pointer-events:auto; }
 
         /* First paragraph dark */
         .lesson-content > p:first-of-type { font-size:1.05em; color:#CBD5E1; line-height:1.9; }
@@ -1084,10 +1118,29 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
 
       {/* ── New layout: flex row with scrollable main + sticky right panel ── */}
-      <div style={{ display:'flex', flex:1, minHeight:0, overflow:'hidden' }}>
+      {/* ── Three-column: ToC sidebar | main | right panel ── */}
+      {/* All inside fullContent flex container from DarkLayout */}
+      <div style={{ display:'flex', flex:1, minHeight:0, overflow:'hidden', width:'100%' }}>
 
-      {/* Main content — scrollable */}
-      <div className="lv-main" style={{ flex:1, minWidth:0, overflowY:'auto', padding:'24px 28px 40px' }}>
+      {/* ── ToC mini sidebar (left of main) ── */}
+      {tocItems.length > 1 && (
+        <div style={{ width:4, flexShrink:0, background:'transparent', position:'relative' }}>
+          {/* Hover expand to full ToC */}
+          <div className="lv-toc-sidebar">
+            <div style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,.3)', textTransform:'uppercase', letterSpacing:'.07em', padding:'0 0 10px', marginBottom:4 }}>Obsah</div>
+            {tocItems.map(item => (
+              <button key={item.id}
+                onClick={() => { const el=document.getElementById(item.id); const main=document.querySelector('.lv-main') as HTMLElement; if(el&&main) main.scrollTo({top:el.offsetTop-40,behavior:'smooth'}); setTocActiveId(item.id) }}
+                style={{ display:'block', width:'100%', textAlign:'left', padding:item.level===1?'4px 0':item.level===2?'3px 0 3px 10px':'3px 0 3px 18px', fontSize:11, fontWeight:tocActiveId===item.id?700:400, color:tocActiveId===item.id?'var(--accent)':'rgba(255,255,255,.45)', background:'none', border:'none', borderLeft:`2px solid ${tocActiveId===item.id?'var(--accent)':'transparent'}`, cursor:'pointer', lineHeight:1.5, fontFamily:'inherit', paddingLeft: item.level===1?0:item.level===2?10:18 }}>
+                {item.text}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Main content (scrollable) ── */}
+      <div className="lv-main" style={{ flex:1, minWidth:0, overflowY:'auto', padding:'24px 28px 100px' }}>
         {/* Breadcrumb */}
         <div style={{ fontSize:12, color:D.txtSec, marginBottom:14, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
           <a href="/student/modules" style={{ color:D.txtSec, textDecoration:'none' }}>Moduly</a>
@@ -1296,20 +1349,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div style={{ fontSize:11, color:D.txtSec, marginTop:2 }}>{topLevelLessons.length} lekcí</div>
         </div>
 
-        {/* Progress actions — always visible, right below header */}
-        <div style={{ padding:'10px 16px', borderBottom:`1px solid ${D.border}`, flexShrink:0, display:'flex', gap:6 }}>
-          <button onClick={() => setProgress(status==='completed'?'none':'completed')} disabled={saving}
-            style={{ flex:1, padding:'8px 6px', background:status==='completed'?'rgba(34,197,94,.15)':'var(--accent)', color:status==='completed'?'#22C55E':'#fff', border:`1px solid ${status==='completed'?'rgba(34,197,94,.3)':'transparent'}`, borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textAlign:'center' as const }}>
-            {status==='completed' ? '✓ Hotovo' : 'Dokončit'}
-          </button>
-          <button onClick={() => setProgress(status==='bookmark'?'none':'bookmark')} disabled={saving}
-            title={status==='bookmark' ? 'Odebrat záložku' : 'Uložit na později'}
-            style={{ padding:'8px 11px', background:status==='bookmark'?'rgba(251,191,36,.15)':'rgba(255,255,255,.05)', color:status==='bookmark'?'#FBBF24':'rgba(255,255,255,.4)', border:`1px solid ${status==='bookmark'?'rgba(251,191,36,.3)':'rgba(255,255,255,.08)'}`, borderRadius:8, fontSize:14, cursor:'pointer', fontFamily:'inherit' }}>
-            🔖
-          </button>
-        </div>
-
-        {/* Lesson list — scrollable */}
+        {/* Lesson list — scrollable */
         <div style={{ flex:1, overflowY:'auto' }}>
           {topLevelLessons.map((l:any, i:number) => {
             const isCurrent = l.id === lesson.id
@@ -1343,34 +1383,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           })}
         </div>
 
-        {/* ToC + AI Tutor — always visible at bottom */}
-        <div style={{ borderTop:`1px solid ${D.border}`, padding:'10px 16px', flexShrink:0, display:'flex', gap:6 }}>
-          {tocItems.length > 1 && (
-            <div style={{ position:'relative', flex:1 }} onMouseEnter={e => { const pop = (e.currentTarget as HTMLElement).querySelector('.rp-toc-pop') as HTMLElement; if(pop) pop.style.display='block' }} onMouseLeave={e => { const pop = (e.currentTarget as HTMLElement).querySelector('.rp-toc-pop') as HTMLElement; if(pop) pop.style.display='none' }}>
-              <button style={{ width:'100%', padding:'7px 10px', background:'rgba(255,255,255,.05)', border:`1px solid rgba(255,255,255,.1)`, borderRadius:8, color:'rgba(255,255,255,.5)', fontSize:12, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:5 }}>
-                <span style={{ fontSize:14 }}>≡</span><span>Obsah</span>
-              </button>
-              <div className="rp-toc-pop" style={{ display:'none', position:'absolute', bottom:'calc(100% + 6px)', left:0, right:0, background:'#14171F', border:`1px solid ${D.border}`, borderRadius:12, padding:'8px 0', boxShadow:'0 -8px 28px rgba(0,0,0,.5)', zIndex:60, maxHeight:280, overflowY:'auto' }}>
-                <div style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,.3)', textTransform:'uppercase', letterSpacing:'.07em', padding:'0 12px 6px' }}>Obsah lekce</div>
-                {tocItems.map(item => {
-                  const mainEl = document.querySelector('[style*="overflowY: auto"]') as HTMLElement
-                  return (
-                    <button key={item.id}
-                      onClick={() => { const el=document.getElementById(item.id); if(el){ const scroller = el.closest('[style*="overflowY"]') as HTMLElement ?? document.querySelector('.lv-main') as HTMLElement; if(scroller) scroller.scrollTo({top:el.offsetTop-60,behavior:'smooth'}); else el.scrollIntoView({behavior:'smooth'}) }; setTocActiveId(item.id) }}
-                      style={{ display:'block', width:'100%', textAlign:'left', padding:item.level===1?'5px 12px':item.level===2?'4px 12px 4px 20px':'3px 12px 3px 28px', fontSize:12, fontWeight:tocActiveId===item.id?600:400, color:tocActiveId===item.id?'var(--accent)':'rgba(255,255,255,.55)', background:tocActiveId===item.id?'rgba(255,255,255,.05)':'none', border:'none', borderLeft:`2px solid ${tocActiveId===item.id?'var(--accent)':'transparent'}`, cursor:'pointer', lineHeight:1.5, fontFamily:'inherit' }}>
-                      {item.text}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-          <button onClick={() => setAiOpen(o=>!o)}
-            style={{ flex: tocItems.length > 1 ? 'none' : 1, padding:'7px 11px', background:aiOpen?'rgba(139,92,246,.2)':'rgba(255,255,255,.05)', border:`1px solid ${aiOpen?'rgba(139,92,246,.4)':'rgba(255,255,255,.1)'}`, borderRadius:8, color:aiOpen?'#C4B5FD':'rgba(255,255,255,.5)', fontSize:12, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' as const }}>
-            <span>🎓</span>{tocItems.length < 1 && <span>AI Tutor</span>}
-          </button>
-        </div>
-
       </div>
 
       {/* AI Tutor slide-up panel */}
@@ -1391,6 +1403,24 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
       </div>
 
       </div>{/* end flex row */}
+
+      {/* ── Fixed bottom footer: progress actions ── */}
+      <div className="lv-footer">
+        <button onClick={() => setProgress(status==='completed'?'none':'completed')} disabled={saving}
+          style={{ padding:'9px 28px', background:status==='completed'?'rgba(34,197,94,.15)':'var(--accent)', color:status==='completed'?'#22C55E':'#fff', border:`1px solid ${status==='completed'?'rgba(34,197,94,.3)':'transparent'}`, borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          {status==='completed' ? '✓ Dokončeno' : 'Označit jako dokončené'}
+        </button>
+        <button onClick={() => setProgress(status==='bookmark'?'none':'bookmark')} disabled={saving}
+          title={status==='bookmark' ? 'Odebrat záložku' : 'Uložit na později'}
+          style={{ padding:'9px 16px', background:status==='bookmark'?'rgba(251,191,36,.15)':'rgba(255,255,255,.06)', color:status==='bookmark'?'#FBBF24':'rgba(255,255,255,.4)', border:`1px solid ${status==='bookmark'?'rgba(251,191,36,.35)':'rgba(255,255,255,.1)'}`, borderRadius:9, fontSize:13, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+          🔖 {status==='bookmark' ? 'Uloženo' : 'Uložit na později'}
+        </button>
+      </div>
+
+      {/* ── Fixed AI Tutor button ── */}
+      <button className={`lv-ai-btn${aiOpen?' active':''}`} onClick={() => setAiOpen(o=>!o)} title="AI Tutor">
+        🎓
+      </button>
     </DarkLayout>
   )
 }
