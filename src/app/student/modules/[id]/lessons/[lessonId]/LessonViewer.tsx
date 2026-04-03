@@ -455,7 +455,7 @@ const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
       row.onclick = () => {
         if (quiz.dataset.solved) return
         optsEl.querySelectorAll('.dot').forEach((d:any)=>{d.style.background='';d.style.borderColor='#ccc'})
-        optsEl.querySelectorAll('div[style*="display:flex"]').forEach((r:any)=>{r.style.background='#fff';r.style.borderColor='#e5e7eb'})
+        optsEl.querySelectorAll('div[style*="display:flex"]').forEach((r:any)=>{r.style.background='rgba(255,255,255,.04)';r.style.borderColor='rgba(255,255,255,.1)'})
         const dot = row.querySelector('.dot') as HTMLElement
         if (i === correct) {
           dot.style.background='#27500A'; dot.style.borderColor='#27500A'
@@ -991,28 +991,89 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .cb-strip-line.h2 { width: 10px; }
         .cb-strip-line.h3 { width: 7px; }
 
-        /* ── ToC floating button ── */
-        .cb-toc-float { position:relative; display:inline-block; }
-        .cb-toc-popover { display:none; position:absolute; right:38px; top:-8px; width:210px;
+        /* ── ToC + AI floating buttons ── */
+        .cb-float-btns { position:sticky; top:16px; float:right; margin-left:12px; z-index:20;
+          display:flex; flex-direction:column; gap:8px; margin-bottom:-120px; }
+        .cb-toc-float { position:relative; }
+        /* Wide invisible bridge so mouse can reach the popover without hover dropping */
+        .cb-toc-float::before { content:''; position:absolute; right:0; top:-8px; width:260px; height:calc(100% + 16px); }
+        .cb-toc-popover { display:none; position:absolute; right:42px; top:-8px; width:210px;
           background:#14171F; border:1px solid rgba(255,255,255,.09); border-radius:12px;
           padding:10px 0; box-shadow:0 12px 40px rgba(0,0,0,.6); z-index:50; }
         .cb-toc-float:hover .cb-toc-popover { display:block; }
-        .cb-toc-btn { width:32px; height:32px; border-radius:50%;
+        .cb-float-btn { width:32px; height:32px; border-radius:50%;
           background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12);
           color:rgba(255,255,255,.4); display:flex; align-items:center; justify-content:center;
           cursor:pointer; font-size:15px; transition:all .15s; }
-        .cb-toc-btn:hover { background:rgba(255,255,255,.14)!important; color:#fff!important; }
+        .cb-float-btn:hover { background:rgba(255,255,255,.14)!important; color:#fff!important; }
+        .cb-float-btn.ai-active { background:rgba(139,92,246,.2)!important; border-color:rgba(139,92,246,.4)!important; color:#C4B5FD!important; }
 
         /* ── AI Tutor slide panel ── */
-        .cb-ai-panel { position:fixed; bottom:0; right:272px; width:360px; height:500px;
-          background:#14171F; border:1px solid rgba(255,255,255,.08); border-bottom:none;
+        .cb-ai-panel { position:fixed; bottom:0; right:272px; width:380px; height:520px;
+          background:#0D0F16; border:1px solid rgba(255,255,255,.08); border-bottom:none;
           border-radius:16px 16px 0 0; display:flex; flex-direction:column;
-          box-shadow:0 -8px 40px rgba(0,0,0,.5); z-index:100;
-          transform:translateY(100%); transition:transform .28s cubic-bezier(.4,0,.2,1); }
+          box-shadow:0 -8px 40px rgba(0,0,0,.6); z-index:100;
+          transform:translateY(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow:hidden; }
         .cb-ai-panel.open { transform:translateY(0); }
 
         /* First paragraph dark */
         .lesson-content > p:first-of-type { font-size:1.05em; color:#CBD5E1; line-height:1.9; }
+
+        /* ── Teacher-generated content overrides ── */
+        /* Attached file links (📎 File button output) */
+        .lesson-content a[download],
+        .lesson-content a[style*="background:#f3f4f6"],
+        .lesson-content a[style*="background: #f3f4f6"] {
+          background: rgba(255,255,255,.06) !important;
+          border-color: rgba(255,255,255,.1) !important;
+          color: var(--accent) !important;
+        }
+
+        /* Inline code spans (Consolas font from editor) */
+        .lesson-content [style*="font-family:Consolas"],
+        .lesson-content [style*="font-family: Consolas"],
+        .lesson-content [style*="font-family:monospace"],
+        .lesson-content code {
+          background: rgba(255,255,255,.1) !important;
+          color: #93C5FD !important;
+          border-radius: 4px !important;
+          padding: 1px 5px !important;
+        }
+
+        /* Table headers (th) with light background from editor */
+        .lesson-content th[style*="background"],
+        .lesson-content th {
+          background: rgba(255,255,255,.07) !important;
+          color: #E2E8F0 !important;
+          border-color: rgba(255,255,255,.1) !important;
+        }
+        .lesson-content td {
+          border-color: rgba(255,255,255,.08) !important;
+          color: #CBD5E1 !important;
+        }
+        .lesson-content tr:nth-child(even) td {
+          background: rgba(255,255,255,.02) !important;
+        }
+
+        /* Quiz blocks from HtmlBlock (cb-quiz class) */
+        .lesson-content .cb-quiz {
+          background: rgba(24,95,165,.08) !important;
+          border-color: rgba(24,95,165,.3) !important;
+        }
+        .lesson-content .cb-quiz summary {
+          background: rgba(24,95,165,.18) !important;
+          color: #93C5FD !important;
+        }
+        .lesson-content .cb-quiz .qinner {
+          color: #E2E8F0 !important;
+        }
+
+        /* Inline code from quiz/HtmlBlock */
+        .lesson-content .cb-quiz code,
+        .lesson-content .qinner code {
+          background: rgba(255,255,255,.12) !important;
+          color: #93C5FD !important;
+        }
       `}</style>
 
       {/* Scroll progress bar */}
@@ -1040,12 +1101,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         {isMobile && (
           <div style={{ marginBottom:12 }}>
             <button onClick={() => setNavOpen(o => !o)}
-              style={{ width:'100%', padding:'10px 14px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', fontFamily:'inherit', color:'#555' }}>
+              style={{ width:'100%', padding:'10px 14px', background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.1)', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', fontFamily:'inherit', color:'rgba(255,255,255,.6)' }}>
               <span>📚 Lesson {currentIndex+1} of {topLevelLessons.length}: <strong style={{ color:'#111' }}>{lesson.title}</strong></span>
-              <span style={{ color:'#888' }}>{navOpen ? '▲' : '▼'}</span>
+              <span style={{ color:'rgba(255,255,255,.35)' }}>{navOpen ? '▲' : '▼'}</span>
             </button>
             {navOpen && (
-              <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'6px 0', maxHeight:260, overflowY:'auto' }}>
+              <div style={{ background:'#14171F', border:'1px solid rgba(255,255,255,.08)', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'6px 0', maxHeight:260, overflowY:'auto' }}>
                 {topLevelLessons.map((l:any, i:number) => {
                   const isCurrent = l.id === lesson.id
                   const isDone = completedSet.has(l.id)
@@ -1054,14 +1115,14 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                     <div key={l.id}>
                       {l.locked ? (
                         <div style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', borderLeft:'3px solid transparent', cursor:'not-allowed' }}>
-                          <div style={{ width:20, height:20, borderRadius:'50%', background:'#f3f4f6', color:'#ccc', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔒</div>
+                          <div style={{ width:20, height:20, borderRadius:'50%', background:'rgba(255,255,255,.06)', color:'rgba(255,255,255,.25)', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔒</div>
                           <span style={{ fontSize:13, lineHeight:1.4, color:'#ccc' }}>{l.title}</span>
                         </div>
                       ) : (
                         <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
                           onClick={() => { setNavOpen(false); setActiveTab('main') }}
-                          style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid var(--accent)':'3px solid transparent' }}>
-                          <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'var(--accent)':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                          style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 14px', textDecoration:'none', background:isCurrent?'rgba(255,255,255,.08)':'transparent', color:isCurrent?'#fff':'rgba(255,255,255,.6)', borderLeft:isCurrent?'3px solid var(--accent)':'3px solid transparent' }}>
+                          <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#22C55E20':isCurrent?'var(--accent)':'rgba(255,255,255,.06)', color:isDone?'#22C55E':isCurrent?'#fff':'rgba(255,255,255,.4)', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                             {isDone ? '✓' : i+1}
                           </div>
                           <span style={{ fontSize:13, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
@@ -1070,7 +1131,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                       {isCurrent && subs.length > 0 && subs.map((s:any) => (
                         <button key={s.id}
                           onClick={() => { setNavOpen(false); setActiveTab(s.id) }}
-                          style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'7px 14px 7px 36px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'3px solid var(--accent)':'3px solid transparent', color: activeTab===s.id?'#0C447C':'#888', fontSize:12, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left' }}>
+                          style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'7px 14px 7px 36px', background: activeTab===s.id?'rgba(255,255,255,.06)':'transparent', borderLeft: activeTab===s.id?'3px solid var(--accent)':'3px solid transparent', color: activeTab===s.id?'var(--accent)':'rgba(255,255,255,.45)', fontSize:12, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left' }}>
                           <span style={{ fontSize:10 }}>↳</span>
                           <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
                         </button>
@@ -1091,36 +1152,37 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
               {activeLesson.title}
             </h1>
             <button onClick={exportPDF}
-              style={{ padding:'5px 12px', fontSize:12, background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, cursor:'pointer', color:'#888', display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', flexShrink:0 }}
+              style={{ padding:'5px 12px', fontSize:12, background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.1)', borderRadius:8, cursor:'pointer', color:'rgba(255,255,255,.45)', display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap', flexShrink:0 }}
               title="Export lesson as printable PDF">
               ⬇ PDF
             </button>
           </div>
           {/* Row 2: author + read time */}
           <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom: subLessons.length > 0 ? 14 : 0 }}>
-            {authorName && <span style={{ fontSize:12, color:'#aaa' }}>By {authorName}</span>}
-            {authorName && readTime && <span style={{ color:'#e5e7eb' }}>·</span>}
-            {readTime && <span style={{ fontSize:12, color:'#aaa' }}>🕐 {readTime}</span>}
+            {authorName && <span style={{ fontSize:12, color:'rgba(255,255,255,.4)' }}>✍ {authorName}</span>}
+            {authorName && readTime && <span style={{ color:'rgba(255,255,255,.2)' }}>·</span>}
+            {readTime && <span style={{ fontSize:12, color:'rgba(255,255,255,.35)' }}>🕐 {readTime}</span>}
           </div>
         </div>
 
-        {/* Floating ToC button */}
-        {tocItems.length > 1 && (
-          <div style={{ position:'sticky', top:12, float:'right', marginLeft:12, zIndex:10, marginBottom:-44 }}>
+        {/* Floating buttons: ToC + AI Tutor trigger */}
+        <div className="cb-float-btns">
+          {tocItems.length > 1 && (
             <div className="cb-toc-float">
-              <button className="cb-toc-btn">≡</button>
+              <button className="cb-float-btn" title="Obsah lekce">≡</button>
               <div className="cb-toc-popover">
                 <div style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,.35)', textTransform:'uppercase', letterSpacing:'.07em', padding:'0 14px 8px' }}>Obsah lekce</div>
                 {tocItems.map(item => (
                   <button key={item.id} onClick={() => { const el=document.getElementById(item.id); if(el){el.scrollIntoView({behavior:'smooth',block:'start'});setTocActiveId(item.id)} }}
-                    style={{ display:'block', width:'100%', textAlign:'left', padding:item.level===1?'5px 14px':item.level===2?'4px 14px 4px 22px':'3px 14px 3px 30px', fontSize:12, fontWeight:tocActiveId===item.id?600:400, color:tocActiveId===item.id?'var(--accent)':'rgba(255,255,255,.5)', background:tocActiveId===item.id?'rgba(255,255,255,.05)':'none', border:'none', borderLeft:`2px solid ${tocActiveId===item.id?'var(--accent)':'transparent'}`, cursor:'pointer', lineHeight:1.5, fontFamily:'inherit' }}>
+                    style={{ display:'block', width:'100%', textAlign:'left', padding:item.level===1?'5px 14px':item.level===2?'4px 14px 4px 22px':'3px 14px 3px 30px', fontSize:12, fontWeight:tocActiveId===item.id?600:400, color:tocActiveId===item.id?'var(--accent)':'rgba(255,255,255,.55)', background:tocActiveId===item.id?'rgba(255,255,255,.05)':'none', border:'none', borderLeft:`2px solid ${tocActiveId===item.id?'var(--accent)':'transparent'}`, cursor:'pointer', lineHeight:1.5, fontFamily:'inherit' }}>
                     {item.text}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
+          <button className={`cb-float-btn${aiOpen?' ai-active':''}`} title="AI Tutor" onClick={() => setAiOpen(o=>!o)} style={{ fontSize:16 }}>🎓</button>
+        </div>
 
         {/* ── Části lekce (sub-lessons) ───────────────────────────── */}
         {subLessons.length > 0 && (
@@ -1172,12 +1234,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         {isMobile && tocItems.length > 1 && (
           <div style={{ marginBottom:10 }}>
             <button onClick={() => setTocOpen(o => !o)}
-              style={{ width:'100%', padding:'8px 14px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', fontFamily:'inherit', color:'#555' }}>
+              style={{ width:'100%', padding:'8px 14px', background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.1)', borderRadius:8, fontSize:13, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer', fontFamily:'inherit', color:'rgba(255,255,255,.5)' }}>
               <span>📋 Contents ({tocItems.length})</span>
-              <span style={{ color:'#888', fontSize:11 }}>{tocOpen ? '▲ Hide' : '▼ Show'}</span>
+              <span style={{ color:'rgba(255,255,255,.3)', fontSize:11 }}>{tocOpen ? '▲ Skrýt' : '▼ Zobrazit'}</span>
             </button>
             {tocOpen && (
-              <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 8px 8px', padding:'6px 0' }}>
+              <div style={{ background:'#14171F', border:'1px solid rgba(255,255,255,.08)', borderTop:'none', borderRadius:'0 0 8px 8px', padding:'6px 0' }}>
                 {tocItems.map(item => (
                   <button key={item.id}
                     onClick={() => {
@@ -1192,7 +1254,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
                       padding: item.level === 1 ? '7px 14px' : item.level === 2 ? '6px 14px 6px 24px' : '5px 14px 5px 34px',
                       fontSize: item.level === 1 ? 13 : 12,
                       fontWeight: item.level === 1 ? 500 : 400,
-                      color: item.level === 1 ? '#333' : '#666',
+                      color: item.level === 1 ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.45)',
                       background:'none', border:'none', cursor:'pointer',
                       lineHeight:1.4, fontFamily:'inherit',
                     }}>
@@ -1301,18 +1363,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           </div>
         </div>
 
-        {/* AI Tutor trigger */}
-        <div style={{ padding:'12px 16px', flexShrink:0 }}>
-          <button onClick={() => setAiOpen(o => !o)}
-            style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background: aiOpen?'rgba(139,92,246,.18)':'rgba(139,92,246,.08)', border:`1px solid rgba(139,92,246,${aiOpen?.4:.2})`, borderRadius:11, cursor:'pointer', fontFamily:'inherit', color:'#C4B5FD', transition:'all .15s' }}>
-            <span style={{ fontSize:18 }}>🤖</span>
-            <div style={{ textAlign:'left' as const }}>
-              <div style={{ fontSize:13, fontWeight:600 }}>AI Tutor</div>
-              <div style={{ fontSize:10, opacity:.7 }}>Zeptej se na lekci</div>
-            </div>
-            <span style={{ marginLeft:'auto', fontSize:11, opacity:.5 }}>{aiOpen?'▼':'▲'}</span>
-          </button>
-        </div>
       </div>
 
       {/* AI Tutor slide-up panel */}
