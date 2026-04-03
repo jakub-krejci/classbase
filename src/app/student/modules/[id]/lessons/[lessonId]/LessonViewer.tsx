@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 import { createClient } from '@/lib/supabase/client'
 import { BackLink, Breadcrumb } from '@/components/ui'
+import { DarkLayout, D } from '@/components/DarkLayout'
 import AiTutor from '@/components/AiTutor'
 import { highlightCode, highlightPython, PYTHON_CSS, LANGUAGE_LABELS, type Language } from '@/lib/highlight'
 
@@ -744,9 +745,8 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }
 
   return (
-    <>
-    <div style={{ display: isMobile ? 'block' : 'flex', gap: 18, alignItems: 'flex-start' }}>
-      <style>{PYTHON_CSS}{`
+    <DarkLayout profile={null} activeRoute="/student/modules" fullContent>
+    <style>{PYTHON_CSS}{`
         /* ─────────────────────────────────────────────────────────────
            LESSON CONTENT TYPOGRAPHY
            Reading-optimised: literary serif, generous line-height,
@@ -755,10 +755,10 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
         .lesson-content {
           font-family: 'Georgia', 'Charter', 'Palatino Linotype', serif;
-          font-size: 16.5px;
+          font-size: 16px;
           line-height: 1.85;
-          color: #1c1c1e;
-          max-width: 760px;
+          color: #E2E8F0;
+          max-width: 720px;
           margin: 0 auto;
         }
 
@@ -770,19 +770,19 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .lesson-content h1 {
           font-family: system-ui, -apple-system, sans-serif;
           font-size: 1.55em; font-weight: 700; line-height: 1.25;
-          color: #111; margin: 1.8em 0 0.45em;
+          color: #F8FAFC; margin: 1.8em 0 0.45em;
           letter-spacing: -.02em;
         }
         .lesson-content h2 {
           font-family: system-ui, -apple-system, sans-serif;
           font-size: 1.25em; font-weight: 700; line-height: 1.3;
-          color: #1a1a1a; margin: 1.6em 0 0.4em;
+          color: #F1F5F9; margin: 1.6em 0 0.4em;
           letter-spacing: -.01em;
         }
         .lesson-content h3 {
           font-family: system-ui, -apple-system, sans-serif;
           font-size: 1.05em; font-weight: 600; line-height: 1.4;
-          color: #222; margin: 1.3em 0 0.3em;
+          color: #E2E8F0; margin: 1.3em 0 0.3em;
         }
         .lesson-content h1:first-child,
         .lesson-content h2:first-child,
@@ -803,7 +803,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .lesson-content h1[data-toc-active],
         .lesson-content h2[data-toc-active],
         .lesson-content h3[data-toc-active] {
-          background: #EBF4FF;
+          background: rgba(24,95,165,.15);
           color: var(--accent);
           box-shadow: -3px 0 0 var(--accent);
         }
@@ -818,10 +818,10 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .lesson-content code {
           font-family: ui-monospace, 'Cascadia Code', monospace;
           font-size: 0.84em;
-          background: #f0f2f5;
+          background: rgba(255,255,255,.1);
           padding: 2px 6px;
           border-radius: 4px;
-          color: #b31d28;
+          color: #93C5FD;
           letter-spacing: 0;
         }
 
@@ -830,31 +830,31 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           border-left: 3px solid var(--accent);
           padding: 8px 18px;
           margin: 1.2em 0;
-          color: #4a4a4a;
+          color: #94A3B8;
           font-style: italic;
-          background: #f7faff;
+          background: rgba(255,255,255,.04);
           border-radius: 0 8px 8px 0;
         }
 
         /* ── Links ── */
         .lesson-content a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-        .lesson-content a:hover { color: #0c447c; }
+        .lesson-content a:hover { color: #60A5FA; }
 
         /* ── Tables ── */
         .lesson-content table { border-collapse: collapse; width: 100%; margin: 1.2em 0; font-size: 0.92em; font-family: system-ui, sans-serif; }
-        .lesson-content td, .lesson-content th { border: 1px solid #e2e8f0; padding: 9px 13px; }
-        .lesson-content th { background: #f8fafc; font-weight: 600; color: #374151; }
-        .lesson-content tr:nth-child(even) td { background: #fafbfc; }
+        .lesson-content td, .lesson-content th { border: 1px solid rgba(255,255,255,.1); padding: 9px 13px; }
+        .lesson-content th { background: rgba(255,255,255,.06); font-weight: 600; color: #E2E8F0; }
+        .lesson-content tr:nth-child(even) td { background: rgba(255,255,255,.02); }
 
         /* ── Images & embeds ── */
         .lesson-content img { max-width: 100%; border-radius: 8px; margin: 1.2em auto; display: block; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
         .lesson-content iframe { width: 100%; aspect-ratio: 16/9; border: none; border-radius: 10px; margin: 1.2em 0; display: block; }
 
         /* ── Fold / collapsible ── */
-        .lesson-content details { border: 1px solid #e2e8f0; border-radius: 9px; margin: 1.2em 0; overflow: hidden; }
-        .lesson-content summary { padding: 11px 15px; background: #f8fafc; cursor: pointer; font-weight: 500; list-style: none; font-family: system-ui, sans-serif; font-size: 0.95em; color: #374151; }
+        .lesson-content details { border: 1px solid rgba(255,255,255,.1); border-radius: 9px; margin: 1.2em 0; overflow: hidden; }
+        .lesson-content summary { padding: 11px 15px; background: rgba(255,255,255,.05); cursor: pointer; font-weight: 500; list-style: none; font-family: system-ui, sans-serif; font-size: 0.95em; color: #CBD5E1; }
         .lesson-content summary::-webkit-details-marker { display: none; }
-        .lesson-content details[open] summary { border-bottom: 1px solid #e2e8f0; }
+        .lesson-content details[open] summary { border-bottom: 1px solid rgba(255,255,255,.1); }
         .lesson-content details > *:not(summary) { padding: 12px 15px; }
 
         /* ── Code blocks ────────────────────────────────────────────
@@ -873,11 +873,11 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         }
 
         /* ── Quiz ── */
-        .cb-quiz { background: #f0f7ff; border: 1px solid #B5D4F4; border-radius: 10px; margin: 1.4em 0; overflow: hidden; }
+        .cb-quiz { background: rgba(24,95,165,.08); border: 1px solid rgba(24,95,165,.3); border-radius: 10px; margin: 1.4em 0; overflow: hidden; }
         .cb-quiz-details summary::-webkit-details-marker { display: none; }
 
         /* ── Horizontal rule ── */
-        .lesson-content hr { border: none; border-top: 1px solid #e2e8f0; margin: 2em 0; }
+        .lesson-content hr { border: none; border-top: 1px solid rgba(255,255,255,.1); margin: 2em 0; }
 
         /* ── Annotation tooltips ── */
         .cb-annotation {
@@ -992,52 +992,25 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
       `}</style>
 
       {/* Scroll progress bar */}
-      <div style={{ position:'fixed', top:52, left:0, right:0, height:3, background:'#f0f0f0', zIndex:49, pointerEvents:'none' }}>
-        <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#27500A' : 'var(--accent)', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
+      <div style={{ position:'fixed', top:0, left:64, right:0, height:3, background:'rgba(255,255,255,.07)', zIndex:49, pointerEvents:'none' }}>
+        <div style={{ height:'100%', width: scrollPct + '%', background: scrollPct >= 100 ? '#22C55E' : 'var(--accent)', transition:'width .4s ease', borderRadius:'0 2px 2px 0' }} />
       </div>
 
-      {/* ── Left nav — always-visible fixed sidebar (desktop only) ── */}
-      {!isMobile && (
-        <div className="cb-sidebar-left">
-          <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 10px' }}>Lessons</div>
-          {topLevelLessons.map((l:any, i:number) => {
-            const isCurrent = l.id === lesson.id
-            const isDone = completedSet.has(l.id)
-            const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
-            return (
-              <div key={l.id}>
-                {l.locked ? (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', color:'#bbb', borderLeft:'3px solid transparent', fontSize:13, cursor:'not-allowed' }}>
-                    <div style={{ width:20, height:20, borderRadius:'50%', background:'#f3f4f6', color:'#ccc', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔒</div>
-                    <span style={{ fontSize:12, lineHeight:1.4, color:'#ccc' }}>{l.title}</span>
-                  </div>
-                ) : (
-                  <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
-                    style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', textDecoration:'none', background:isCurrent?'#E6F1FB':'transparent', color:isCurrent?'#0C447C':'#333', borderLeft:isCurrent?'3px solid var(--accent)':'3px solid transparent', fontSize:13 }}>
-                    <div style={{ width:20, height:20, borderRadius:'50%', background:isDone?'#EAF3DE':isCurrent?'var(--accent)':'#f3f4f6', color:isDone?'#27500A':isCurrent?'#fff':'#888', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                      {isDone ? '✓' : i+1}
-                    </div>
-                    <span style={{ fontSize:12, lineHeight:1.4, fontWeight:isCurrent?600:400 }}>{l.title}</span>
-                  </a>
-                )}
-                {isCurrent && subs.length > 0 && subs.map((s:any) => (
-                  <div key={s.id} style={{ paddingLeft:28, paddingRight:8, paddingTop:2, paddingBottom:2 }}>
-                    <button onClick={() => setActiveTab(s.id === activeTab ? 'main' : s.id)}
-                      style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'5px 8px', background: activeTab===s.id?'#dbeafe':'transparent', borderLeft: activeTab===s.id?'2px solid var(--accent)':'2px solid #e0e7ef', color: activeTab===s.id?'var(--accent)':'#888', fontSize:11, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left', borderRadius:'0 4px 4px 0' }}>
-                      <span style={{ fontSize:10, color: activeTab===s.id?'var(--accent)':'#bbb' }}>↳</span>
-                      <span style={{ fontWeight: activeTab===s.id?600:400 }}>{s.title}</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )
-          })}
-        </div>
-      )}
 
-      {/* Main content */}
-      <div style={{ flex:1, minWidth:0 }}>
-        <Breadcrumb items={[{ label: 'Modules', href: '/student/modules' }, { label: lesson.module_title ?? 'Module', href: `/student/modules/${moduleId}` }, { label: lesson.title }]} />
+
+      {/* ── New layout: flex row with scrollable main + sticky right panel ── */}
+      <div style={{ display:'flex', flex:1, minHeight:0, overflow:'hidden' }}>
+
+      {/* Main content — scrollable */}
+      <div style={{ flex:1, minWidth:0, overflowY:'auto', padding:'24px 28px 40px' }}>
+        {/* Breadcrumb */}
+        <div style={{ fontSize:12, color:D.txtSec, marginBottom:14, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+          <a href="/student/modules" style={{ color:D.txtSec, textDecoration:'none' }}>Moduly</a>
+          <span>/</span>
+          <a href={`/student/modules/${moduleId}`} style={{ color:D.txtSec, textDecoration:'none' }}>{lesson.module_title ?? 'Modul'}</a>
+          <span>/</span>
+          <span style={{ color:D.txtPri }}>{lesson.title}</span>
+        </div>
 
         {/* Mobile: inline lesson nav */}
         {isMobile && (
@@ -1191,7 +1164,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         )}
 
         {/* Lesson content */}
-        <div ref={contentRef} style={{ background:'#fafafa', border:'1px solid #e9ecef', borderRadius:12, padding: isMobile ? '20px 16px' : '32px 40px', marginBottom:20 }}>
+        <div ref={contentRef} style={{ background:'rgba(255,255,255,.03)', border:'1px solid rgba(255,255,255,.07)', borderRadius:14, padding:'32px 40px', marginBottom:20 }}>
           {blocks.map((b, i) => (
             <div key={i}>
               {b.type === 'html'      && <HtmlBlock html={b.content} />}
@@ -1208,12 +1181,12 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         {/* Progress actions */}
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:20 }}>
           <button onClick={() => setProgress(status==='completed'?'none':'completed')} disabled={saving}
-            style={{ padding:'9px 18px', background:status==='completed'?'#EAF3DE':'var(--accent)', color:status==='completed'?'#27500A':'#E6F1FB', border:'none', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', flex: isMobile ? 1 : 'none' }}>
-            {status==='completed' ? '✓ Completed' : 'Mark as complete'}
+            style={{ padding:'9px 18px', background:status==='completed'?'#22C55E20':'var(--accent)', color:status==='completed'?'#22C55E':'#fff', border:`1px solid ${status==='completed'?'#22C55E40':'transparent'}`, borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+            {status==='completed' ? '✓ Dokončeno' : 'Označit jako dokončené'}
           </button>
           <button onClick={() => setProgress(status==='bookmark'?'none':'bookmark')} disabled={saving}
-            style={{ padding:'9px 18px', background:status==='bookmark'?'#FFF3CD':'#f9fafb', color:status==='bookmark'?'#856404':'#555', border:'1px solid', borderColor:status==='bookmark'?'#FFCA2C':'#e5e7eb', borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', flex: isMobile ? 1 : 'none' }}>
-            {status==='bookmark' ? '🔖 Bookmarked' : '🔖 Save for later'}
+            style={{ padding:'9px 18px', background:status==='bookmark'?'#FBBF2420':'rgba(255,255,255,.05)', color:status==='bookmark'?'#FBBF24':D.txtSec, border:`1px solid ${status==='bookmark'?'#FBBF2440':'rgba(255,255,255,.1)'}`, borderRadius:8, fontSize:13, fontWeight:500, cursor:'pointer', fontFamily:'inherit' }}>
+            {status==='bookmark' ? '🔖 Uloženo' : '🔖 Uložit na později'}
           </button>
         </div>
 
@@ -1222,7 +1195,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div style={{ width: isMobile ? '100%' : 'auto' }}>
             {prevLesson && (
               <a href={`/student/modules/${moduleId}/lessons/${prevLesson.id}`}
-                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, fontSize:13, textDecoration:'none', color:'#333', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-start', boxSizing:'border-box' }}>
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:D.bgCard, border:`1px solid ${D.border}`, borderRadius:8, fontSize:13, textDecoration:'none', color:D.txtSec, boxSizing:'border-box' as const }}>
                 ← {prevLesson.title}
               </a>
             )}
@@ -1230,7 +1203,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div style={{ width: isMobile ? '100%' : 'auto' }}>
             {nextLesson && (
               <a href={`/student/modules/${moduleId}/lessons/${nextLesson.id}`}
-                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:'var(--accent)', color:'#E6F1FB', border:'none', borderRadius:8, fontSize:13, textDecoration:'none', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-end', boxSizing:'border-box' }}>
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 16px', background:'var(--accent)', color:'#fff', border:'none', borderRadius:8, fontSize:13, textDecoration:'none', boxSizing:'border-box' as const }}>
                 {nextLesson.title} →
               </a>
             )}
@@ -1238,57 +1211,76 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         </div>
       </div>
 
+      {/* ── RIGHT PANEL: lesson list + ToC + AI Tutor ── */}
+      <div style={{ width:272, flexShrink:0, borderLeft:`1px solid ${D.border}`, background:D.bgCard, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
-      {/* ── ToC overlay sidebar (desktop only) ── */}
-      {!isMobile && tocItems.length > 1 && (
-        <div className="cb-sidebar-right">
-          {/* Expanded panel (left side of the right sidebar) */}
-          <div className="cb-sidebar-panel">
-            <div className="cb-sidebar-panel-inner">
-              <div style={{ fontSize:10, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:'.06em', padding:'0 14px 10px' }}>Contents</div>
-              {tocItems.map(item => (
-                <button key={item.id}
-                  onClick={() => {
-                    const el = document.getElementById(item.id)
-                    if (el) {
-                      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                      document.querySelectorAll('.lesson-content [data-toc-active]')
-                        .forEach(h => h.removeAttribute('data-toc-active'))
-                      el.setAttribute('data-toc-active', '1')
-                    }
-                    setTocActiveId(item.id)
-                  }}
-                  style={{
-                    display:'block', width:'100%', textAlign:'left',
-                    padding: item.level === 1 ? '5px 14px' : item.level === 2 ? '4px 14px 4px 22px' : '3px 14px 3px 30px',
-                    fontSize: item.level === 1 ? 12 : 11,
-                    fontWeight: tocActiveId === item.id ? 600 : item.level === 1 ? 500 : 400,
-                    color: tocActiveId === item.id ? 'var(--accent)' : item.level === 1 ? '#333' : '#666',
-                    background: tocActiveId === item.id ? '#E6F1FB' : 'none',
-                    border:'none', borderLeft: tocActiveId === item.id ? '2px solid var(--accent)' : '2px solid transparent',
-                    cursor:'pointer', lineHeight:1.4, fontFamily:'inherit',
-                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-                  }}>
-                  {item.text}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Collapsed strip — ToC level lines */}
-          <div className="cb-sidebar-strip" title="Obsah">
-            {tocItems.slice(0, 16).map(item => (
-              <div key={item.id} className={`cb-strip-line h${item.level}`}
-                style={{ background: tocActiveId === item.id ? 'var(--accent)' : '#c7d3ff' }} />
+        {/* Module header */}
+        <div style={{ padding:'18px 16px 12px', borderBottom:`1px solid ${D.border}`, flexShrink:0 }}>
+          <a href={`/student/modules/${moduleId}`} style={{ fontSize:11, color:D.txtSec, textDecoration:'none', display:'block', marginBottom:6 }}>← Zpět na modul</a>
+          <div style={{ fontSize:13, fontWeight:700, color:D.txtPri, lineHeight:1.3 }}>{lesson.module_title ?? 'Modul'}</div>
+          <div style={{ fontSize:11, color:D.txtSec, marginTop:3 }}>{topLevelLessons.length} lekcí</div>
+        </div>
+
+        {/* Lesson list */}
+        <div style={{ flex:1, overflowY:'auto' }}>
+          {topLevelLessons.map((l:any, i:number) => {
+            const isCurrent = l.id === lesson.id
+            const isDone = completedSet.has(l.id) || (isCurrent && status === 'completed')
+            const isVid = l.lesson_type === 'video'
+            const subs = allLessons.filter((s:any) => s.parent_lesson_id === l.id)
+            if (l.locked) return (
+              <div key={l.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', opacity:.4, borderLeft:'3px solid transparent' }}>
+                <div style={{ width:24, height:24, borderRadius:'50%', background:'rgba(255,255,255,.06)', color:D.txtSec, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, flexShrink:0 }}>🔒</div>
+                <span style={{ fontSize:12, color:D.txtSec, flex:1 }}>{l.title}</span>
+              </div>
+            )
+            return (
+              <div key={l.id}>
+                <a href={`/student/modules/${moduleId}/lessons/${l.id}`}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', textDecoration:'none', background:isCurrent?'var(--accent)15':'transparent', borderLeft:`3px solid ${isCurrent?'var(--accent)':'transparent'}`, transition:'background .12s' }}>
+                  <div style={{ width:24, height:24, borderRadius:'50%', background:isDone?'#22C55E20':isCurrent?'rgba(255,255,255,.15)':'rgba(255,255,255,.06)', color:isDone?'#22C55E':isCurrent?'#fff':D.txtSec, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>
+                    {isDone?'✓':isVid?'▶':i+1}
+                  </div>
+                  <span style={{ fontSize:12, color:isCurrent?'#fff':D.txtSec, fontWeight:isCurrent?600:400, flex:1, lineHeight:1.4 }}>{l.title}</span>
+                </a>
+                {isCurrent && subs.length > 0 && subs.map((s:any) => (
+                  <button key={s.id} onClick={() => setActiveTab(s.id===activeTab?'main':s.id)}
+                    style={{ display:'flex', alignItems:'center', gap:6, width:'100%', padding:'7px 16px 7px 50px', background:activeTab===s.id?'rgba(255,255,255,.05)':'transparent', borderLeft:`3px solid ${activeTab===s.id?'var(--accent)':'transparent'}`, color:activeTab===s.id?'var(--accent)':D.txtSec, fontSize:11, cursor:'pointer', border:'none', fontFamily:'inherit', textAlign:'left' }}>
+                    <span style={{ fontSize:10, opacity:.6 }}>↳</span>
+                    <span style={{ fontWeight:activeTab===s.id?600:400 }}>{s.title}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* ToC (when available) */}
+        {tocItems.length > 1 && (
+          <div style={{ borderTop:`1px solid ${D.border}`, padding:'12px 0', maxHeight:200, overflowY:'auto', flexShrink:0 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:D.txtSec, textTransform:'uppercase', letterSpacing:'.06em', padding:'0 16px 8px' }}>Obsah</div>
+            {tocItems.map(item => (
+              <button key={item.id}
+                onClick={() => { const el = document.getElementById(item.id); if(el) { el.scrollIntoView({behavior:'smooth',block:'start'}); setTocActiveId(item.id) } }}
+                style={{ display:'block', width:'100%', textAlign:'left', padding: item.level===1?'4px 16px':item.level===2?'3px 16px 3px 26px':'3px 16px 3px 36px', fontSize:11, fontWeight:tocActiveId===item.id?600:400, color:tocActiveId===item.id?'var(--accent)':D.txtSec, background:tocActiveId===item.id?'rgba(255,255,255,.05)':'none', border:'none', borderLeft:`2px solid ${tocActiveId===item.id?'var(--accent)':'transparent'}`, cursor:'pointer', lineHeight:1.4, fontFamily:'inherit', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                {item.text}
+              </button>
             ))}
           </div>
+        )}
+
+        {/* AI Tutor */}
+        <div style={{ borderTop:`1px solid ${D.border}`, padding:'12px 16px', flexShrink:0 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:D.txtSec, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>🤖 AI Tutor</div>
+          <AiTutor
+            lessonTitle={activeLesson.title}
+            contentHtml={activeLesson.content_html ?? ''}
+            isMobile={false}
+          />
         </div>
-      )}
-    </div>
-    <AiTutor
-      lessonTitle={activeLesson.title}
-      contentHtml={activeLesson.content_html ?? ''}
-      isMobile={isMobile}
-    />
-  </>
+      </div>
+
+      </div>{/* end flex row */}
+    </DarkLayout>
   )
 }

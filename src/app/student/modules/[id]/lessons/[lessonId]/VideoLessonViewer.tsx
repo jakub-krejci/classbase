@@ -115,6 +115,13 @@ export default function VideoLessonViewer({ lesson, moduleId, studentId, complet
     setQa(prev => prev.filter(r => r.id !== id))
   }
 
+  async function deleteReply(questionId: string, replyId: string) {
+    await supabase.from('lesson_qa_replies').delete().eq('id', replyId)
+    setQa(prev => prev.map(q => q.id===questionId
+      ? { ...q, replies: (q.replies??[]).filter(r => r.id !== replyId), lesson_qa_replies: (q.lesson_qa_replies??[]).filter(r => r.id !== replyId) }
+      : q))
+  }
+
   async function postReply(qId: string) {
     const txt = replyText[qId]?.trim()
     if (!txt) return
@@ -293,6 +300,9 @@ export default function VideoLessonViewer({ lesson, moduleId, studentId, complet
                                         <span style={{ fontSize:12,fontWeight:600,color:D.txtPri }}>{rp?.full_name??'Student'}</span>
                                         {rp?.role==='teacher' && <span style={{ fontSize:9,padding:'1px 6px',background:accent+'20',color:accent,borderRadius:10,fontWeight:700 }}>Učitel</span>}
                                         <span style={{ fontSize:10,color:D.txtSec }}>{r.created_at?new Date(r.created_at).toLocaleDateString('cs-CZ',{day:'numeric',month:'short'}):''}</span>
+                                        {r.author_id===studentId && (
+                                          <button onClick={()=>deleteReply(row.id,r.id)} style={{ marginLeft:'auto',padding:'1px 6px',background:'rgba(239,68,68,.12)',color:D.danger,border:'none',borderRadius:4,fontSize:9,cursor:'pointer',fontFamily:'inherit' }}>Smazat</button>
+                                        )}
                                       </div>
                                       <p style={{ fontSize:13,color:D.txtPri,margin:0,lineHeight:1.5 }}>{r.reply}</p>
                                     </div>

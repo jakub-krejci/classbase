@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import AppShell from '@/components/AppShell'
 import LessonViewer from './LessonViewer'
 import VideoLessonViewer from './VideoLessonViewer'
 
@@ -64,17 +63,15 @@ export default async function StudentLessonPage({ params }: { params: any }) {
     .select('*').eq('parent_lesson_id', params.lessonId).eq('locked', false).order('sub_position')
 
   return (
-    <AppShell user={profile} role="student" wide>
-      <LessonViewer
-        lesson={lessonWithTitle}
-        moduleId={params.id}
-        studentId={(user as any).id}
-        completionStatus={completionStatus}
-        allLessons={(allLessons ?? []) as any[]}
-        completedIds={Array.from(completedIds) as string[]}
-        authorName={authorName}
-        subLessons={(subLessons ?? []) as any[]}
-      />
-    </AppShell>
+    <LessonViewer
+      lesson={lessonWithTitle}
+      moduleId={params.id}
+      studentId={(user as any).id}
+      completionStatus={completionStatus}
+      allLessons={(allLessons ?? []) as any[]}
+      completedIds={Array.from(completedIds) as string[]}
+      authorName={authorName}
+      subLessons={(subLessons ?? []) as any[]}
+    />
   )
 }
