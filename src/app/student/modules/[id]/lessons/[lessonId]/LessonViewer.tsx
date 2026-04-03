@@ -1357,6 +1357,27 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div style={{ fontSize:11, color:D.txtSec, marginTop:2 }}>{topLevelLessons.length} lekcí</div>
         </div>
 
+        {/* ToC in right panel — above lesson list */}
+        {tocItems.length > 1 && (
+          <div style={{ borderBottom:`1px solid ${D.border}`, flexShrink:0, maxHeight:220, overflowY:'auto' }}>
+            <div style={{ padding:'10px 16px 6px', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.3)', textTransform:'uppercase', letterSpacing:'.07em', display:'flex', alignItems:'center', gap:6 }}>
+              <span>≡</span> Obsah lekce
+            </div>
+            {tocItems.map(item => (
+              <button key={item.id} className="lv-rp-toc-item"
+                onClick={() => {
+                  const el = document.getElementById(item.id)
+                  const main = document.querySelector('.lv-main') as HTMLElement
+                  if (el && main) main.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' })
+                  setTocActiveId(item.id)
+                }}
+                style={{ padding: item.level===1 ? '5px 16px' : item.level===2 ? '4px 16px 4px 26px' : '3px 16px 3px 36px', fontSize:11, fontWeight: tocActiveId===item.id ? 600 : 400, color: tocActiveId===item.id ? 'var(--accent)' : 'rgba(255,255,255,.45)', borderLeft:`2px solid ${tocActiveId===item.id ? 'var(--accent)' : 'transparent'}` }}>
+                {item.text}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Lesson list — scrollable */}
         <div style={{ flex:1, overflowY:'auto' }}>
           {topLevelLessons.map((l:any, i:number) => {
@@ -1390,27 +1411,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
             )
           })}
         </div>
-
-        {/* ToC in right panel — always visible when lesson has headings */}
-        {tocItems.length > 1 && (
-          <div style={{ borderTop:`1px solid ${D.border}`, flexShrink:0, maxHeight:220, overflowY:'auto' }}>
-            <div style={{ padding:'10px 16px 6px', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.3)', textTransform:'uppercase', letterSpacing:'.07em', display:'flex', alignItems:'center', gap:6 }}>
-              <span>≡</span> Obsah lekce
-            </div>
-            {tocItems.map(item => (
-              <button key={item.id} className="lv-rp-toc-item"
-                onClick={() => {
-                  const el = document.getElementById(item.id)
-                  const main = document.querySelector('.lv-main') as HTMLElement
-                  if (el && main) main.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' })
-                  setTocActiveId(item.id)
-                }}
-                style={{ padding: item.level===1 ? '5px 16px' : item.level===2 ? '4px 16px 4px 26px' : '3px 16px 3px 36px', fontSize:11, fontWeight: tocActiveId===item.id ? 600 : 400, color: tocActiveId===item.id ? 'var(--accent)' : 'rgba(255,255,255,.45)', borderLeft:`2px solid ${tocActiveId===item.id ? 'var(--accent)' : 'transparent'}` }}>
-                {item.text}
-              </button>
-            ))}
-          </div>
-        )}
 
       </div>
 
