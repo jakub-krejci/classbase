@@ -1349,7 +1349,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           <div style={{ fontSize:11, color:D.txtSec, marginTop:2 }}>{topLevelLessons.length} lekcí</div>
         </div>
 
-        {/* Lesson list — scrollable */
+        {/* Lesson list — scrollable */}
         <div style={{ flex:1, overflowY:'auto' }}>
           {topLevelLessons.map((l:any, i:number) => {
             const isCurrent = l.id === lesson.id
