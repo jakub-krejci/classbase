@@ -26,7 +26,7 @@ function fmt(s: number) {
 }
 
 interface QAReply { id: string; author_id: string; reply: string; created_at: string; profiles: any }
-interface QARow   { id: string; student_id: string; question: string; created_at: string; profiles: any; replies?: QAReply[] }
+interface QARow   { id: string; student_id: string; question: string; created_at: string; profiles: any; replies?: QAReply[]; lesson_qa_replies?: QAReply[] }
 
 function Av({ src, name, size=30, accent='#7C3AED' }: { src?: string; name: string; size?: number; accent?: string }) {
   const ini = (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
