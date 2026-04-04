@@ -528,7 +528,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   const simRef = useRef<MbSim>(new MbSim())
   const [simDisplay, setSimDisplay] = useState<number[][]>(Array(5).fill(null).map(()=>Array(5).fill(0)))
   const [simLog, setSimLog]         = useState<string[]>([])
-  const simRunningRef = useRef(false)  // single source of truth for sim state
+  const simRunningRef = useRef(false)  // kept for sim.stop() in checkStop
   const [simTab, setSimTab]         = useState<'display'|'log'|'sensors'>('display')
   const [btnADown, setBtnADown]     = useState(false)
   const [btnBDown, setBtnBDown]     = useState(false)
@@ -775,17 +775,18 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   ]
 
   // ── Simulator ──────────────────────────────────────────────────────────────
-  // Force re-render without state — simRunningRef is the single source of truth
-  const [, forceUpdate] = useReducer(x => x + 1, 0)
+  // isRunning: React state for UI, ref for synchronous guard
+  const [isRunning, setIsRunning] = useState(false)
+  const isRunningRef = useRef(false)
 
   function runSim() {
-    if (simRunningRef.current) return
-    const sim = simRef.current
+    if (isRunningRef.current) return   // synchronous guard
     const currentCode = codeRef.current || code
     if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); return }
-    simRunningRef.current = true
-    forceUpdate()               // re-render immediately with new ref value
+    isRunningRef.current = true        // set ref first (synchronous)
+    setIsRunning(true)                 // then state (triggers re-render)
     setSimLog([])
+    const sim = simRef.current
     sim.setTemp(simTemp)
     sim.setAccel(simAccelX, simAccelY, -1024)
     sim.pressA(btnADown); sim.pressB(btnBDown)
@@ -793,15 +794,15 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
       setSimDisplay(disp.map(r => [...r]))
       setSimLog([...log])
     }).finally(() => {
-      simRunningRef.current = false
-      forceUpdate()             // re-render when done
+      isRunningRef.current = false
+      setIsRunning(false)
     })
   }
 
   function stopSim() {
     simRef.current.stop()
-    simRunningRef.current = false
-    forceUpdate()               // re-render immediately
+    isRunningRef.current = false
+    setIsRunning(false)
   }
 
   const [logoDown, setLogoDown] = useState(false)
@@ -1055,16 +1056,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             </div>
             <button onClick={save} disabled={saving} className="mb-btn" style={{...ghost,background:isDirty?accent+'25':undefined,borderColor:isDirty?accent+'50':undefined,color:isDirty?accent:undefined}}>{saving?'…':'💾 Uložit'}</button>
             <button onClick={downloadCode} className="mb-btn" style={ghost}>⬇ Stáhnout .py</button>
-            <button onClick={runSim} disabled={simRunningRef.current} className="mb-btn"
-              style={{...ghost,color:D.success,borderColor:D.success+'50',background:D.success+'15',
-                opacity:simRunningRef.current?.35:1,cursor:simRunningRef.current?'not-allowed':'pointer'}}>
-              ▶ Spustit
-            </button>
-            <button onClick={stopSim} disabled={!simRunningRef.current} className="mb-btn"
-              style={{...ghost,color:D.danger,borderColor:D.danger+'50',background:D.danger+'15',
-                opacity:!simRunningRef.current?.35:1,cursor:!simRunningRef.current?'not-allowed':'pointer'}}>
-              ⏹ Stop
-            </button>
+
           </div>
 
           {/* Monaco editor */}
@@ -1100,7 +1092,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
           <div style={{padding:'16px',borderBottom:`1px solid ${D.border}`,flexShrink:0}}>
             <div style={{textAlign:'center',marginBottom:10}}>
               <div style={{fontSize:11,fontWeight:700,color:D.txtSec,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>
-                🔬 Simulátor {simRunningRef.current&&<span style={{color:D.success}}>● běží</span>}
+                🔬 Simulátor {isRunning&&<span style={{color:D.success}}>● běží</span>}
               </div>
               {/* LED matrix */}
               <div style={{display:'inline-block',background:'#1a0a00',borderRadius:12,padding:10,border:'2px solid #3a2010'}}>
@@ -1133,14 +1125,14 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             </div>
 
             <div style={{display:'flex',gap:6}}>
-              <button onClick={runSim} disabled={simRunningRef.current}
+              <button onClick={runSim} disabled={isRunning}
                 style={{...btn(D.success),flex:1,padding:'7px',fontSize:11,
-                  opacity:simRunningRef.current?.35:1,cursor:simRunningRef.current?'not-allowed':'pointer'}}>
+                  opacity:isRunning?0.35:1,cursor:isRunning?'not-allowed':'pointer'}}>
                 ▶ Spustit
               </button>
-              <button onClick={stopSim} disabled={!simRunningRef.current}
+              <button onClick={stopSim} disabled={!isRunning}
                 style={{...btn('#EF4444'),flex:1,padding:'7px',fontSize:11,
-                  opacity:!simRunningRef.current?.35:1,cursor:!simRunningRef.current?'not-allowed':'pointer'}}>
+                  opacity:isRunning?1:0.35,cursor:isRunning?'pointer':'not-allowed'}}>
                 ⏹ Stop
               </button>
             </div>
