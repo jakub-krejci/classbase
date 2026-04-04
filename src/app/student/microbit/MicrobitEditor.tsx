@@ -776,24 +776,54 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   ]
 
   // ── Simulator ──────────────────────────────────────────────────────────────
+  const runBtnRef  = useRef<HTMLButtonElement>(null)
+  const stopBtnRef = useRef<HTMLButtonElement>(null)
+  const runBtn2Ref  = useRef<HTMLButtonElement>(null)
+  const stopBtn2Ref = useRef<HTMLButtonElement>(null)
+
+  function setSimBtns(running: boolean) {
+    // Immediately update DOM — don't wait for React re-render
+    ;[runBtnRef.current, runBtn2Ref.current].forEach(b => {
+      if (!b) return
+      b.disabled = running
+      b.style.opacity = running ? '0.35' : '1'
+      b.style.cursor  = running ? 'not-allowed' : 'pointer'
+    })
+    ;[stopBtnRef.current, stopBtn2Ref.current].forEach(b => {
+      if (!b) return
+      b.disabled = !running
+      b.style.opacity = !running ? '0.35' : '1'
+      b.style.cursor  = !running ? 'not-allowed' : 'pointer'
+    })
+  }
+
   function runSim() {
-    if (simRunningRef.current) return // already running
+    if (simRunningRef.current) return
     const sim = simRef.current
     const currentCode = codeRef.current || code
     if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); return }
-    setSimLog([]); setSimRunning(true); simRunningRef.current = true
+    simRunningRef.current = true
+    setSimBtns(true)         // immediate DOM update
+    setSimRunning(true)      // React state for UI indicators
+    setSimLog([])
     sim.setTemp(simTemp)
     sim.setAccel(simAccelX, simAccelY, -1024)
     sim.pressA(btnADown); sim.pressB(btnBDown)
     sim.run(currentCode, (disp, log) => {
       setSimDisplay(disp.map(r => [...r]))
       setSimLog([...log])
-    }).finally(() => { setSimRunning(false); simRunningRef.current = false })
+    }).finally(() => {
+      simRunningRef.current = false
+      setSimBtns(false)
+      setSimRunning(false)
+    })
   }
+
   function stopSim() {
     simRef.current.stop()
-    setSimRunning(false)
     simRunningRef.current = false
+    setSimBtns(false)        // immediate DOM update
+    setSimRunning(false)
   }
 
   const [logoDown, setLogoDown] = useState(false)
@@ -1047,12 +1077,12 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             </div>
             <button onClick={save} disabled={saving} className="mb-btn" style={{...ghost,background:isDirty?accent+'25':undefined,borderColor:isDirty?accent+'50':undefined,color:isDirty?accent:undefined}}>{saving?'…':'💾 Uložit'}</button>
             <button onClick={downloadCode} className="mb-btn" style={ghost}>⬇ Stáhnout .py</button>
-            <button onClick={runSim} disabled={simRunning} className="mb-btn"
-              style={{...ghost,color:D.success,borderColor:D.success+'50',background:D.success+'15',opacity:simRunning?.4:1,cursor:simRunning?'not-allowed':'pointer'}}>
+            <button ref={runBtnRef} onClick={runSim} className="mb-btn"
+              style={{...ghost,color:D.success,borderColor:D.success+'50',background:D.success+'15'}}>
               ▶ Spustit
             </button>
-            <button onClick={stopSim} disabled={!simRunning} className="mb-btn"
-              style={{...ghost,color:D.danger,borderColor:D.danger+'50',background:D.danger+'15',opacity:!simRunning?.3:1,cursor:!simRunning?'not-allowed':'pointer'}}>
+            <button ref={stopBtnRef} onClick={stopSim} className="mb-btn"
+              style={{...ghost,color:D.danger,borderColor:D.danger+'50',background:D.danger+'15',opacity:.35,cursor:'not-allowed'}}>
               ⏹ Stop
             </button>
           </div>
@@ -1123,12 +1153,12 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             </div>
 
             <div style={{display:'flex',gap:6}}>
-              <button onClick={runSim} disabled={simRunning}
-                style={{...btn(D.success),flex:1,padding:'7px',fontSize:11,opacity:simRunning?.4:1}}>
+              <button ref={runBtn2Ref} onClick={runSim}
+                style={{...btn(D.success),flex:1,padding:'7px',fontSize:11}}>
                 ▶ Spustit
               </button>
-              <button onClick={stopSim} disabled={!simRunning}
-                style={{...btn('#EF4444'),flex:1,padding:'7px',fontSize:11,opacity:!simRunning?.4:1}}>
+              <button ref={stopBtn2Ref} onClick={stopSim}
+                style={{...btn('#EF4444'),flex:1,padding:'7px',fontSize:11,opacity:.35,cursor:'not-allowed'}}>
                 ⏹ Stop
               </button>
             </div>
