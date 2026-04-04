@@ -28,7 +28,7 @@ interface FNode {
   id:string; type:NodeType; x:number; y:number; w:number; h:number; label:string
   textStyle?:TextStyle; nodeStyle?:NodeStyle
 }
-interface FEdge { id:string; from:string; to:string; fromPort:Port; toPort:Port; label:string }
+interface FEdge { id:string; from:string; to:string; fromPort:Port; toPort:Port; label:string; waypoints?:{x:number;y:number}[] }
 interface Diagram { nodes:FNode[]; edges:FEdge[] }
 interface FFile { path:string; name:string; project:string }
 interface Project { name:string; files:FFile[] }
@@ -75,6 +75,17 @@ function bestPorts(a:FNode,b:FNode):[Port,Port]{
 function curvePath(x1:number,y1:number,x2:number,y2:number){
   const dy=Math.abs(y2-y1)*0.5
   return `M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`
+}
+function edgePathWithWaypoints(x1:number,y1:number,x2:number,y2:number,wps?:{x:number;y:number}[]): string {
+  if(!wps||wps.length===0) return curvePath(x1,y1,x2,y2)
+  let path=`M${x1},${y1}`
+  const points=[{x:x1,y:y1},...wps,{x:x2,y:y2}]
+  for(let i=0;i<points.length-1;i++){
+    const a=points[i],b=points[i+1]
+    const dy=Math.abs(b.y-a.y)*0.4
+    path+=` C${a.x},${a.y+dy} ${b.x},${b.y-dy} ${b.x},${b.y}`
+  }
+  return path
 }
 
 // ── SVG shape for each node type ──────────────────────────────────────────────
@@ -226,6 +237,8 @@ export default function FlowchartEditor({profile}:{profile:any}){
   const [drawingEdge,setDrawingEdge] = useState<{fromId:string;fromPort:Port;mx:number;my:number}|null>(null)
   const drawingRef = useRef<typeof drawingEdge>(null)
   const resizeRef = useRef<{id:string;corner:string;ox:number;oy:number;ow:number;oh:number;nx:number;ny:number}|null>(null)
+  // Edge waypoint drag
+  const edgeDragRef = useRef<{edgeId:string;wpIdx:number;ox:number;oy:number}|null>(null)
 
   // Modals
   const [nfm,setNFM]=useState(false); const [nfn,setNFN]=useState(''); const [nfp,setNFP]=useState(DEFAULT_PROJ)
@@ -233,6 +246,11 @@ export default function FlowchartEditor({profile}:{profile:any}){
   const [dfm,setDFM]=useState<FFile|null>(null)
   const [dpm,setDPM]=useState<string|null>(null)
   const [pseudoModal,setPseudoModal]=useState(false); const [pseudoCode,setPseudoCode]=useState('')
+  // Rename
+  const [renamingFile,setRenamingFile]  = useState<FFile|null>(null)
+  const [renameFileVal,setRFV]         = useState('')
+  const [renamingProj,setRenamingProj] = useState<string|null>(null)
+  const [renameProjVal,setRPV]         = useState('')
 
   // ── Storage ────────────────────────────────────────────────────────────────
   async function push(path:string,data:Diagram){
@@ -319,6 +337,35 @@ export default function FlowchartEditor({profile}:{profile:any}){
     setDiagram(d=>({nodes:d.nodes.filter(n=>!selectedIds.has(n.id)),edges:d.edges.filter(e=>!selectedIds.has(e.id)&&!selectedIds.has(e.from)&&!selectedIds.has(e.to))}))
     setSelectedIds(new Set())
   }
+  async function renameFile(file:FFile, newName:string){
+    if(!newName.trim()||newName===file.name) return
+    const fname=newName.trim().endsWith('.flow')?newName.trim():newName.trim()+'.flow'
+    const newPath=`zaci/${uid}/${sanitize(file.project)}/${sanitize(fname)}`
+    const data=diagramRef.current
+    // Load current data from storage
+    const cur=await pull(file.path)
+    await push(newPath,cur)
+    await supabase.storage.from(BUCKET).remove([file.path])
+    if(activeFile?.path===file.path) setActiveFile({...file,path:newPath,name:fname})
+    setRenamingFile(null)
+    await refresh()
+  }
+
+  async function renameProject(oldName:string, newName:string){
+    if(!newName.trim()||newName===oldName) return
+    const proj=projects.find(p=>p.name===oldName); if(!proj) return
+    for(const file of proj.files){
+      const cur=await pull(file.path)
+      const newPath=`zaci/${uid}/${sanitize(newName)}/${sanitize(file.name)}`
+      await push(newPath,cur)
+      await supabase.storage.from(BUCKET).remove([file.path])
+      if(activeFile?.path===file.path) setActiveFile({...activeFile,path:newPath,project:newName})
+    }
+    setRenamingProj(null)
+    setExpanded(prev=>{const n=new Set(prev);n.delete(oldName);n.add(newName);return n})
+    await refresh()
+  }
+
   function quickInsertNode(type:NodeType){
     if(!quickInsert) return
     const cfg=NODE_CFG[type]; const id='n'+Date.now()
@@ -383,6 +430,17 @@ export default function FlowchartEditor({profile}:{profile:any}){
         }
         setDiagramState({...diagramRef.current})
       }
+      if(edgeDragRef.current){
+        const c=clientToSvg(e.clientX,e.clientY)
+        const ed=edgeDragRef.current
+        const edge=diagramRef.current.edges.find(e=>e.id===ed.edgeId)
+        if(edge){
+          const wps=[...(edge.waypoints??[])]
+          wps[ed.wpIdx]={x:c.x,y:c.y}
+          edge.waypoints=wps
+        }
+        setDiagramState({...diagramRef.current})
+      }
     }
     function onUp(e:MouseEvent){
       if(drawingRef.current){
@@ -399,7 +457,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
         }
         drawingRef.current=null; setDrawingEdge(null)
       }
-      dragNode.current=null; panStart.current=null; resizeRef.current=null
+      dragNode.current=null; panStart.current=null; resizeRef.current=null; edgeDragRef.current=null
     }
     window.addEventListener('mousemove',onMove)
     window.addEventListener('mouseup',onUp)
@@ -421,16 +479,23 @@ export default function FlowchartEditor({profile}:{profile:any}){
   // ── Export ────────────────────────────────────────────────────────────────
   function exportSVG(){
     if(!svgRef.current) return
-    const src='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svgRef.current)
+    const svg=svgRef.current
+    // Temporarily hide ports and resize handles
+    svg.querySelectorAll('.fc-port,.fc-resize-h').forEach((el:any)=>{el.dataset.oldDisplay=el.style.display;el.style.display='none'})
+    const src='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svg)
+    svg.querySelectorAll('.fc-port,.fc-resize-h').forEach((el:any)=>{el.style.display=el.dataset.oldDisplay??''})
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([src],{type:'image/svg+xml'}))
     a.download=(activeFile?.name.replace('.flow','')||'diagram')+'.svg'; a.click()
   }
   function exportPNG(){
     if(!svgRef.current) return
-    const src=new XMLSerializer().serializeToString(svgRef.current)
+    const svg=svgRef.current
+    svg.querySelectorAll('.fc-port,.fc-resize-h').forEach((el:any)=>{el.dataset.oldDisplay=el.style.display;el.style.display='none'})
+    const src=new XMLSerializer().serializeToString(svg)
+    svg.querySelectorAll('.fc-port,.fc-resize-h').forEach((el:any)=>{el.style.display=el.dataset.oldDisplay??''})
     const img=new Image(); const url=URL.createObjectURL(new Blob([src],{type:'image/svg+xml'}))
     img.onload=()=>{
-      const c=document.createElement('canvas'); c.width=svgRef.current!.clientWidth*2; c.height=svgRef.current!.clientHeight*2
+      const c=document.createElement('canvas'); c.width=svg.clientWidth*2; c.height=svg.clientHeight*2
       const ctx=c.getContext('2d')!; ctx.fillStyle='#090B10'; ctx.fillRect(0,0,c.width,c.height)
       ctx.scale(2,2); ctx.drawImage(img,0,0); URL.revokeObjectURL(url)
       const a=document.createElement('a'); a.href=c.toDataURL('image/png')
@@ -524,6 +589,28 @@ export default function FlowchartEditor({profile}:{profile:any}){
           <button onClick={()=>setEdgeLabelId(null)} style={{padding:'9px 14px',background:D.bgMid,color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>Bez popisku</button>
         </div>
       </Modal>}
+      {/* Rename file modal */}
+      {renamingFile&&<Modal title="✏️ Přejmenovat diagram" onClose={()=>setRenamingFile(null)}>
+        <input value={renameFileVal} onChange={e=>setRFV(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&renameFile(renamingFile,renameFileVal)}
+          autoFocus style={{...inp,marginBottom:12}}/>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={()=>renameFile(renamingFile,renameFileVal)} style={{flex:1,padding:'9px',background:accent,color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>Uložit</button>
+          <button onClick={()=>setRenamingFile(null)} style={{padding:'9px 14px',background:D.bgMid,color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>Zrušit</button>
+        </div>
+      </Modal>}
+
+      {/* Rename project modal */}
+      {renamingProj&&<Modal title="✏️ Přejmenovat projekt" onClose={()=>setRenamingProj(null)}>
+        <input value={renameProjVal} onChange={e=>setRPV(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&renameProject(renamingProj,renameProjVal)}
+          autoFocus style={{...inp,marginBottom:12}}/>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={()=>renameProject(renamingProj,renameProjVal)} style={{flex:1,padding:'9px',background:accent,color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>Uložit</button>
+          <button onClick={()=>setRenamingProj(null)} style={{padding:'9px 14px',background:D.bgMid,color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>Zrušit</button>
+        </div>
+      </Modal>}
+
       {pseudoModal&&<Modal title="📋 Pseudokód" onClose={()=>setPseudoModal(false)}>
         <pre style={{background:'#1e1e2e',color:'#cdd6f4',padding:'14px',borderRadius:10,fontSize:12,overflowX:'auto',maxHeight:380,whiteSpace:'pre-wrap',fontFamily:'ui-monospace,monospace',marginBottom:12}}>{pseudoCode}</pre>
         <div style={{display:'flex',gap:8}}>
@@ -590,13 +677,15 @@ export default function FlowchartEditor({profile}:{profile:any}){
                   <div style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',cursor:'pointer',fontSize:12,fontWeight:600,color:D.txtSec}}
                     onClick={()=>setExpanded(prev=>{const n=new Set(prev);n.has(proj.name)?n.delete(proj.name):n.add(proj.name);return n})}>
                     <span style={{fontSize:9}}>{expanded.has(proj.name)?'▼':'▶'}</span>
-                    <span style={{flex:1}}>📁 {proj.name}</span>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>📁 {proj.name}</span>
+                    <button onClick={e=>{e.stopPropagation();setRenamingProj(proj.name);setRPV(proj.name)}} style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,.4)',fontSize:11,padding:'0 2px'}} title="Přejmenovat">✏</button>
                     <button onClick={e=>{e.stopPropagation();setDPM(proj.name)}} style={{background:'none',border:'none',cursor:'pointer',color:D.danger,fontSize:11,padding:'0 2px',opacity:.5}} title="Smazat projekt">🗑</button>
                   </div>
                   {expanded.has(proj.name)&&proj.files.map(file=>(
                     <div key={file.path} className="fc-file-row" style={{background:activeFile?.path===file.path?accent+'15':'transparent',borderLeft:`2px solid ${activeFile?.path===file.path?accent:'transparent'}`}}>
                       <span style={{fontSize:9}}>📊</span>
                       <span onClick={()=>openFile(file)} style={{fontSize:11,color:activeFile?.path===file.path?D.txtPri:D.txtSec,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{file.name.replace('.flow','')}</span>
+                      <button onClick={e=>{e.stopPropagation();setRenamingFile(file);setRFV(file.name.replace('.flow',''))}} style={{background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,.4)',fontSize:11,padding:'0 2px',flexShrink:0}} title="Přejmenovat">✏</button>
                       <button onClick={()=>setDFM(file)} style={{background:'none',border:'none',cursor:'pointer',color:D.danger,fontSize:11,opacity:.5,padding:'0 2px',flexShrink:0}}>🗑</button>
                     </div>
                   ))}
@@ -671,11 +760,33 @@ export default function FlowchartEditor({profile}:{profile:any}){
                   const fn=diagram.nodes.find(n=>n.id===edge.from); const tn=diagram.nodes.find(n=>n.id===edge.to)
                   if(!fn||!tn) return null
                   const [fx,fy]=portXY(fn,edge.fromPort); const [tx,ty]=portXY(tn,edge.toPort)
-                  const path=curvePath(fx,fy,tx,ty); const sel=selectedIds.has(edge.id)
+                  const wps=edge.waypoints??[]
+                  const path=edgePathWithWaypoints(fx,fy,tx,ty,wps); const sel=selectedIds.has(edge.id)
+                  // Midpoint for adding a waypoint (center of path)
+                  const allPts=[{x:fx,y:fy},...wps,{x:tx,y:ty}]
+                  const mid=allPts[Math.floor(allPts.length/2)]
                   return<g key={edge.id} style={{cursor:'pointer'}} onClick={e=>{e.stopPropagation();setSelectedIds(new Set([edge.id]))}}>
                     <path d={path} fill="none" stroke="transparent" strokeWidth={14}/>
                     <path d={path} fill="none" stroke={sel?'#fff':'rgba(255,255,255,.35)'} strokeWidth={sel?2:1.5} markerEnd="url(#arr)"/>
-                    {edge.label&&<text x={(fx+tx)/2} y={(fy+ty)/2-7} textAnchor="middle" fontSize={11} fill="rgba(255,255,255,.55)" fontFamily="DM Sans,system-ui" style={{pointerEvents:'none'}}>{edge.label}</text>}
+                    {edge.label&&<text x={mid.x} y={mid.y-9} textAnchor="middle" fontSize={11} fill="rgba(255,255,255,.55)" fontFamily="DM Sans,system-ui" style={{pointerEvents:'none'}}>{edge.label}</text>}
+                    {/* Waypoint handles (draggable) */}
+                    {sel&&wps.map((wp,i)=>(
+                      <circle key={i} cx={wp.x} cy={wp.y} r={6} fill="#fff" fillOpacity={.25} stroke="#fff" strokeWidth={1.5}
+                        style={{cursor:'move'}}
+                        onMouseDown={e=>{e.stopPropagation();edgeDragRef.current={edgeId:edge.id,wpIdx:i,ox:e.clientX,oy:e.clientY}}}/>
+                    ))}
+                    {/* Midpoint handle to add new waypoint */}
+                    {sel&&<circle cx={mid.x} cy={mid.y} r={5} fill={accent} fillOpacity={.7} stroke="#fff" strokeWidth={1}
+                      style={{cursor:'crosshair'}} title="Táhni pro ohnutí hrany"
+                      onMouseDown={e=>{
+                        e.stopPropagation()
+                        // Insert a new waypoint at mid position
+                        const newWps=[...wps]
+                        const insertIdx=Math.floor(allPts.length/2)-1
+                        newWps.splice(Math.max(0,insertIdx),0,{x:mid.x,y:mid.y})
+                        setDiagram(d=>({...d,edges:d.edges.map(ed=>ed.id===edge.id?{...ed,waypoints:newWps}:ed)}))
+                        edgeDragRef.current={edgeId:edge.id,wpIdx:Math.max(0,insertIdx),ox:e.clientX,oy:e.clientY}
+                      }}/>}
                   </g>
                 })}
                 {/* Nodes */}
