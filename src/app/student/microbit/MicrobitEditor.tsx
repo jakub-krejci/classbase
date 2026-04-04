@@ -283,47 +283,59 @@ function transpileMicroPython(code: string, _ctx: any): string {
 
     const indentLevel = raw.length - stripped.length
 
-    // Close blocks whose indent is deeper than current line
+    // elif/else: close only the INNER block (not the if-block level)
+    const isElif = stripped.startsWith('elif ')
+    const isElse = stripped === 'else:'
+
+    // Close blocks whose indent is GREATER than current line
     while(indentStack.length > 1 && indentLevel < indentStack[indentStack.length - 1]) {
       indentStack.pop()
-      out.push('  '.repeat(indentStack.length) + '}')
+      // For elif/else, don't add closing brace — the replacement handles it
+      if(!(isElif || isElse) || indentStack[indentStack.length-1] !== indentLevel) {
+        out.push('  '.repeat(indentStack.length) + '}')
+      }
     }
 
     const ind = '  '.repeat(currDepth())
 
-    // Detect block-opening statements (end with :)
-    const isBlock = /^(while |if |elif |else:|for |def )/.test(stripped) && stripped.endsWith(':')
-
     let line = stripped
       .replace(/^while True:$/,  'while(true){')
       .replace(/^while False:$/, 'while(false){')
-      .replace(/^if (.+):$/,    (_,c)=>`if(${transpileExpr(c)}){`)
-      .replace(/^elif (.+):$/,  (_,c)=>`} else if(${transpileExpr(c)}){`)
-      .replace(/^else:$/,       '} else {')
-      .replace(/^while (.+):$/, (_,c)=>`while(${transpileExpr(c)}){`)
+      .replace(/^if (.+):$/,     (_,c)=>`if(${transpileExpr(c)}){`)
+      .replace(/^elif (.+):$/,   (_,c)=>`} else if(${transpileExpr(c)}){`)
+      .replace(/^else:$/,        '} else {')
+      .replace(/^while (.+):$/,  (_,c)=>`while(${transpileExpr(c)}){`)
       .replace(/^for (\w+) in range\((.+)\):$/, (_,v,args)=>`for(const ${v} of range(${args})){`)
-      .replace(/^for (\w+) in (.+):$/,          (_,v,it)=>`for(const ${v} of ${transpileExpr(it)}){`)
-      .replace(/^def (\w+)\(([^)]*)\):$/,       (_,nm,args)=>`async function ${nm}(${args}){`)
+      .replace(/^for (\w+) in (.+):$/,            (_,v,it)=>`for(const ${v} of ${transpileExpr(it)}){`)
+      .replace(/^def (\w+)\(([^)]*)\):$/,         (_,nm,args)=>`async function ${nm}(${args}){`)
       .replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false').replace(/\bNone\b/g,'null')
       .replace(/\band\b/g,'&&').replace(/\bor\b/g,'||').replace(/\bnot\b/g,'!')
       .replace(/\bsleep\(/g,'await sleep(')
       .replace(/^pass$/,'/* pass */')
 
     // Add await to display/compass async calls
-    if((line.includes('display.scroll(') || line.includes('display.show(') || line.includes('compass.calibrate()')) && !line.startsWith('await ')) {
+    if((line.includes('display.scroll(') || line.includes('display.show(') || line.includes('compass.calibrate()'))
+      && !line.startsWith('await ') && !line.startsWith('}')){
       line = 'await ' + line
     }
 
-    // Add semicolon to statements
+    // Add semicolon to non-block statements
     if(!line.endsWith('{') && !line.endsWith('}') && line.trim() !== '' && !line.startsWith('//') && !line.endsWith(';')) {
       line += ';'
     }
 
-    out.push(ind + line)
+    // elif/else: use same indent level as the if (don't add extra indent)
+    out.push((isElif || isElse) ? '  '.repeat(Math.max(1, currDepth()-1)) + line : ind + line)
 
-    // Push new indent level if this was a block opener
+    // Push new indent level if block opener
     if(line.endsWith('{')) {
-      indentStack.push(indentLevel + 4)
+      if(!(isElif || isElse)) {
+        indentStack.push(indentLevel + 4)
+      } else {
+        // Replace the last indent level (elif/else continues same block)
+        if(indentStack.length > 1) indentStack[indentStack.length-1] = indentLevel + 4
+        else indentStack.push(indentLevel + 4)
+      }
     }
   }
 
@@ -361,7 +373,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   const [saveMsg, setSaveMsg]       = useState('')
 
   // ── Editor state ───────────────────────────────────────────────────────────
-  const [code, setCode]             = useState(DEFAULT_CODE)
+  const [code, setCode]             = useState('')
   const editorRef = useRef<any>(null)
   const monacoRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -397,9 +409,22 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   // ── Storage ────────────────────────────────────────────────────────────────
   async function push(path: string, content: string) {
     const blob = new Blob([content], { type: 'text/plain' })
-    await supabase.storage.from(BUCKET).remove([path])
-    const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { cacheControl: '0' })
-    return error?.message ?? null
+    // Try upsert first
+    const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
+      contentType: 'text/plain',
+      upsert: true,
+      cacheControl: '0',
+    })
+    if (error) {
+      // Fallback: remove then re-upload
+      await supabase.storage.from(BUCKET).remove([path])
+      const { error: e2 } = await supabase.storage.from(BUCKET).upload(path, blob, {
+        contentType: 'text/plain',
+        cacheControl: '0',
+      })
+      return e2?.message ?? null
+    }
+    return null
   }
   async function pull(path: string) {
     const { data, error } = await supabase.storage.from(BUCKET).download(path)
@@ -463,16 +488,33 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   }
   async function createFile() {
     const name = (nfn.trim() || 'main').replace(/\.py$/, '') + '.py'
-    const proj = nfp || DEFAULT_PROJ; const path = fp(uid, proj, name)
-    await push(path, DEFAULT_CODE)
+    const proj = nfp || DEFAULT_PROJ
+    const path = fp(uid, proj, name)
+    const err = await push(path, DEFAULT_CODE)
     setNFM(false); setNFN('')
+    if (err) { setSaveMsg('❌ ' + err); return }
+    // Immediately show the new file in editor
+    const file: MbFile = { path, name, project: proj, updatedAt: new Date().toISOString() }
+    setCode(DEFAULT_CODE)
+    setActiveFile(file)
+    setIsDirty(false)
+    localStorage.setItem(LS_LAST, JSON.stringify(file))
+    setExpanded(prev => new Set([...prev, proj]))
     await refresh()
-    await openFile({ path, name, project: proj, updatedAt: new Date().toISOString() })
   }
   async function createProject() {
     const name = npn.trim() || 'Projekt'
-    await push(fp(uid, name, 'main.py'), DEFAULT_CODE)
-    setNPM(false); setNPN(''); await refresh()
+    const path = fp(uid, name, 'main.py')
+    const err = await push(path, DEFAULT_CODE)
+    setNPM(false); setNPN('')
+    if (!err) {
+      const file: MbFile = { path, name: 'main.py', project: name, updatedAt: new Date().toISOString() }
+      setCode(DEFAULT_CODE)
+      setActiveFile(file)
+      setIsDirty(false)
+      setExpanded(prev => new Set([...prev, name]))
+    }
+    await refresh()
   }
   async function deleteFile(file: MbFile) {
     await supabase.storage.from(BUCKET).remove([file.path])
@@ -769,12 +811,27 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 
           {/* Monaco editor */}
           <div ref={containerRef} style={{flex:1,overflow:'hidden',position:'relative'}}>
-            <MonacoPanel
-              code={code}
-              onChange={(v:string)=>{setCode(v);setIsDirty(true)}}
-              completions={MB_COMPLETIONS}
-              onSave={save}
-            />
+            {!activeFile ? (
+              <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:14,color:'rgba(255,255,255,.25)'}}>
+                <span style={{fontSize:52,opacity:.3}}>🔬</span>
+                <div style={{fontSize:15,fontWeight:600,color:'rgba(255,255,255,.3)'}}>Vítej v micro:bit editoru</div>
+                <div style={{fontSize:12,color:'rgba(255,255,255,.2)',textAlign:'center' as const,lineHeight:1.7}}>
+                  Vytvoř nový soubor nebo otevři existující projekt<br/>
+                  z levého panelu a začni programovat.
+                </div>
+                <button onClick={()=>setNFM(true)} style={{marginTop:8,padding:'10px 22px',background:`rgba(${parseInt(accent.slice(1,3)||'7C',16)},${parseInt(accent.slice(3,5)||'3A',16)},${parseInt(accent.slice(5,7)||'ED',16)},.15)`,border:`1px solid ${accent}40`,borderRadius:10,cursor:'pointer',color:accent,fontFamily:'inherit',fontWeight:600,fontSize:13}}>
+                  + Vytvořit první soubor
+                </button>
+              </div>
+            ) : (
+              <MonacoPanel
+                code={code}
+                onChange={(v:string)=>{setCode(v);setIsDirty(true)}}
+                completions={MB_COMPLETIONS}
+                onSave={save}
+                onEditorMount={(e:any)=>{ editorRef.current = e }}
+              />
+            )}
           </div>
         </div>
 
@@ -933,6 +990,13 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
                     <div style={{fontSize:10,opacity:.6}}>Připoj přes USB a klikni zde</div>
                   </div>
                 </button>
+                <div style={{marginTop:7,padding:'7px 10px',background:'rgba(255,255,255,.03)',borderRadius:8,border:'1px solid rgba(255,255,255,.06)'}}>
+                  <div style={{fontSize:10,color:'rgba(255,255,255,.3)',lineHeight:1.6}}>
+                    💡 Po kliknutí se otevře <strong style={{color:'rgba(255,255,255,.45)'}}>okno prohlížeče</strong> pro výběr portu.<br/>
+                    Vyber <strong style={{color:'rgba(255,255,255,.45)'}}>mbed Serial Port (COMX)</strong> nebo <strong style={{color:'rgba(255,255,255,.45)'}}>BBC micro:bit</strong>.<br/>
+                    Toto okno je součástí prohlížeče a nelze ho nastylovat.
+                  </div>
+                </div>
                 {serialStatus&&<div style={{fontSize:10,color:'rgba(255,255,255,.3)',marginTop:5,textAlign:'center' as const}}>{serialStatus}</div>}
               </div>
             )}
@@ -949,8 +1013,8 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 }
 
 // ── Monaco panel sub-component ────────────────────────────────────────────────
-function MonacoPanel({ code, onChange, completions, onSave }: {
-  code: string; onChange: (v:string)=>void; completions: any[]; onSave: ()=>void
+function MonacoPanel({ code, onChange, completions, onSave, onEditorMount }: {
+  code: string; onChange: (v:string)=>void; completions: any[]; onSave: ()=>void; onEditorMount?: (e:any)=>void
 }) {
   const [Editor, setEditor] = useState<any>(null)
 
@@ -959,6 +1023,7 @@ function MonacoPanel({ code, onChange, completions, onSave }: {
   }, [])
 
   function handleMount(editor: any, monaco: any) {
+    onEditorMount?.(editor)
     // Register micro:bit completions
     monaco.languages.registerCompletionItemProvider('python', {
       triggerCharacters: ['.'],
@@ -1003,7 +1068,7 @@ function MonacoPanel({ code, onChange, completions, onSave }: {
     <Editor
       height="100%"
       language="python"
-      value={code}
+      defaultValue={code}
       onChange={(v: string|undefined) => onChange(v??'')}
       onMount={handleMount}
       options={{
