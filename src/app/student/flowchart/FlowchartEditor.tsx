@@ -13,7 +13,7 @@ function sanitize(s: string) {
 function fp(uid:string,proj:string,name:string){ return `zaci/${uid}/${sanitize(proj)}/${sanitize(name)}` }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type NodeType = 'start'|'end'|'process'|'decision'|'io'|'loop'|'subroutine'|'connector'
+type NodeType = 'start'|'end'|'process'|'decision'|'io'|'loop'|'subroutine'|'connector'|'text'
 type Port = 'top'|'bottom'|'left'|'right'
 type TextAlign = 'left'|'center'|'right'
 
@@ -44,6 +44,7 @@ const NODE_CFG: Record<NodeType,{label:string;color:string;w:number;h:number}> =
   loop:       {label:'Smyčka',       color:'#06B6D4', w:180, h:64},
   subroutine: {label:'Podprogram',   color:'#EC4899', w:180, h:64},
   connector:  {label:'A',            color:'#A3A3A3', w:56,  h:56},
+  text:       {label:'Text...',      color:'#E2E8F0', w:160, h:40},
 }
 
 // Preset color themes for the properties panel
@@ -78,6 +79,12 @@ function curvePath(x1:number,y1:number,x2:number,y2:number){
 
 // ── SVG shape for each node type ──────────────────────────────────────────────
 function NodeShape({n,sel}:{n:FNode;sel:boolean}){
+  if(n.type==='text'){
+    // Text block: just a dashed selection box, transparent fill
+    return sel
+      ? <rect x={n.x} y={n.y} width={n.w} height={n.h} fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.3)" strokeWidth={1} strokeDasharray="4,3" rx={3}/>
+      : <rect x={n.x} y={n.y} width={n.w} height={n.h} fill="transparent" stroke="transparent"/>
+  }
   const defColor = NODE_CFG[n.type].color
   const fill   = n.nodeStyle?.fillColor   ?? defColor+'20'
   const stroke = sel ? '#fff' : (n.nodeStyle?.strokeColor ?? defColor)
@@ -124,6 +131,8 @@ function PalettePreview({type,color}:{type:NodeType;color:string}){
         <line x1={7} y1={1} x2={7} y2={H-1} stroke={stroke} strokeWidth={1}/>
         <line x1={W-8} y1={1} x2={W-8} y2={H-1} stroke={stroke} strokeWidth={1}/>
       </svg>
+    case 'text':
+      return <svg width={W} height={H}><rect x={1} y={5} width={W-2} height={H-12} fill="transparent" stroke={color} strokeWidth={1} strokeDasharray="3,2" rx={2}/><text x={W/2} y={H/2+2} textAnchor="middle" dominantBaseline="central" fontSize={8} fill={color} fontFamily="DM Sans,system-ui">Aa</text></svg>
     default:
       return <svg width={W} height={H}><rect x={1} y={1} width={W-2} height={H-2} rx={4} {...props}/></svg>
   }
@@ -205,6 +214,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
   const [editVal,setEditVal]         = useState('')
   const [edgeLabelId,setEdgeLabelId] = useState<string|null>(null)
   const [edgeLabelVal,setEdgeLabelVal] = useState('')
+  const [quickInsert,setQuickInsert] = useState<{x:number;y:number;svgX:number;svgY:number;fromId:string;fromPort:Port}|null>(null)
 
   const svgRef   = useRef<SVGSVGElement>(null)
   const [pan,setPan]   = useState({x:80,y:60})
@@ -309,6 +319,18 @@ export default function FlowchartEditor({profile}:{profile:any}){
     setDiagram(d=>({nodes:d.nodes.filter(n=>!selectedIds.has(n.id)),edges:d.edges.filter(e=>!selectedIds.has(e.id)&&!selectedIds.has(e.from)&&!selectedIds.has(e.to))}))
     setSelectedIds(new Set())
   }
+  function quickInsertNode(type:NodeType){
+    if(!quickInsert) return
+    const cfg=NODE_CFG[type]; const id='n'+Date.now()
+    const nx=quickInsert.svgX-cfg.w/2; const ny=quickInsert.svgY-cfg.h/2
+    const newNode:FNode={id,type,x:Math.max(0,nx),y:Math.max(0,ny),w:cfg.w,h:cfg.h,label:cfg.label}
+    const fromNode=diagramRef.current.nodes.find(n=>n.id===quickInsert.fromId)
+    const [_fp,tp]=fromNode?bestPorts(fromNode,newNode):['bottom' as Port,'top' as Port]
+    const eid='e'+Date.now()
+    setDiagram(d=>({nodes:[...d.nodes,newNode],edges:[...d.edges,{id:eid,from:quickInsert.fromId,to:id,fromPort:quickInsert.fromPort,toPort:tp,label:''}]}))
+    setQuickInsert(null)
+  }
+
   function finishLabelEdit(){
     if(!editingId) return
     setDiagram(d=>({...d,nodes:d.nodes.map(n=>n.id===editingId?{...n,label:editVal}:n)}))
@@ -371,6 +393,9 @@ export default function FlowchartEditor({profile}:{profile:any}){
           const id='e'+Date.now()
           setDiagram(d=>({...d,edges:[...d.edges,{id,from:de.fromId,to:target.id,fromPort:de.fromPort,toPort:tp,label:''}]}))
           setEdgeLabelId(id); setEdgeLabelVal('')
+        } else {
+          // Dropped in empty space → quick-insert popup
+          setQuickInsert({x:e.clientX,y:e.clientY,svgX:c.x,svgY:c.y,fromId:de.fromId,fromPort:de.fromPort})
         }
         drawingRef.current=null; setDrawingEdge(null)
       }
@@ -387,7 +412,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
       if(editingId||edgeLabelId) return
       if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}
       if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size>0) deleteSelected()
-      if(e.key==='Escape') setSelectedIds(new Set())
+      if(e.key==='Escape'){setSelectedIds(new Set());setQuickInsert(null)}
     }
     window.addEventListener('keydown',onKey)
     return ()=>window.removeEventListener('keydown',onKey)
@@ -436,7 +461,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
   const PALETTE_ITEMS:[NodeType,string][]=[
     ['start','Start'],['end','Konec'],['process','Proces'],
     ['decision','Rozhodnutí'],['io','Vstup / Výstup'],['loop','Smyčka'],
-    ['subroutine','Podprogram'],['connector','Spojka'],
+    ['subroutine','Podprogram'],['connector','Spojka'],['text','Volný text'],
   ]
   const fcBtn:React.CSSProperties={background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)',color:'rgba(255,255,255,.6)',borderRadius:7,padding:'6px 11px',cursor:'pointer',fontFamily:'inherit',fontSize:12,transition:'all .12s',whiteSpace:'nowrap' as const}
 
@@ -449,12 +474,14 @@ export default function FlowchartEditor({profile}:{profile:any}){
         .fc-file-row{display:flex;align-items:center;padding:5px 12px 5px 26px;cursor:pointer;gap:5px;transition:background .1s;}
         .fc-file-row:hover{background:rgba(255,255,255,.05)!important;}
         .fc-btn:hover{background:rgba(255,255,255,.12)!important;color:#fff!important;}
-        .fc-port{fill:transparent;cursor:crosshair;}
-        .fc-node-g:hover .fc-port{fill:rgba(255,255,255,.18)!important;stroke-opacity:1!important;}
-        .fc-port:hover{fill:rgba(255,255,255,.55)!important;}
+        .fc-port{fill:transparent;stroke:transparent;cursor:crosshair;transition:fill .15s,stroke .15s;}
+        .fc-node-g:hover .fc-port{fill:rgba(255,255,255,.15)!important;stroke:rgba(255,255,255,.6)!important;}
+        .fc-port:hover{fill:rgba(255,255,255,.5)!important;stroke:white!important;}
         .fc-resize-h{fill:rgba(255,255,255,.15);cursor:se-resize;}
         .fc-resize-h:hover{fill:rgba(255,255,255,.45);}
         .prop-toggle{background:transparent;border:1px solid rgba(255,255,255,.12);border-radius:5px;color:rgba(255,255,255,.4);padding:3px 7px;cursor:pointer;font-family:inherit;font-size:12px;transition:all .12s;}
+        .qi-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;border-radius:9px;cursor:pointer;border:1px solid transparent;background:rgba(255,255,255,.04);transition:all .12s;}
+        .qi-item:hover{background:rgba(255,255,255,.12)!important;border-color:rgba(255,255,255,.2)!important;transform:scale(1.05);}
         .prop-toggle.active{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;}
       `}</style>
 
@@ -504,6 +531,28 @@ export default function FlowchartEditor({profile}:{profile:any}){
           <button onClick={()=>setPseudoModal(false)} style={{padding:'9px 14px',background:D.bgMid,color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:8,cursor:'pointer',fontFamily:'inherit'}}>Zavřít</button>
         </div>
       </Modal>}
+
+      {/* ── Quick Insert popup ── */}
+      {quickInsert&&(
+        <>
+          <div onClick={()=>setQuickInsert(null)} style={{position:'fixed',inset:0,zIndex:9990}}/>
+          <div style={{position:'fixed',left:quickInsert.x-160,top:quickInsert.y-100,zIndex:9991,background:'#14171F',border:'1px solid rgba(255,255,255,.12)',borderRadius:16,padding:'10px 12px',boxShadow:'0 16px 48px rgba(0,0,0,.7)',width:320}}>
+            <div style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,.35)',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8,textAlign:'center'}}>Přidat blok a propojit</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+              {([
+                ['start','🟢'],['end','🔴'],['process','🔵'],['decision','🟡'],
+                ['io','🟣'],['loop','🩵'],['subroutine','🩷'],['connector','⚪'],['text','Aa'],
+              ] as [NodeType,string][]).map(([type,emoji])=>(
+                <button key={type} className="qi-item" onClick={()=>quickInsertNode(type)}>
+                  <PalettePreview type={type} color={NODE_CFG[type].color}/>
+                  <span style={{fontSize:9,color:'rgba(255,255,255,.45)',lineHeight:1.2,textAlign:'center'}}>{NODE_CFG[type].label}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{fontSize:10,color:'rgba(255,255,255,.2)',textAlign:'center',marginTop:8}}>Klik = přidá blok + automaticky propojí šipkou · Esc = zrušit</div>
+          </div>
+        </>
+      )}
 
       <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
 
@@ -661,7 +710,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
                       {node.label}
                     </text>
                     {/* Ports — only visible on hover via CSS */}
-                    {ports.map(port=>{const [px,py]=portXY(node,port); return<circle key={port} className="fc-port" data-port={port} cx={px} cy={py} r={7} stroke={cfg.color} strokeWidth={2} style={{cursor:'crosshair'}}/>})}
+                    {node.type!=='text'&&ports.map(port=>{const [px,py]=portXY(node,port); return<circle key={port} className="fc-port" data-port={port} cx={px} cy={py} r={7} strokeWidth={2} style={{cursor:'crosshair'}}/>})}
                     {/* Resize handles */}
                     {sel&&[['bottom-right',x+w,y+h],['bottom-left',x,y+h],['top-right',x+w,y],['top-left',x,y]].map(([c,cx,cy])=>(
                       <rect key={String(c)} className="fc-resize-h" data-corner={String(c)} x={Number(cx)-5} y={Number(cy)-5} width={10} height={10} rx={2}/>
