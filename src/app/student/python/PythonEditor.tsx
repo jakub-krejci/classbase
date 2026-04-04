@@ -160,8 +160,19 @@ export default function PythonEditor({ profile }: { profile: any }) {
       w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
       w.require(['vs/editor/editor.main'], (monaco: any) => {
         if (!containerRef.current || editorRef.current) return
+        monaco.editor.defineTheme('cb-dark', {
+          base: 'vs-dark', inherit: true,
+          rules: [
+            { token: 'keyword', foreground: 'c792ea' },
+            { token: 'string', foreground: 'c3e88d' },
+            { token: 'comment', foreground: '546e7a', fontStyle: 'italic' },
+            { token: 'number', foreground: 'f78c6c' },
+            { token: 'type', foreground: '82aaff' },
+          ],
+          colors: { 'editor.background': '#0d1117', 'editor.foreground': '#e6edf3', 'editorLineNumber.foreground': '#30363d', 'editor.lineHighlightBackground': '#161b22', 'editorCursor.foreground': '#e6edf3' }
+        })
         const ed = monaco.editor.create(containerRef.current, {
-          value: DEFAULT_CODE, language: 'python', theme: 'vs-dark',
+          value: DEFAULT_CODE, language: 'python', theme: 'cb-dark',
           fontSize: 14, fontFamily: "'JetBrains Mono','Fira Code',monospace",
           fontLigatures: true, minimap: { enabled: false }, lineNumbers: 'on',
           wordWrap: 'on', automaticLayout: true, scrollBeyondLastLine: false,
@@ -447,7 +458,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
   }
 
   return (
-    <DarkLayout profile={profile} activeRoute="/student/python">
+    <DarkLayout profile={profile} activeRoute="/student/python" fullContent>
 
       {/* ── input() modal ── */}
       {inputResolve && (
@@ -602,32 +613,20 @@ export default function PythonEditor({ profile }: { profile: any }) {
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Page header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#3B82F612', border: `1px solid #3B82F620`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <img src="/icons/python.png" alt="Python" style={{ width: 24, height: 24, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>Python Editor</h1>
-          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>Ctrl+S uložit · Ctrl+Enter spustit · soubory uloženy v cloudu</p>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
-          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '3px 9px', background: '#3B82F612', color: '#60A5FA', borderRadius: 20, fontWeight: 600 }}><img src="/icons/python.png" alt="" style={{ width: 14, height: 14, objectFit: 'contain' }} /> Python 3.11</span>
-        </div>
-      </div>
-
-      {/* ── 2-col layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr', gap: 14, height: 'calc(100vh - 200px)', minHeight: 560, alignItems: 'start' }}>
+      {/* ── 3-col layout ── */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
         {/* ══ LEFT: Sidebar ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', overflowY: 'auto' }}>
+        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-          {/* File actions */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Soubory</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {/* Header + file actions */}
+          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+              <img src="/icons/python.png" alt="Python" style={{ width: 18, height: 18, objectFit: 'contain' }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: D.txtPri }}>Python</span>
+              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <button className="py-sb" style={sideBtn} onClick={() => setNewFileModal(true)}>
                 <span>📄</span> Nový soubor
               </button>
@@ -635,7 +634,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
                 onClick={() => { setSaveAsName(activeFile?.name.replace(/\.py$/, '') ?? ''); setSaveAsProj(activeFile?.project ?? DEFAULT_PROJ); setSaveAsModal(true) }}>
                 <span>📋</span> Uložit jako…
               </button>
-              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
+              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
               <button className="py-sb" style={sideBtn} onClick={() => setNewProjModal(true)}>
                 <span>📁</span> Nový projekt
               </button>
@@ -645,9 +644,9 @@ export default function PythonEditor({ profile }: { profile: any }) {
             </div>
           </div>
 
-          {/* Recent files */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Nedávné soubory</SectionLabel>
+          {/* Recent files + projects — scrollable */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Nedávné</div>
             {recent.length === 0
               ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné soubory</div>
               : recent.map(r => (
@@ -665,11 +664,8 @@ export default function PythonEditor({ profile }: { profile: any }) {
                   </div>
                 ))
             }
-          </div>
-
-          {/* Projects tree */}
-          <div style={{ ...card({ padding: '13px' }), flex: 1, minHeight: 0 }}>
-            <SectionLabel>Moje projekty</SectionLabel>
+          <div style={{ height: 1, background: D.border, margin: '4px 12px' }} />
+          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Projekty</div>
             {loadingProj
               ? <div style={{ fontSize: 12, color: D.txtSec, textAlign: 'center', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />
@@ -728,14 +724,13 @@ export default function PythonEditor({ profile }: { profile: any }) {
           </div>
         </div>
 
-        {/* ══ RIGHT: Editor + Output ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 10 }}>
+        {/* ══ CENTER: Editor ══ */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
           {/* Toolbar */}
-          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
-            {/* Breadcrumb with inline rename */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-              <span style={{ color: D.txtSec }}>📁 {activeFile?.project ?? '—'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, flex: 1, minWidth: 0 }}>
+              <span style={{ color: D.txtSec, flexShrink: 0 }}>📁 {activeFile?.project ?? '—'}</span>
               <span style={{ color: D.txtSec, opacity: .4 }}>/</span>
               {renamingBreadcrumb && activeFile ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -752,93 +747,86 @@ export default function PythonEditor({ profile }: { profile: any }) {
               ) : (
                 <button onClick={() => { if (activeFile) { setBreadcrumbVal(activeFile.name.replace(/\.py$/, '')); setRenamingBreadcrumb(true) } }}
                   title="Kliknout pro přejmenování"
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: activeFile ? 'pointer' : 'default', padding: '2px 5px', borderRadius: 5, color: D.txtPri, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: activeFile ? 'pointer' : 'default', padding: '2px 5px', borderRadius: 5, color: D.txtPri, fontSize: 12, fontWeight: 600, fontFamily: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}
                   className="py-row">
-                  {activeFile?.name ?? 'main.py'}
+                  {activeFile?.name ?? 'Bez souboru'}
                   {isDirty && <span style={{ color: D.warning, fontSize: 10 }}>●</span>}
-                  {activeFile && <span style={{ fontSize: 10, color: D.txtSec, opacity: 0 }} className="py-acts">✏</span>}
                 </button>
               )}
             </div>
-            <div style={{ flex: 1 }} />
-            {pyStatus && (
-              <span style={{ fontSize: 11, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 11, height: 11, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />{pyStatus}
-              </span>
-            )}
+            {pyStatus && <span style={{ fontSize: 11, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ width: 11, height: 11, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />{pyStatus}
+            </span>}
+            {saveMsg && <span style={{ fontSize: 11, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
             <button onClick={downloadFile} disabled={!activeFile}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 12, cursor: activeFile ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeFile ? 1 : .4 }}>
-              ⬇️ Stáhnout .py
+              style={{ padding: '5px 10px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 12, cursor: activeFile ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeFile ? 1 : .4 }}>
+              ⬇ .py
             </button>
             <button id="py-save-btn" onClick={saveCurrentFile} disabled={!activeFile || saving}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeFile || saving ? .4 : 1 }}>
+              style={{ padding: '5px 11px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeFile || saving ? .4 : 1 }}>
               {saving ? '…' : '💾 Uložit'}
             </button>
             <button id="py-run-btn" onClick={runCode} disabled={running}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', background: running ? D.bgMid : accent, color: running ? D.txtSec : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
+              style={{ padding: '6px 16px', background: running ? D.bgMid : accent, color: running ? D.txtSec : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .2s', display: 'flex', alignItems: 'center', gap: 6 }}>
               {running ? <><div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: D.txtSec, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Spouštím…</> : '▶ Spustit'}
             </button>
-            <span style={{ fontSize: 10, color: D.txtSec, opacity: .4 }}>Ctrl+Enter</span>
           </div>
 
-          {/* Monaco */}
-          <div style={{ flex: '0 0 56%', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden', position: 'relative' }}>
+          {/* Monaco editor — full height */}
+          <div style={{ flex: 1, background: '#0d1117', overflow: 'hidden', position: 'relative' }}>
             {!monacoReady && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1E1E1E', flexDirection: 'column', gap: 10 }}>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', flexDirection: 'column', gap: 10 }}>
                 <div style={{ width: 26, height: 26, border: `3px solid rgba(255,255,255,.06)`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
-                <span style={{ fontSize: 12, color: D.txtSec }}>Načítám Monaco Editor…</span>
+                <span style={{ fontSize: 12, color: D.txtSec }}>Načítám editor…</span>
               </div>
             )}
             <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
           </div>
+        </div>
 
-          {/* Output */}
-          <div style={{ ...card({ overflow: 'hidden', display: 'flex', flexDirection: 'column' }), flex: 1, minHeight: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-              <span>⚡</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: D.txtPri }}>Výstup</span>
-              {hasRun && !running && (
-                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: runError ? D.danger+'20' : D.success+'20', color: runError ? D.danger : D.success, fontWeight: 700 }}>
-                  {runError ? '✗ Chyba' : '✓ OK'}
-                </span>
-              )}
-              <div style={{ flex: 1 }} />
-              {(outputLines.length > 0 || figures.length > 0 || runError) && (
-                <button onClick={clearOutput} style={{ padding: '2px 8px', background: 'none', border: `1px solid ${D.border}`, borderRadius: 6, fontSize: 11, color: D.txtSec, cursor: 'pointer', fontFamily: 'inherit' }}>Vymazat</button>
-              )}
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, lineHeight: 1.7 }}>
-              {!hasRun && (
-                <div style={{ color: D.txtSec, display: 'flex', alignItems: 'center', gap: 14, padding: '6px 0' }}>
-                  <img src="/icons/python.png" alt="" style={{ width: 26, height: 26, objectFit: 'contain', opacity: .35, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 12 }}>Stiskni ▶ Spustit nebo Ctrl+Enter</div>
-                    <div style={{ fontSize: 11, opacity: .55 }}>Výstup print(), grafy matplotlib a chyby se zobrazí zde</div>
-                  </div>
-                </div>
-              )}
-              {running && outputLines.length === 0 && (
-                <div style={{ color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 13, height: 13, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite', flexShrink: 0 }} />
-                  {pyStatus || 'Inicializuji Python…'}
-                </div>
-              )}
-              {outputLines.map((line, i) => (
-                <div key={i} style={{ color: line.startsWith('⚠') ? D.warning : D.txtPri, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line || '\u00A0'}</div>
-              ))}
-              {runError && (
-                <div style={{ marginTop: 10, padding: '10px 13px', background: 'rgba(239,68,68,.1)', border: `1px solid rgba(239,68,68,.2)`, borderRadius: 9 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: D.danger, marginBottom: 4 }}>❌ Chyba</div>
-                  <pre style={{ fontSize: 11, color: '#FCA5A5', whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>{runError}</pre>
-                </div>
-              )}
-              {figures.map((b64, i) => (
-                <div key={i} style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 10, color: D.txtSec, marginBottom: 4 }}>📊 Graf {figures.length > 1 ? i+1 : ''}</div>
-                  <img src={`data:image/png;base64,${b64}`} alt={`Graf ${i+1}`} style={{ maxWidth: '100%', borderRadius: 8, border: `1px solid ${D.border}` }} />
-                </div>
-              ))}
-            </div>
+        {/* ══ RIGHT: Output panel ══ */}
+        <div style={{ width: 300, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            <span style={{ fontSize: 13 }}>⚡</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: D.txtPri }}>Výstup</span>
+            {hasRun && !running && (
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: runError ? D.danger+'20' : D.success+'20', color: runError ? D.danger : D.success, fontWeight: 700 }}>
+                {runError ? '✗ Chyba' : '✓ OK'}
+              </span>
+            )}
+            <div style={{ flex: 1 }} />
+            {(outputLines.length > 0 || figures.length > 0 || runError) && (
+              <button onClick={clearOutput} style={{ padding: '2px 8px', background: 'none', border: `1px solid ${D.border}`, borderRadius: 6, fontSize: 11, color: D.txtSec, cursor: 'pointer', fontFamily: 'inherit' }}>Vymazat</button>
+            )}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, lineHeight: 1.7 }}>
+            {!hasRun && (
+              <div style={{ color: D.txtSec, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, textAlign: 'center' as const }}>
+                <img src="/icons/python.png" alt="" style={{ width: 32, height: 32, objectFit: 'contain', opacity: .2 }} />
+                <div style={{ fontSize: 12, opacity: .5 }}>Stiskni ▶ Spustit<br/>nebo Ctrl+Enter</div>
+              </div>
+            )}
+            {running && outputLines.length === 0 && (
+              <div style={{ color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 13, height: 13, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite', flexShrink: 0 }} />
+                {pyStatus || 'Inicializuji Python…'}
+              </div>
+            )}
+            {outputLines.map((line, i) => (
+              <div key={i} style={{ color: line.startsWith('⚠') ? D.warning : D.txtPri, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line || '\u00A0'}</div>
+            ))}
+            {runError && (
+              <div style={{ marginTop: 10, padding: '10px 13px', background: 'rgba(239,68,68,.1)', border: `1px solid rgba(239,68,68,.2)`, borderRadius: 9 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: D.danger, marginBottom: 4 }}>❌ Chyba</div>
+                <pre style={{ fontSize: 11, color: '#FCA5A5', whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>{runError}</pre>
+              </div>
+            )}
+            {figures.map((b64, i) => (
+              <div key={i} style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 10, color: D.txtSec, marginBottom: 4 }}>📊 Graf {figures.length > 1 ? i+1 : ''}</div>
+                <img src={`data:image/png;base64,${b64}`} alt={`Graf ${i+1}`} style={{ maxWidth: '100%', borderRadius: 8, border: `1px solid ${D.border}` }} />
+              </div>
+            ))}
           </div>
         </div>
       </div>

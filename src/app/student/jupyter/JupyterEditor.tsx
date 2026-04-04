@@ -225,6 +225,16 @@ export default function JupyterEditor({ profile }: { profile: any }) {
       const w = window as any
       w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
       w.require(['vs/editor/editor.main'], (monaco: any) => {
+        monaco.editor.defineTheme('cb-dark', {
+          base: 'vs-dark', inherit: true,
+          rules: [
+            { token: 'keyword', foreground: 'c792ea' },
+            { token: 'string', foreground: 'c3e88d' },
+            { token: 'comment', foreground: '546e7a', fontStyle: 'italic' },
+            { token: 'number', foreground: 'f78c6c' },
+          ],
+          colors: { 'editor.background': '#0d1117', 'editor.foreground': '#e6edf3', 'editorLineNumber.foreground': '#30363d', 'editor.lineHighlightBackground': '#161b22' }
+        })
         monacoRef.current = monaco
         setMonacoLoaded(true)
       })
@@ -621,7 +631,7 @@ export default function JupyterEditor({ profile }: { profile: any }) {
   const projSel: React.CSSProperties = { width: '100%', padding: '8px 10px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 8, fontSize: 13, color: D.txtPri, fontFamily: 'inherit', outline: 'none', marginTop: 8 }
 
   return (
-    <DarkLayout profile={profile} activeRoute="/student/jupyter">
+    <DarkLayout profile={profile} activeRoute="/student/jupyter" fullContent>
 
       {/* ── Modals ── */}
       {newProjModal && (
@@ -749,44 +759,32 @@ export default function JupyterEditor({ profile }: { profile: any }) {
         @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
       `}</style>
 
-      {/* ── Page header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#F37726' + '20', border: `1px solid #F37726` + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <img src="/icons/jupyter.png" alt="Jupyter" style={{ width: 26, height: 26, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>Jupyter Notebook</h1>
-          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>Ctrl+Enter spustit buňku · Ctrl+S uložit · Python 3.11 via Pyodide</p>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
-          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
-          {activeFile && <span style={{ fontSize: 11, color: D.txtSec }}>{activeFile.project} / {activeFile.name}</span>}
-        </div>
-      </div>
-
-      {/* ── 2-col layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
+      {/* ── 3-col layout ── */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
         {/* ══ LEFT: sidebar ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-          {/* Actions */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Soubory</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {/* Header */}
+          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+              <img src="/icons/jupyter.png" alt="Jupyter" style={{ width: 18, height: 18, objectFit: 'contain' }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: D.txtPri }}>Jupyter</span>
+              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <button className="jup-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>📁</span> Nový projekt</button>
               <button className="jup-sb" style={sideBtn} onClick={() => setNewFileModal(true)}><span>📄</span> Nový notebook</button>
               <button className="jup-sb" style={sideBtn} onClick={() => { setOpenModal(true); refreshProjects() }}><span>📂</span> Otevřít</button>
-              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
+              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
               <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile || saving ? .4 : 1 }} disabled={!activeFile || saving} onClick={saveNotebook}><span>💾</span> Uložit</button>
-              <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile ? .4 : 1 }} disabled={!activeFile} onClick={downloadNotebook}><span>⬇️</span> Stáhnout .ipynb</button>
+              <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile ? .4 : 1 }} disabled={!activeFile} onClick={downloadNotebook}><span>⬇️</span> .ipynb</button>
             </div>
           </div>
 
-          {/* Recent */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Nedávné</SectionLabel>
+          {/* Scrollable: recent + projects */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Nedávné</div>
             {recent.length === 0
               ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné soubory</div>
               : recent.map(r => (
@@ -801,11 +799,8 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                   </div>
                 ))
             }
-          </div>
-
-          {/* Project tree */}
-          <div style={{ ...card({ padding: '13px' }) }}>
-            <SectionLabel>Moje projekty</SectionLabel>
+          <div style={{ height: 1, background: D.border, margin: '4px 12px' }} />
+          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Projekty</div>
             {loadingProj
               ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
@@ -884,11 +879,11 @@ export default function JupyterEditor({ profile }: { profile: any }) {
           </div>
         </div>
 
-        {/* ══ RIGHT: Notebook ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {/* ══ CENTER: Notebook ══ */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
           {/* Notebook toolbar */}
-          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
             {/* Run controls */}
             <button onClick={() => selectedCell && runCell(selectedCell)} disabled={!selectedCell}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: accent, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: !selectedCell ? .4 : 1 }}>
@@ -920,7 +915,7 @@ export default function JupyterEditor({ profile }: { profile: any }) {
           </div>
 
           {/* Notebook body */}
-          <div style={{ background: '#13141b', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, minHeight: 500, padding: '16px 0' }}>
+          <div style={{ background: '#0d1117', flex: 1, overflowY: 'auto', padding: '16px 0' }}>
             {notebook.cells.map((cell, idx) => (
               <CellView
                 key={cell.id}
@@ -992,7 +987,7 @@ function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, 
     const ed = monaco.editor.create(monacoContRef.current, {
       value: cell.source,
       language: 'python',
-      theme: 'vs-dark',
+      theme: 'cb-dark',
       fontSize: 13,
       fontFamily: "'JetBrains Mono','Fira Code',monospace",
       minimap: { enabled: false },
