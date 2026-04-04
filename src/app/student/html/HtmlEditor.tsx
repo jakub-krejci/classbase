@@ -1130,16 +1130,6 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           </div>
         </div>
       </div>
-      </div>
-      </div>
-      </div>
-      </div>
-      </div>
-      </div>
-      </div>
-      </div>
-      </div>
-    </div>
     </DarkLayout>
   )
 }

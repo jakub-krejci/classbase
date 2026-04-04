@@ -777,9 +777,8 @@ export default function SqlEditor({ profile }: { profile: any }) {
                   </div>
                 ))
             }
-          </div>
-          </div>
-        </div>
+          </div>{/* end scrollable */}
+        </div>{/* end left sidebar */}
 
         {/* ══ CENTER: Editor ══ */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -937,10 +936,6 @@ export default function SqlEditor({ profile }: { profile: any }) {
           </div>
         </div>
       </div>
-      </div>
-      </div>
-      </div>
-    </div>
     </DarkLayout>
   )
 }
