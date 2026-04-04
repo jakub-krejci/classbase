@@ -776,53 +776,15 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 
   // ── Simulator ──────────────────────────────────────────────────────────────
   const isRunningRef = useRef(false)
-  const simBtnWrapRef = useRef<HTMLDivElement>(null)
-  const runSimRef  = useRef<()=>void>(()=>{})
-  const stopSimRef = useRef<()=>void>(()=>{})
-
-  // Create sim buttons imperatively — 100% outside React, React can never override them
-  useEffect(() => {
-    const wrap = simBtnWrapRef.current
-    if (!wrap) return
-    wrap.style.cssText = 'display:flex;gap:6px;'
-
-    const base = 'color:#fff;border:none;border-radius:8px;font-family:inherit;font-weight:700;font-size:12px;flex:1;padding:8px 7px;transition:opacity .15s;'
-    const runEl  = document.createElement('button')
-    runEl.textContent = '▶ Spustit'
-    runEl.style.cssText = base + `background:${D.success};cursor:pointer;opacity:1;`
-    runEl.onclick = () => runSimRef.current()   // always calls latest runSim via ref
-
-    const stopEl = document.createElement('button')
-    stopEl.textContent = '⏹ Stop'
-    stopEl.style.cssText = base + 'background:#EF4444;opacity:.35;cursor:not-allowed;'
-    stopEl.disabled = true
-    stopEl.onclick = () => stopSimRef.current()  // always calls latest stopSim via ref
-
-    wrap.appendChild(runEl)
-    wrap.appendChild(stopEl)
-
-    ;(wrap as any).__setRunning = (running: boolean) => {
-      runEl.disabled      = running
-      runEl.style.opacity = running ? '0.35' : '1'
-      runEl.style.cursor  = running ? 'not-allowed' : 'pointer'
-      stopEl.disabled      = !running
-      stopEl.style.opacity = running ? '1' : '0.35'
-      stopEl.style.cursor  = running ? 'pointer' : 'not-allowed'
-    }
-
-    return () => { wrap.innerHTML = '' }
-  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
-
-  function setRunBtns(running: boolean) {
-    ;(simBtnWrapRef.current as any)?.__setRunning?.(running)
-  }
+  const isRunningRef = useRef(false)
+  const [simTick, setSimTick] = useState(0) // only used to re-render buttons
 
   function runSim() {
     if (isRunningRef.current) return
     const currentCode = codeRef.current || code
     if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); return }
     isRunningRef.current = true
-    setRunBtns(true)
+    setSimTick(t => t + 1) // trigger re-render so buttons update
     setSimLog([])
     const sim = simRef.current
     sim.setTemp(simTemp)
@@ -833,17 +795,15 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
       setSimLog([...log])
     }).finally(() => {
       isRunningRef.current = false
-      setRunBtns(false)
+      setSimTick(t => t + 1) // trigger re-render so buttons update
     })
   }
-  runSimRef.current = runSim   // keep ref current on every render
 
   function stopSim() {
     simRef.current.stop()
     isRunningRef.current = false
-    setRunBtns(false)
+    setSimTick(t => t + 1) // trigger re-render so buttons update
   }
-  stopSimRef.current = stopSim  // keep ref current on every render
 
   const [logoDown, setLogoDown] = useState(false)
 
@@ -1164,7 +1124,26 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
               </button>
             </div>
 
-            <div style={{display:'flex',gap:6}} ref={simBtnWrapRef} />
+            <div style={{display:'flex',gap:6}}>
+              <button
+                onClick={runSim}
+                disabled={isRunningRef.current}
+                style={{background:D.success,color:'#fff',border:'none',borderRadius:8,
+                  cursor:isRunningRef.current?'not-allowed':'pointer',
+                  fontFamily:'inherit',fontWeight:700,fontSize:12,flex:1,padding:'8px 7px',
+                  opacity:isRunningRef.current?0.35:1,transition:'opacity .15s'}}>
+                ▶ Spustit
+              </button>
+              <button
+                onClick={stopSim}
+                disabled={!isRunningRef.current}
+                style={{background:'#EF4444',color:'#fff',border:'none',borderRadius:8,
+                  cursor:isRunningRef.current?'pointer':'not-allowed',
+                  fontFamily:'inherit',fontWeight:700,fontSize:12,flex:1,padding:'8px 7px',
+                  opacity:isRunningRef.current?1:0.35,transition:'opacity .15s'}}>
+                ⏹ Stop
+              </button>
+            </div>
           </div>
 
           {/* Tabs: log / sensors */}
