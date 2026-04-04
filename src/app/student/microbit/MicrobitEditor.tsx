@@ -177,27 +177,38 @@ class MbSim {
           }
           sim.clearDisplay()
         },
-        show: async (img: any) => {
+        show: async (img: any, delay_ms=400) => {
           if (sim.stopFlag) throw new Error('__STOPPED__')
-          if(typeof img === 'string') {
-            const imgData = MB_IMAGES[img]
-            if(imgData) sim.showImage(imgData)
-          } else if(typeof img === 'number') {
-            const digitMaps: Record<number,number[][]> = {
-              0:[[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
-              1:[[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
-              2:[[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
-              3:[[1,1,1],[0,0,1],[0,1,1],[0,0,1],[1,1,1]],
-              4:[[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
-              5:[[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
-              6:[[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
-              7:[[1,1,1],[0,0,1],[0,1,0],[1,0,0],[1,0,0]],
-              8:[[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
-              9:[[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]],
-            }
-            const m = digitMaps[img]
-            if(m) { for(let y=0;y<5;y++) for(let x=0;x<3;x++) sim.display[y][x+1]=(m[y]?.[x]??0)*9; sim.emit() }
+          const digitMaps: Record<number,number[][]> = {
+            0:[[1,1,1,1,0],[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[1,1,1,1,0]],
+            1:[[0,0,1,0,0],[0,1,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,1,1,1,0]],
+            2:[[1,1,1,0,0],[0,0,0,1,0],[0,1,1,0,0],[1,0,0,0,0],[1,1,1,1,0]],
+            3:[[1,1,1,0,0],[0,0,0,1,0],[0,1,1,0,0],[0,0,0,1,0],[1,1,1,0,0]],
+            4:[[1,0,0,1,0],[1,0,0,1,0],[1,1,1,1,0],[0,0,0,1,0],[0,0,0,1,0]],
+            5:[[1,1,1,1,0],[1,0,0,0,0],[1,1,1,0,0],[0,0,0,1,0],[1,1,1,0,0]],
+            6:[[0,1,1,1,0],[1,0,0,0,0],[1,1,1,1,0],[1,0,0,1,0],[0,1,1,1,0]],
+            7:[[1,1,1,1,0],[0,0,0,1,0],[0,0,1,0,0],[0,1,0,0,0],[0,1,0,0,0]],
+            8:[[0,1,1,0,0],[1,0,0,1,0],[0,1,1,0,0],[1,0,0,1,0],[0,1,1,0,0]],
+            9:[[0,1,1,0,0],[1,0,0,1,0],[0,1,1,1,0],[0,0,0,1,0],[0,1,1,0,0]],
           }
+          if (typeof img === 'string') {
+            // String key like "HAPPY" or single character
+            const imgData = MB_IMAGES[img]
+            if (imgData) {
+              sim.showImage(imgData)
+            } else if (img.length === 1) {
+              // Single character — use getCharMap
+              const charMap = getCharMap(img)
+              for(let y=0;y<5;y++) for(let x=0;x<5;x++) sim.display[y][x]=(charMap[y]?.[x]??0)*9
+              sim.emit()
+            }
+          } else if (typeof img === 'number') {
+            const m = digitMaps[img] ?? digitMaps[0]
+            for(let y=0;y<5;y++) for(let x=0;x<5;x++) sim.display[y][x]=(m[y]?.[x]??0)*9
+            sim.emit()
+          }
+          // Small delay so image is visible before next instruction
+          await delay(50)
         },
         clear: () => { if(!sim.stopFlag) sim.clearDisplay() },
         set_pixel: (x:number,y:number,b:number) => { if(!sim.stopFlag){ sim.setPixel(x,y,b); sim.emit() } },
@@ -259,35 +270,35 @@ class MbSim {
   setTemp(t:number) { this.temperature=t }
 }
 
-// Simple char maps for display.scroll (5x3 subset of ASCII)
+// Char maps — 5 columns wide for proper micro:bit display
 function getCharMap(ch: string): number[][] {
   const maps: Record<string,number[][]> = {
-    'A':[[0,1,0],[1,0,1],[1,1,1],[1,0,1],[1,0,1]],
-    'B':[[1,1,0],[1,0,1],[1,1,0],[1,0,1],[1,1,0]],
-    'C':[[0,1,1],[1,0,0],[1,0,0],[1,0,0],[0,1,1]],
-    'D':[[1,1,0],[1,0,1],[1,0,1],[1,0,1],[1,1,0]],
-    'E':[[1,1,1],[1,0,0],[1,1,0],[1,0,0],[1,1,1]],
-    'H':[[1,0,1],[1,0,1],[1,1,1],[1,0,1],[1,0,1]],
-    'I':[[1,1,1],[0,1,0],[0,1,0],[0,1,0],[1,1,1]],
-    'J':[[0,1,1],[0,0,1],[0,0,1],[1,0,1],[0,1,0]],
-    'O':[[0,1,0],[1,0,1],[1,0,1],[1,0,1],[0,1,0]],
-    'K':[[1,0,1],[1,1,0],[1,0,0],[1,1,0],[1,0,1]],
-    'L':[[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,1,1]],
-    'M':[[1,0,1],[1,1,1],[1,0,1],[1,0,1],[1,0,1]],
-    'N':[[1,0,1],[1,1,1],[1,1,1],[1,0,1],[1,0,1]],
-    'P':[[1,1,0],[1,0,1],[1,1,0],[1,0,0],[1,0,0]],
-    'R':[[1,1,0],[1,0,1],[1,1,0],[1,1,0],[1,0,1]],
-    'S':[[0,1,1],[1,0,0],[0,1,0],[0,0,1],[1,1,0]],
-    'T':[[1,1,1],[0,1,0],[0,1,0],[0,1,0],[0,1,0]],
-    'U':[[1,0,1],[1,0,1],[1,0,1],[1,0,1],[0,1,0]],
-    'V':[[1,0,1],[1,0,1],[1,0,1],[0,1,0],[0,1,0]],
-    'W':[[1,0,1],[1,0,1],[1,0,1],[1,1,1],[1,0,1]],
-    'X':[[1,0,1],[0,1,0],[0,1,0],[0,1,0],[1,0,1]],
-    'Y':[[1,0,1],[0,1,0],[0,1,0],[0,1,0],[0,1,0]],
-    'Z':[[1,1,1],[0,0,1],[0,1,0],[1,0,0],[1,1,1]],
-    '!':[[0,1,0],[0,1,0],[0,1,0],[0,0,0],[0,1,0]],
-    '?':[[0,1,0],[1,0,1],[0,0,1],[0,1,0],[0,1,0]],
-    ' ':[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],
+    'A':[[0,1,1,0,0],[1,0,0,1,0],[1,1,1,1,0],[1,0,0,1,0],[1,0,0,1,0]],
+    'B':[[1,1,1,0,0],[1,0,0,1,0],[1,1,1,0,0],[1,0,0,1,0],[1,1,1,0,0]],
+    'C':[[0,1,1,1,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[0,1,1,1,0]],
+    'D':[[1,1,1,0,0],[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[1,1,1,0,0]],
+    'E':[[1,1,1,1,0],[1,0,0,0,0],[1,1,1,0,0],[1,0,0,0,0],[1,1,1,1,0]],
+    'H':[[1,0,0,1,0],[1,0,0,1,0],[1,1,1,1,0],[1,0,0,1,0],[1,0,0,1,0]],
+    'I':[[1,1,1,0,0],[0,1,0,0,0],[0,1,0,0,0],[0,1,0,0,0],[1,1,1,0,0]],
+    'J':[[0,0,1,1,0],[0,0,0,1,0],[0,0,0,1,0],[1,0,0,1,0],[0,1,1,0,0]],
+    'O':[[0,1,1,0,0],[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[0,1,1,0,0]],
+    'K':[[1,0,0,1,0],[1,0,1,0,0],[1,1,0,0,0],[1,0,1,0,0],[1,0,0,1,0]],
+    'L':[[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,0,0,0,0],[1,1,1,1,0]],
+    'M':[[1,0,0,0,1],[1,1,0,1,1],[1,0,1,0,1],[1,0,0,0,1],[1,0,0,0,1]],
+    'N':[[1,0,0,0,1],[1,1,0,0,1],[1,0,1,0,1],[1,0,0,1,1],[1,0,0,0,1]],
+    'P':[[1,1,1,0,0],[1,0,0,1,0],[1,1,1,0,0],[1,0,0,0,0],[1,0,0,0,0]],
+    'R':[[1,1,1,0,0],[1,0,0,1,0],[1,1,1,0,0],[1,0,1,0,0],[1,0,0,1,0]],
+    'S':[[0,1,1,1,0],[1,0,0,0,0],[0,1,1,0,0],[0,0,0,1,0],[1,1,1,0,0]],
+    'T':[[1,1,1,1,1],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0]],
+    'U':[[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[0,1,1,0,0]],
+    'V':[[1,0,0,0,1],[1,0,0,0,1],[0,1,0,1,0],[0,1,0,1,0],[0,0,1,0,0]],
+    'W':[[1,0,0,0,1],[1,0,0,0,1],[1,0,1,0,1],[1,1,0,1,1],[1,0,0,0,1]],
+    'X':[[1,0,0,0,1],[0,1,0,1,0],[0,0,1,0,0],[0,1,0,1,0],[1,0,0,0,1]],
+    'Y':[[1,0,0,0,1],[0,1,0,1,0],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0]],
+    'Z':[[1,1,1,1,0],[0,0,0,1,0],[0,0,1,0,0],[0,1,0,0,0],[1,1,1,1,0]],
+    '!':[[0,1,0,0,0],[0,1,0,0,0],[0,1,0,0,0],[0,0,0,0,0],[0,1,0,0,0]],
+    '?':[[0,1,1,0,0],[1,0,0,1,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,1,0,0]],
+    ' ':[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
   }
   return maps[ch.toUpperCase()] ?? maps[' ']
 }
@@ -705,85 +716,85 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 
   async function flashToDevice() {
     if (!serialPortRef.current) { setFlashMsg('Nejprve se připoj k zařízení'); return }
-    setFlashing(true); setFlashMsg('Odesílám kód…')
+    setFlashing(true); setFlashMsg('Připravuji REPL…')
     try {
       const port = serialPortRef.current
       const enc = new TextEncoder()
-      const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
+      const dec = new TextDecoder()
       const flashCode = codeRef.current || code
+      if (!flashCode.trim()) { setFlashMsg('⚠️ Žádný kód'); setFlashing(false); return }
 
-      const write = async (data: string) => {
-        const writer = port.writable.getWriter()
-        await writer.write(enc.encode(data))
-        writer.releaseLock()
-      }
+      const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-      const drain = async (ms = 300) => {
+      // Read with timeout — returns what was received
+      async function readFor(ms: number): Promise<string> {
         if (!port.readable) return ''
-        let result = ''
         const reader = port.readable.getReader()
-        const timer = setTimeout(() => reader.cancel().catch(()=>{}), ms)
+        let result = ''
+        const deadline = Date.now() + ms
         try {
-          while(true) {
-            const {done, value} = await reader.read()
-            if(done) break
-            result += new TextDecoder().decode(value)
+          while (Date.now() < deadline) {
+            const timeout = new Promise<{done:true,value:undefined}>(r =>
+              setTimeout(() => r({done:true,value:undefined}), Math.min(50, deadline - Date.now()))
+            )
+            const {done, value} = await Promise.race([reader.read(), timeout])
+            if (done || !value) break
+            result += dec.decode(value)
           }
         } catch {}
-        clearTimeout(timer)
         reader.releaseLock()
         return result
       }
 
-      // Step 1: Break out of any running program
-      await write('\r\n')
-      await delay(100)
-      await write('\x03') // Ctrl+C
-      await delay(400)
-      await drain(300)
-
-      // Step 2: Enter raw REPL (Ctrl+A)
-      await write('\x01')
-      await delay(400)
-      const rawPrompt = await drain(300)
-      if (!rawPrompt.includes('raw REPL') && !rawPrompt.includes('>')) {
-        // Try again
-        await write('\x01')
-        await delay(400)
-        await drain(300)
+      // Write helper
+      async function write(s: string) {
+        const writer = port.writable.getWriter()
+        await writer.write(enc.encode(s))
+        writer.releaseLock()
       }
 
-      // Step 3: Send code in small chunks with delays
-      const CHUNK = 128
+      // Step 1: Interrupt running code (send Ctrl+C twice)
+      setFlashMsg('Přerušuji program…')
+      await write('\r\x03\x03')
+      await readFor(600)
+
+      // Step 2: Enter raw REPL mode
+      setFlashMsg('Vstupuji do raw REPL…')
+      await write('\x01')
+      const rawResp = await readFor(800)
+      if (!rawResp.includes('raw REPL')) {
+        // Try soft-reset first, then raw REPL
+        await write('\x04')  // soft reset
+        await readFor(1500)
+        await write('\x01')
+        await readFor(600)
+      }
+
+      // Step 3: Send code in small chunks
+      setFlashMsg('Odesílám kód…')
+      const CHUNK = 64
       for (let i = 0; i < flashCode.length; i += CHUNK) {
         await write(flashCode.slice(i, i + CHUNK))
-        await delay(50)
+        await delay(40)
       }
 
-      // Step 4: Execute (Ctrl+D terminates raw REPL input and runs)
+      // Step 4: Execute with Ctrl+D
+      setFlashMsg('Spouštím…')
       await write('\x04')
-      await delay(1000)
-      await drain(800)
+      const execResp = await readFor(2000)
 
-      // Step 5: Back to friendly REPL
-      await write('\x02')
-      await delay(200)
-
-      setFlashMsg('✓ Kód spuštěn! Zkontroluj micro:bit.')
+      // Check for error in response
+      if (execResp.includes('Error') || execResp.includes('Traceback')) {
+        const errLine = execResp.split('\n').find(l => l.includes('Error')) ?? 'Chyba v kódu'
+        setFlashMsg('❌ ' + errLine.trim())
+      } else {
+        setFlashMsg('✓ Kód běží na micro:bit!')
+      }
     } catch (e: any) {
-      setFlashMsg('❌ Chyba přenosu: ' + e.message)
+      setFlashMsg('❌ ' + e.message)
     }
     setFlashing(false)
     setTimeout(() => setFlashMsg(''), 6000)
-  }
-
-  // Open code in python.microbit.org (reliable alternative)
-  function openInMicrobitOrg() {
-    const currentCode = codeRef.current || code
-    const encoded = encodeURIComponent(currentCode)
-    // python.microbit.org supports #code= query for pre-loading code
-    const url = `https://python.microbit.org/v/3#code=${encoded}`
-    window.open(url, '_blank')
   }
 
   function downloadCode() {
@@ -918,9 +929,14 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             </div>
             <button onClick={save} disabled={saving} className="mb-btn" style={{...ghost,background:isDirty?accent+'25':undefined,borderColor:isDirty?accent+'50':undefined,color:isDirty?accent:undefined}}>{saving?'…':'💾 Uložit'}</button>
             <button onClick={downloadCode} className="mb-btn" style={ghost}>⬇ Stáhnout .py</button>
-            <button onClick={runSim} className="mb-btn" style={{...ghost,color:simRunning?D.warning:D.success,borderColor:simRunning?D.warning+'50':D.success+'50',background:simRunning?D.warning+'15':D.success+'15'}}>
-              {simRunning?'⏹ Zastavit':'▶ Spustit simulaci'}
+            <button onClick={runSim} className="mb-btn" style={{...ghost,color:D.success,borderColor:D.success+'50',background:D.success+'15'}}>
+              ▶ Spustit
             </button>
+            {simRunning && (
+              <button onClick={stopSim} className="mb-btn" style={{...ghost,color:D.danger,borderColor:D.danger+'50',background:D.danger+'15'}}>
+                ⏹ Zastavit
+              </button>
+            )}
           </div>
 
           {/* Monaco editor */}
@@ -989,10 +1005,14 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             </div>
 
             <div style={{display:'flex',gap:6}}>
-              <button onClick={runSim} style={{...btn(simRunning?'#EF4444':D.success),flex:1,padding:'7px',fontSize:11}}>
-                {simRunning?'⏹ Stop':'▶ Spustit'}
+              <button onClick={runSim} disabled={simRunning}
+                style={{...btn(D.success),flex:1,padding:'7px',fontSize:11,opacity:simRunning?.4:1}}>
+                ▶ Spustit
               </button>
-              {simRunning&&<button onClick={stopSim} style={{...ghost,padding:'7px 10px',fontSize:11}}>⏹</button>}
+              <button onClick={stopSim} disabled={!simRunning}
+                style={{...btn('#EF4444'),flex:1,padding:'7px',fontSize:11,opacity:!simRunning?.4:1}}>
+                ⏹ Stop
+              </button>
             </div>
           </div>
 
@@ -1120,17 +1140,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
               ⬇ Stáhnout .py soubor
             </button>
 
-            {/* Reliable alternative: open in python.microbit.org */}
-            <div style={{marginTop:8,padding:'9px 10px',background:'rgba(59,130,246,.08)',border:'1px solid rgba(59,130,246,.2)',borderRadius:9}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#93C5FD',marginBottom:4}}>💡 Spolehlivé flashování</div>
-              <div style={{fontSize:10,color:'rgba(147,197,253,.7)',lineHeight:1.55,marginBottom:7}}>
-                Pro trvalé uložení kódu do micro:bit použij officiální editor. Tvůj kód se přenese automaticky.
-              </div>
-              <button onClick={openInMicrobitOrg} className="mb-btn"
-                style={{width:'100%',padding:'8px',background:'rgba(59,130,246,.15)',border:'1px solid rgba(59,130,246,.3)',borderRadius:7,cursor:'pointer',fontFamily:'inherit',color:'#93C5FD',fontSize:11,fontWeight:600}}>
-                🌐 Otevřít v python.microbit.org →
-              </button>
-            </div>
+
           </div>
         </div>
       </div>
