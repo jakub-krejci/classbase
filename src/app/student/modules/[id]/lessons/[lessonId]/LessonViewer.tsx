@@ -458,16 +458,16 @@ const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
         optsEl.querySelectorAll('div[style*="display:flex"]').forEach((r:any)=>{r.style.background='rgba(255,255,255,.04)';r.style.borderColor='rgba(255,255,255,.1)'})
         const dot = row.querySelector('.dot') as HTMLElement
         if (i === correct) {
-          dot.style.background='#27500A'; dot.style.borderColor='#27500A'
-          row.style.background='#EAF3DE'; row.style.borderColor='#3B6D11'
+          dot.style.background='#22C55E'; dot.style.borderColor='#22C55E'
+          row.style.background='rgba(34,197,94,.12)'; row.style.borderColor='rgba(34,197,94,.35)'; row.style.color='#86efac'
           fb.textContent='✓ '+(expl[i]||'Correct!'); fb.style.cssText='display:block;background:rgba(34,197,94,.12);color:#86efac;font-size:13px;padding:8px 11px;border-radius:8px;margin-top:10px;border:1px solid rgba(34,197,94,.2)'
           quiz.dataset.solved='1'
           if(summary){ const last=summary.querySelector('span:last-child') as HTMLElement; if(last)last.textContent='✓ Answered' }
         } else {
-          dot.style.background='#EF444440'; dot.style.borderColor='#EF4444'
-          row.style.background='#FCEBEB'; row.style.borderColor='#A32D2D'
+          dot.style.background='#EF444460'; dot.style.borderColor='#EF4444'
+          row.style.background='rgba(239,68,68,.1)'; row.style.borderColor='rgba(239,68,68,.3)'; row.style.color='#FCA5A5'
           const cr = optsEl.querySelectorAll('div[style*="display:flex"]')[correct] as HTMLElement
-          if(cr){const d2=cr.querySelector('.dot') as HTMLElement;if(d2){d2.style.background='#27500A';d2.style.borderColor='#27500A'}cr.style.background='#EAF3DE';cr.style.borderColor='#3B6D11'}
+          if(cr){const d2=cr.querySelector('.dot') as HTMLElement;if(d2){d2.style.background='#22C55E';d2.style.borderColor='#22C55E'}cr.style.background='rgba(34,197,94,.12)';cr.style.borderColor='rgba(34,197,94,.35)';cr.style.color='#86efac'}
           fb.textContent='✗ '+(expl[i]||'Incorrect.'); fb.style.cssText='display:block;background:rgba(239,68,68,.12);color:#FCA5A5;font-size:13px;padding:8px 11px;border-radius:8px;margin-top:10px;border:1px solid rgba(239,68,68,.2)'
         }
       }
@@ -482,11 +482,11 @@ const HtmlBlock = React.memo(function HtmlBlock({ html }: { html: string }) {
 })
 
 // ── Main viewer ───────────────────────────────────────────────────────────────
-export default function LessonViewer({ lesson, moduleId, studentId, completionStatus, allLessons, completedIds, authorName, subLessons = [] }: {
+export default function LessonViewer({ lesson, moduleId, studentId, completionStatus, allLessons, completedIds, authorName, subLessons = [], profile }: {
   lesson: any; moduleId: string; studentId: string
   completionStatus: 'completed' | 'bookmark' | 'none'
   allLessons: any[]; completedIds: string[]; authorName: string
-  subLessons?: any[]
+  subLessons?: any[]; profile?: any
 }) {
   const supabase = createClient()
   const isMobile = useIsMobile()
@@ -746,7 +746,7 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
   }
 
   return (
-    <DarkLayout profile={null} activeRoute="/student/modules" fullContent>
+    <DarkLayout profile={profile} activeRoute="/student/modules" fullContent>
     <style>{PYTHON_CSS}{`
         /* ─────────────────────────────────────────────────────────────
            LESSON CONTENT TYPOGRAPHY
@@ -1008,13 +1008,51 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         .cb-float-btn:hover { background:rgba(255,255,255,.14)!important; color:#fff!important; }
         .cb-float-btn.ai-active { background:rgba(139,92,246,.2)!important; border-color:rgba(139,92,246,.4)!important; color:#C4B5FD!important; }
 
+        /* ── Fixed bottom footer (progress actions) ── */
+        .lv-footer {
+          position: fixed; bottom: 0; left: 64px; right: 272px;
+          height: 56px; background: rgba(9,11,16,.92); backdrop-filter: blur(12px);
+          border-top: 1px solid rgba(255,255,255,.08); z-index: 50;
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          padding: 0 24px;
+        }
+
+        /* ── Fixed AI Tutor button (bottom right, offset from right panel) ── */
+        .lv-ai-btn {
+          position: fixed; bottom: 70px; right: 288px; z-index: 60;
+          width: 48px; height: 48px; border-radius: 50%;
+          background: linear-gradient(135deg,#7c3aed,#4f46e5);
+          border: none; cursor: pointer; font-size: 22px;
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 4px 20px rgba(124,58,237,.5);
+          transition: transform .15s, box-shadow .15s;
+        }
+        .lv-ai-btn:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(124,58,237,.65); }
+        .lv-ai-btn.active { background: linear-gradient(135deg,#4f46e5,#7c3aed); }
+
+        /* ── Progress dots (left of main content) ── */
+        .lv-dots { position:sticky; top:80px; width:20px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:0; padding-top:4px; }
+        .lv-dot { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.12); cursor:pointer; flex-shrink:0; transition:all .2s; position:relative; }
+        .lv-dot.h2 { width:5px; height:5px; }
+        .lv-dot.h3 { width:4px; height:4px; }
+        .lv-dot.active { background:var(--accent); box-shadow:0 0 6px var(--accent); transform:scale(1.3); }
+        .lv-dot:hover { background:rgba(255,255,255,.5); transform:scale(1.4); }
+        .lv-dot-line { width:1px; height:14px; background:rgba(255,255,255,.07); flex-shrink:0; }
+        /* Tooltip on hover */
+        .lv-dot::after { content:attr(data-title); position:absolute; left:14px; top:50%; transform:translateY(-50%); white-space:nowrap; background:#14171F; color:rgba(255,255,255,.75); font-size:11px; padding:4px 9px; border-radius:7px; border:1px solid rgba(255,255,255,.1); pointer-events:none; opacity:0; transition:opacity .15s; z-index:20; font-family:'DM Sans',system-ui,sans-serif; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+        .lv-dot:hover::after { opacity:1; }
+
+        /* ── Right panel ToC section ── */
+        .lv-rp-toc-item { display:block; width:100%; text-align:left; border:none; background:none; cursor:pointer; font-family:inherit; transition:all .12s; }
+        .lv-rp-toc-item:hover { background:rgba(255,255,255,.04) !important; }
+
         /* ── AI Tutor slide panel ── */
-        .cb-ai-panel { position:fixed; bottom:0; right:272px; width:380px; height:520px;
+        .cb-ai-panel { position:fixed; bottom:60px; right:88px; width:380px; height:520px;
           background:#0D0F16; border:1px solid rgba(255,255,255,.08); border-bottom:none;
-          border-radius:16px 16px 0 0; display:flex; flex-direction:column;
+          border-radius:16px; display:flex; flex-direction:column;
           box-shadow:0 -8px 40px rgba(0,0,0,.6); z-index:100;
-          transform:translateY(100%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow:hidden; }
-        .cb-ai-panel.open { transform:translateY(0); }
+          transform:scale(.9); opacity:0; pointer-events:none; transition:all .25s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+        .cb-ai-panel.open { transform:scale(1); opacity:1; pointer-events:auto; }
 
         /* First paragraph dark */
         .lesson-content > p:first-of-type { font-size:1.05em; color:#CBD5E1; line-height:1.9; }
@@ -1084,10 +1122,33 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
 
 
       {/* ── New layout: flex row with scrollable main + sticky right panel ── */}
-      <div style={{ display:'flex', flex:1, minHeight:0, overflow:'hidden' }}>
+      {/* ── Three-column: ToC sidebar | main | right panel ── */}
+      {/* All inside fullContent flex container from DarkLayout */}
+      <div style={{ display:'flex', flex:1, minHeight:0, overflow:'hidden', width:'100%' }}>
 
-      {/* Main content — scrollable */}
-      <div style={{ flex:1, minWidth:0, overflowY:'auto', padding:'24px 28px 40px' }}>
+      {/* ── Progress dots (left of main, sticky) ── */}
+      {tocItems.length > 1 && (
+        <div className="lv-dots">
+          {tocItems.map((item, i) => (
+            <React.Fragment key={item.id}>
+              {i > 0 && <div className="lv-dot-line" />}
+              <div
+                className={`lv-dot${item.level===2?' h2':item.level===3?' h3':''}${tocActiveId===item.id?' active':''}`}
+                data-title={item.text}
+                onClick={() => {
+                  const el = document.getElementById(item.id)
+                  const main = document.querySelector('.lv-main') as HTMLElement
+                  if (el && main) main.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' })
+                  setTocActiveId(item.id)
+                }}
+              />
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
+      {/* ── Main content (scrollable) ── */}
+      <div className="lv-main" style={{ flex:1, minWidth:0, overflowY:'auto', padding:'24px 28px 100px' }}>
         {/* Breadcrumb */}
         <div style={{ fontSize:12, color:D.txtSec, marginBottom:14, display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
           <a href="/student/modules" style={{ color:D.txtSec, textDecoration:'none' }}>Moduly</a>
@@ -1163,25 +1224,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
             {authorName && readTime && <span style={{ color:'rgba(255,255,255,.2)' }}>·</span>}
             {readTime && <span style={{ fontSize:12, color:'rgba(255,255,255,.35)' }}>🕐 {readTime}</span>}
           </div>
-        </div>
-
-        {/* Floating buttons: ToC + AI Tutor trigger */}
-        <div className="cb-float-btns">
-          {tocItems.length > 1 && (
-            <div className="cb-toc-float">
-              <button className="cb-float-btn" title="Obsah lekce">≡</button>
-              <div className="cb-toc-popover">
-                <div style={{ fontSize:10, fontWeight:700, color:'rgba(255,255,255,.35)', textTransform:'uppercase', letterSpacing:'.07em', padding:'0 14px 8px' }}>Obsah lekce</div>
-                {tocItems.map(item => (
-                  <button key={item.id} onClick={() => { const el=document.getElementById(item.id); if(el){el.scrollIntoView({behavior:'smooth',block:'start'});setTocActiveId(item.id)} }}
-                    style={{ display:'block', width:'100%', textAlign:'left', padding:item.level===1?'5px 14px':item.level===2?'4px 14px 4px 22px':'3px 14px 3px 30px', fontSize:12, fontWeight:tocActiveId===item.id?600:400, color:tocActiveId===item.id?'var(--accent)':'rgba(255,255,255,.55)', background:tocActiveId===item.id?'rgba(255,255,255,.05)':'none', border:'none', borderLeft:`2px solid ${tocActiveId===item.id?'var(--accent)':'transparent'}`, cursor:'pointer', lineHeight:1.5, fontFamily:'inherit' }}>
-                    {item.text}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <button className={`cb-float-btn${aiOpen?' ai-active':''}`} title="AI Tutor" onClick={() => setAiOpen(o=>!o)} style={{ fontSize:16 }}>🎓</button>
         </div>
 
         {/* ── Části lekce (sub-lessons) ───────────────────────────── */}
@@ -1305,17 +1347,38 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
         </div>
       </div>
 
-      {/* ── RIGHT PANEL: lesson list + ToC + AI Tutor ── */}
+      {/* ── RIGHT PANEL ── */}
       <div style={{ width:272, flexShrink:0, borderLeft:`1px solid ${D.border}`, background:D.bgCard, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
         {/* Module header */}
-        <div style={{ padding:'18px 16px 12px', borderBottom:`1px solid ${D.border}`, flexShrink:0 }}>
-          <a href={`/student/modules/${moduleId}`} style={{ fontSize:11, color:D.txtSec, textDecoration:'none', display:'block', marginBottom:6 }}>← Zpět na modul</a>
+        <div style={{ padding:'14px 16px 10px', borderBottom:`1px solid ${D.border}`, flexShrink:0 }}>
+          <a href={`/student/modules/${moduleId}`} style={{ fontSize:11, color:D.txtSec, textDecoration:'none', display:'block', marginBottom:4 }}>← Zpět na modul</a>
           <div style={{ fontSize:13, fontWeight:700, color:D.txtPri, lineHeight:1.3 }}>{lesson.module_title ?? 'Modul'}</div>
-          <div style={{ fontSize:11, color:D.txtSec, marginTop:3 }}>{topLevelLessons.length} lekcí</div>
+          <div style={{ fontSize:11, color:D.txtSec, marginTop:2 }}>{topLevelLessons.length} lekcí</div>
         </div>
 
-        {/* Lesson list */}
+        {/* ToC in right panel — above lesson list */}
+        {tocItems.length > 1 && (
+          <div style={{ borderBottom:`1px solid ${D.border}`, flexShrink:0, maxHeight:220, overflowY:'auto' }}>
+            <div style={{ padding:'10px 16px 6px', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.3)', textTransform:'uppercase', letterSpacing:'.07em', display:'flex', alignItems:'center', gap:6 }}>
+              <span>≡</span> Obsah lekce
+            </div>
+            {tocItems.map(item => (
+              <button key={item.id} className="lv-rp-toc-item"
+                onClick={() => {
+                  const el = document.getElementById(item.id)
+                  const main = document.querySelector('.lv-main') as HTMLElement
+                  if (el && main) main.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' })
+                  setTocActiveId(item.id)
+                }}
+                style={{ padding: item.level===1 ? '5px 16px' : item.level===2 ? '4px 16px 4px 26px' : '3px 16px 3px 36px', fontSize:11, fontWeight: tocActiveId===item.id ? 600 : 400, color: tocActiveId===item.id ? 'var(--accent)' : 'rgba(255,255,255,.45)', borderLeft:`2px solid ${tocActiveId===item.id ? 'var(--accent)' : 'transparent'}` }}>
+                {item.text}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Lesson list — scrollable */}
         <div style={{ flex:1, overflowY:'auto' }}>
           {topLevelLessons.map((l:any, i:number) => {
             const isCurrent = l.id === lesson.id
@@ -1349,20 +1412,6 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
           })}
         </div>
 
-        {/* Progress actions */}
-        <div style={{ borderTop:`1px solid ${D.border}`, padding:'14px 16px', flexShrink:0 }}>
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            <button onClick={() => setProgress(status==='completed'?'none':'completed')} disabled={saving}
-              style={{ padding:'10px', background:status==='completed'?'rgba(34,197,94,.15)':'var(--accent)', color:status==='completed'?'#22C55E':'#fff', border:`1px solid ${status==='completed'?'rgba(34,197,94,.3)':'transparent'}`, borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit', width:'100%' }}>
-              {status==='completed' ? '✓ Dokončeno' : 'Označit jako dokončené'}
-            </button>
-            <button onClick={() => setProgress(status==='bookmark'?'none':'bookmark')} disabled={saving}
-              style={{ padding:'8px', background:status==='bookmark'?'rgba(251,191,36,.1)':'rgba(255,255,255,.04)', color:status==='bookmark'?'#FBBF24':D.txtSec, border:`1px solid ${status==='bookmark'?'rgba(251,191,36,.3)':'rgba(255,255,255,.08)'}`, borderRadius:9, fontSize:12, cursor:'pointer', fontFamily:'inherit', width:'100%' }}>
-              {status==='bookmark' ? '🔖 Uloženo' : '🔖 Uložit na později'}
-            </button>
-          </div>
-        </div>
-
       </div>
 
       {/* AI Tutor slide-up panel */}
@@ -1383,6 +1432,24 @@ export default function LessonViewer({ lesson, moduleId, studentId, completionSt
       </div>
 
       </div>{/* end flex row */}
+
+      {/* ── Fixed bottom footer: progress actions ── */}
+      <div className="lv-footer">
+        <button onClick={() => setProgress(status==='completed'?'none':'completed')} disabled={saving}
+          style={{ padding:'9px 28px', background:status==='completed'?'rgba(34,197,94,.15)':'var(--accent)', color:status==='completed'?'#22C55E':'#fff', border:`1px solid ${status==='completed'?'rgba(34,197,94,.3)':'transparent'}`, borderRadius:9, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          {status==='completed' ? '✓ Dokončeno' : 'Označit jako dokončené'}
+        </button>
+        <button onClick={() => setProgress(status==='bookmark'?'none':'bookmark')} disabled={saving}
+          title={status==='bookmark' ? 'Odebrat záložku' : 'Uložit na později'}
+          style={{ padding:'9px 16px', background:status==='bookmark'?'rgba(251,191,36,.15)':'rgba(255,255,255,.06)', color:status==='bookmark'?'#FBBF24':'rgba(255,255,255,.4)', border:`1px solid ${status==='bookmark'?'rgba(251,191,36,.35)':'rgba(255,255,255,.1)'}`, borderRadius:9, fontSize:13, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+          🔖 {status==='bookmark' ? 'Uloženo' : 'Uložit na později'}
+        </button>
+      </div>
+
+      {/* ── Fixed AI Tutor button ── */}
+      <button className={`lv-ai-btn${aiOpen?' active':''}`} onClick={() => setAiOpen(o=>!o)} title="AI Tutor">
+        🎓
+      </button>
     </DarkLayout>
   )
 }

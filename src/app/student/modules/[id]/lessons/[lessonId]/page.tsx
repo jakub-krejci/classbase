@@ -72,6 +72,7 @@ export default async function StudentLessonPage({ params }: { params: any }) {
       completedIds={Array.from(completedIds) as string[]}
       authorName={authorName}
       subLessons={(subLessons ?? []) as any[]}
+      profile={profile}
     />
   )
 }
