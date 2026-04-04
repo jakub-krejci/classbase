@@ -1,6 +1,6 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useRef, useCallback, useReducer } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DarkLayout, D } from '@/components/DarkLayout'
 
@@ -775,16 +775,56 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   ]
 
   // ── Simulator ──────────────────────────────────────────────────────────────
-  // isRunning: React state for UI, ref for synchronous guard
-  const [isRunning, setIsRunning] = useState(false)
   const isRunningRef = useRef(false)
+  const simBtnWrapRef = useRef<HTMLDivElement>(null)
+
+  // Create sim buttons imperatively — 100% outside React, React can never override them
+  useEffect(() => {
+    const wrap = simBtnWrapRef.current
+    if (!wrap) return
+    wrap.style.display = 'flex'
+    wrap.style.gap = '6px'
+
+    const S = (el: HTMLButtonElement, running: boolean, isRun: boolean) => {
+      el.disabled   = isRun ? running : !running
+      el.style.opacity = (isRun ? running : !running) ? '0.35' : '1'
+      el.style.cursor  = (isRun ? running : !running) ? 'not-allowed' : 'pointer'
+    }
+
+    const base = 'color:#fff;border:none;border-radius:8px;font-family:inherit;font-weight:700;font-size:12px;flex:1;padding:8px 7px;transition:opacity .15s;'
+    const runEl  = document.createElement('button')
+    runEl.textContent = '▶ Spustit'
+    runEl.setAttribute('style', base + `background:${D.success};cursor:pointer;`)
+    runEl.onclick = () => { if (!isRunningRef.current) runSim() }
+
+    const stopEl = document.createElement('button')
+    stopEl.textContent = '⏹ Stop'
+    stopEl.setAttribute('style', base + 'background:#EF4444;opacity:.35;cursor:not-allowed;')
+    stopEl.disabled = true
+    stopEl.onclick = () => { if (isRunningRef.current) stopSim() }
+
+    wrap.appendChild(runEl)
+    wrap.appendChild(stopEl)
+
+    // Expose toggle function on the wrap element for runSim/stopSim to call
+    ;(wrap as any).__setRunning = (running: boolean) => {
+      S(runEl, running, true)
+      S(stopEl, running, false)
+    }
+
+    return () => { wrap.innerHTML = '' }
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  function setRunBtns(running: boolean) {
+    ;(simBtnWrapRef.current as any)?.__setRunning?.(running)
+  }
 
   function runSim() {
-    if (isRunningRef.current) return   // synchronous guard
+    if (isRunningRef.current) return
     const currentCode = codeRef.current || code
     if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); return }
-    isRunningRef.current = true        // set ref first (synchronous)
-    setIsRunning(true)                 // then state (triggers re-render)
+    isRunningRef.current = true
+    setRunBtns(true)   // direct DOM — immediate, no React needed
     setSimLog([])
     const sim = simRef.current
     sim.setTemp(simTemp)
@@ -795,14 +835,14 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
       setSimLog([...log])
     }).finally(() => {
       isRunningRef.current = false
-      setIsRunning(false)
+      setRunBtns(false)
     })
   }
 
   function stopSim() {
     simRef.current.stop()
     isRunningRef.current = false
-    setIsRunning(false)
+    setRunBtns(false)
   }
 
   const [logoDown, setLogoDown] = useState(false)
@@ -1092,7 +1132,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
           <div style={{padding:'16px',borderBottom:`1px solid ${D.border}`,flexShrink:0}}>
             <div style={{textAlign:'center',marginBottom:10}}>
               <div style={{fontSize:11,fontWeight:700,color:D.txtSec,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>
-                🔬 Simulátor {isRunning&&<span style={{color:D.success}}>● běží</span>}
+                🔬 Simulátor {isRunningRef.current&&<span style={{color:D.success}}>● běží</span>}
               </div>
               {/* LED matrix */}
               <div style={{display:'inline-block',background:'#1a0a00',borderRadius:12,padding:10,border:'2px solid #3a2010'}}>
@@ -1124,18 +1164,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
               </button>
             </div>
 
-            <div style={{display:'flex',gap:6}}>
-              <button onClick={runSim} disabled={isRunning}
-                style={{...btn(D.success),flex:1,padding:'7px',fontSize:11,
-                  opacity:isRunning?0.35:1,cursor:isRunning?'not-allowed':'pointer'}}>
-                ▶ Spustit
-              </button>
-              <button onClick={stopSim} disabled={!isRunning}
-                style={{...btn('#EF4444'),flex:1,padding:'7px',fontSize:11,
-                  opacity:isRunning?1:0.35,cursor:isRunning?'pointer':'not-allowed'}}>
-                ⏹ Stop
-              </button>
-            </div>
+            <div style={{display:'flex',gap:6}} ref={simBtnWrapRef} />
           </div>
 
           {/* Tabs: log / sensors */}
