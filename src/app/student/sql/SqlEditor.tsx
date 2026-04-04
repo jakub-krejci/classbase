@@ -937,6 +937,10 @@ export default function SqlEditor({ profile }: { profile: any }) {
           </div>
         </div>
       </div>
+      </div>
+      </div>
+      </div>
+    </div>
     </DarkLayout>
   )
 }

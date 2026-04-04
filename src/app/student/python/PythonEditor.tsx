@@ -830,6 +830,17 @@ export default function PythonEditor({ profile }: { profile: any }) {
           </div>
         </div>
       </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+    </div>
     </DarkLayout>
   )
 }
