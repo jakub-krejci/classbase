@@ -416,6 +416,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 
   // ── Editor state ───────────────────────────────────────────────────────────
   const [code, setCode]             = useState('')
+  const codeRef = useRef('')
   const editorRef = useRef<any>(null)
   const monacoRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -514,7 +515,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   async function openFile(file: MbFile) {
     if (isDirty && !confirm('Neuložené změny budou ztraceny.')) return
     const content = await pull(file.path)
-    setCode(content)
+    setCode(content); codeRef.current = content
     if (editorRef.current) editorRef.current.setValue(content)
     setActiveFile(file); setIsDirty(false)
     localStorage.setItem(LS_LAST, JSON.stringify(file))
@@ -537,7 +538,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     if (err) { setSaveMsg('❌ ' + err); return }
     // Immediately show the new file in editor
     const file: MbFile = { path, name, project: proj, updatedAt: new Date().toISOString() }
-    setCode(DEFAULT_CODE)
+    setCode(DEFAULT_CODE); codeRef.current = DEFAULT_CODE
     setActiveFile(file)
     setIsDirty(false)
     localStorage.setItem(LS_LAST, JSON.stringify(file))
@@ -551,7 +552,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     setNPM(false); setNPN('')
     if (!err) {
       const file: MbFile = { path, name: 'main.py', project: name, updatedAt: new Date().toISOString() }
-      setCode(DEFAULT_CODE)
+      setCode(DEFAULT_CODE); codeRef.current = DEFAULT_CODE
       setActiveFile(file)
       setIsDirty(false)
       setExpanded(prev => new Set([...prev, name]))
@@ -593,6 +594,8 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     setRPM(null); setExpanded(prev => { const n = new Set(prev); n.delete(oldName); n.add(newName); return n })
     await refresh()
   }
+
+  useEffect(() => { codeRef.current = code }, [code])
 
   // ── Monaco Editor ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -660,7 +663,9 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     sim.setTemp(simTemp)
     sim.setAccel(simAccelX, simAccelY, -1024)
     sim.pressA(btnADown); sim.pressB(btnBDown)
-    sim.run(code, (disp, log) => {
+    const currentCode = codeRef.current || code
+    if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); setSimRunning(false); return }
+    sim.run(currentCode, (disp, log) => {
       setSimDisplay(disp.map(r => [...r]))
       setSimLog([...log])
     }).then(() => setSimRunning(false))
@@ -700,65 +705,89 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 
   async function flashToDevice() {
     if (!serialPortRef.current) { setFlashMsg('Nejprve se připoj k zařízení'); return }
-    setFlashing(true); setFlashMsg('Nahrávám…')
+    setFlashing(true); setFlashMsg('Odesílám kód…')
     try {
       const port = serialPortRef.current
       const enc = new TextEncoder()
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
+      const flashCode = codeRef.current || code
 
-      // Helper: write bytes
       const write = async (data: string) => {
         const writer = port.writable.getWriter()
         await writer.write(enc.encode(data))
         writer.releaseLock()
       }
 
-      // Helper: read until timeout (drain incoming data)
-      const drain = async (ms = 200) => {
-        if (!port.readable) return
+      const drain = async (ms = 300) => {
+        if (!port.readable) return ''
+        let result = ''
         const reader = port.readable.getReader()
-        const timer = setTimeout(() => reader.cancel(), ms)
-        try { while(true) { const {done} = await reader.read(); if(done) break } } catch {}
+        const timer = setTimeout(() => reader.cancel().catch(()=>{}), ms)
+        try {
+          while(true) {
+            const {done, value} = await reader.read()
+            if(done) break
+            result += new TextDecoder().decode(value)
+          }
+        } catch {}
         clearTimeout(timer)
         reader.releaseLock()
+        return result
       }
 
-      // 1. Interrupt running program
-      await write('\r\n\x03\x03')
-      await delay(500)
+      // Step 1: Break out of any running program
+      await write('\r\n')
+      await delay(100)
+      await write('\x03') // Ctrl+C
+      await delay(400)
       await drain(300)
 
-      // 2. Enter raw REPL (Ctrl+A) and wait for "raw REPL" prompt
+      // Step 2: Enter raw REPL (Ctrl+A)
       await write('\x01')
-      await delay(300)
-      await drain(200)
-
-      // 3. Send code in chunks to avoid buffer overflow
-      const CHUNK = 256
-      for (let i = 0; i < code.length; i += CHUNK) {
-        await write(code.slice(i, i + CHUNK))
-        await delay(30)
+      await delay(400)
+      const rawPrompt = await drain(300)
+      if (!rawPrompt.includes('raw REPL') && !rawPrompt.includes('>')) {
+        // Try again
+        await write('\x01')
+        await delay(400)
+        await drain(300)
       }
 
-      // 4. Execute (Ctrl+D)
-      await write('\x04')
-      await delay(800)
-      await drain(500)
+      // Step 3: Send code in small chunks with delays
+      const CHUNK = 128
+      for (let i = 0; i < flashCode.length; i += CHUNK) {
+        await write(flashCode.slice(i, i + CHUNK))
+        await delay(50)
+      }
 
-      // 5. Return to friendly REPL (Ctrl+B)
+      // Step 4: Execute (Ctrl+D terminates raw REPL input and runs)
+      await write('\x04')
+      await delay(1000)
+      await drain(800)
+
+      // Step 5: Back to friendly REPL
       await write('\x02')
       await delay(200)
 
-      setFlashMsg('✓ Kód spuštěn na micro:bit!')
+      setFlashMsg('✓ Kód spuštěn! Zkontroluj micro:bit.')
     } catch (e: any) {
-      setFlashMsg('❌ Chyba: ' + e.message)
+      setFlashMsg('❌ Chyba přenosu: ' + e.message)
     }
     setFlashing(false)
-    setTimeout(() => setFlashMsg(''), 5000)
+    setTimeout(() => setFlashMsg(''), 6000)
+  }
+
+  // Open code in python.microbit.org (reliable alternative)
+  function openInMicrobitOrg() {
+    const currentCode = codeRef.current || code
+    const encoded = encodeURIComponent(currentCode)
+    // python.microbit.org supports #code= query for pre-loading code
+    const url = `https://python.microbit.org/v/3#code=${encoded}`
+    window.open(url, '_blank')
   }
 
   function downloadCode() {
-    const blob = new Blob([code], { type: 'text/plain' })
+    const blob = new Blob([codeRef.current || code], { type: 'text/plain' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = activeFile?.name ?? 'microbit.py'
@@ -911,7 +940,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             ) : (
               <MonacoPanel
                 code={code}
-                onChange={(v:string)=>{setCode(v);setIsDirty(true)}}
+                onChange={(v:string)=>{setCode(v);codeRef.current=v||'';setIsDirty(true)}}
                 completions={MB_COMPLETIONS}
                 onSave={save}
                 onEditorMount={(e:any)=>{ editorRef.current = e }}
@@ -1090,6 +1119,18 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
               style={{width:'100%',padding:'8px 12px',background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.08)',borderRadius:9,cursor:'pointer',fontFamily:'inherit',color:'rgba(255,255,255,.45)',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',gap:6,transition:'all .15s'}}>
               ⬇ Stáhnout .py soubor
             </button>
+
+            {/* Reliable alternative: open in python.microbit.org */}
+            <div style={{marginTop:8,padding:'9px 10px',background:'rgba(59,130,246,.08)',border:'1px solid rgba(59,130,246,.2)',borderRadius:9}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#93C5FD',marginBottom:4}}>💡 Spolehlivé flashování</div>
+              <div style={{fontSize:10,color:'rgba(147,197,253,.7)',lineHeight:1.55,marginBottom:7}}>
+                Pro trvalé uložení kódu do micro:bit použij officiální editor. Tvůj kód se přenese automaticky.
+              </div>
+              <button onClick={openInMicrobitOrg} className="mb-btn"
+                style={{width:'100%',padding:'8px',background:'rgba(59,130,246,.15)',border:'1px solid rgba(59,130,246,.3)',borderRadius:7,cursor:'pointer',fontFamily:'inherit',color:'#93C5FD',fontSize:11,fontWeight:600}}>
+                🌐 Otevřít v python.microbit.org →
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1153,7 +1194,7 @@ function MonacoPanel({ code, onChange, completions, onSave, onEditorMount }: {
     <Editor
       height="100%"
       language="python"
-      defaultValue={code}
+      value={code}
       onChange={(v: string|undefined) => onChange(v??'')}
       onMount={handleMount}
       options={{
