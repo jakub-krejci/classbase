@@ -850,7 +850,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, flex: 1, minWidth: 0 }}>
               <span style={{ color: D.txtSec, flexShrink: 0 }}>📁 {activeFile?.project ?? '—'}</span>
-              <span style={{ color: D.txtSec, opacity: .4 }}/</span>
+              <span style={{ color: D.txtSec, opacity: .4 }}>{'/'}</span>
               {renamingBreadcrumb && activeFile ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <input value={breadcrumbVal}
