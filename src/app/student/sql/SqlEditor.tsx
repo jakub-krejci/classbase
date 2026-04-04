@@ -200,20 +200,10 @@ export default function SqlEditor({ profile }: { profile: any }) {
       w.require(['vs/editor/editor.main'], (monaco: any) => {
         monacoRef.current = monaco
         if (!editorContainerRef.current) return
-        monaco.editor.defineTheme('cb-dark', {
-          base: 'vs-dark', inherit: true,
-          rules: [
-            { token: 'keyword', foreground: 'c792ea' },
-            { token: 'string', foreground: 'c3e88d' },
-            { token: 'comment', foreground: '546e7a', fontStyle: 'italic' },
-            { token: 'number', foreground: 'f78c6c' },
-          ],
-          colors: { 'editor.background': '#0d1117', 'editor.foreground': '#e6edf3', 'editorLineNumber.foreground': '#30363d', 'editor.lineHighlightBackground': '#161b22' }
-        })
         const ed = monaco.editor.create(editorContainerRef.current, {
           value: '-- Vyber nebo vytvoř projekt\n',
           language: 'sql',
-          theme: 'cb-dark',
+          theme: 'vs-dark',
           fontSize: 14,
           fontFamily: "'JetBrains Mono','Fira Code',monospace",
           minimap: { enabled: false },
@@ -598,7 +588,7 @@ export default function SqlEditor({ profile }: { profile: any }) {
   const projSel: React.CSSProperties = { width: '100%', padding: '8px 10px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 8, fontSize: 13, color: D.txtPri, fontFamily: 'inherit', outline: 'none', marginTop: 8 }
 
   return (
-    <DarkLayout profile={profile} activeRoute="/student/sql" fullContent>
+    <DarkLayout profile={profile} activeRoute="/student/sql">
 
       {/* ── Modals ── */}
       {newProjModal && (
@@ -674,33 +664,46 @@ export default function SqlEditor({ profile }: { profile: any }) {
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── 3-col layout ── */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      {/* ── Page header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
+        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#336791' + '20', border: `1px solid #336791` + '40', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <img src="/icons/database.png" alt="SQL" style={{ width: 24, height: 24, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+        </div>
+        <div>
+          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>SQL Editor</h1>
+          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>SQLite in-browser · Ctrl+Enter spustit · Ctrl+S uložit</p>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
+          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
+          {!sqlReady && <span style={{ fontSize: 11, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám SQLite…</span>}
+          {sqlReady && activeProject && <span style={{ fontSize: 11, padding: '3px 9px', background: '#336791' + '20', color: '#60A5FA', borderRadius: 20, fontWeight: 600 }}>🗄️ SQLite</span>}
+        </div>
+      </div>
+
+      {/* ── 2-col layout ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
 
         {/* ══ LEFT: sidebar ══ */}
-        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-          {/* Header */}
-          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-              <img src="/icons/database.png" alt="SQL" style={{ width: 18, height: 18, objectFit: 'contain' }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: D.txtPri }}>SQL Editor</span>
-              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Actions */}
+          <div style={card({ padding: '13px' })}>
+            <SectionLabel>Soubory</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <button className="sql-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>🗄️</span> Nový projekt</button>
               <button className="sql-sb" style={sideBtn} onClick={() => setNewScriptModal(true)}><span>📄</span> Nový skript</button>
               <button className="sql-sb" style={sideBtn} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít</button>
-              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
+              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
               <button id="sql-save-btn" className="sql-sb" style={{ ...sideBtn, opacity: !activeProject || saving ? .4 : 1 }} disabled={!activeProject || saving} onClick={saveScript}><span>💾</span> Uložit</button>
-              <button className="sql-sb" style={{ ...sideBtn, opacity: !activeScript ? .4 : 1 }} disabled={!activeScript} onClick={downloadScript}><span>⬇️</span> .sql</button>
-              <button className="sql-sb" style={{ ...sideBtn, opacity: !dbRef.current ? .4 : 1 }} disabled={!dbRef.current} onClick={downloadDb}><span>⬇️</span> .db</button>
+              <button className="sql-sb" style={{ ...sideBtn, opacity: !activeScript ? .4 : 1 }} disabled={!activeScript} onClick={downloadScript}><span>⬇️</span> Stáhnout .sql</button>
+              <button className="sql-sb" style={{ ...sideBtn, opacity: !dbRef.current ? .4 : 1 }} disabled={!dbRef.current} onClick={downloadDb}><span>⬇️</span> Stáhnout .db</button>
             </div>
           </div>
 
-          {/* Scrollable: recent + projects */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
-          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Nedávné</div>
+          {/* Recent */}
+          <div style={card({ padding: '13px' })}>
+            <SectionLabel>Nedávné</SectionLabel>
             {recent.length === 0
               ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné projekty</div>
               : recent.map(r => (
@@ -715,8 +718,9 @@ export default function SqlEditor({ profile }: { profile: any }) {
             }
           </div>
 
-          <div style={{ height: 1, background: D.border, margin: '4px 12px' }} />
-          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Projekty</div>
+          {/* Project / schema tree */}
+          <div style={{ ...card({ padding: '13px' }) }}>
+            <SectionLabel>Moje projekty</SectionLabel>
             {loadingProj
               ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
@@ -777,28 +781,37 @@ export default function SqlEditor({ profile }: { profile: any }) {
                   </div>
                 ))
             }
-          </div>{/* end scrollable */}
-        </div>{/* end left sidebar */}
+          </div>
+        </div>
 
-        {/* ══ CENTER: Editor ══ */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* ══ RIGHT: Editor + Results ══ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
           {/* Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, flex: 1, minWidth: 0 }}>
-              {activeProject && <><span style={{ color: D.txtSec, flexShrink: 0 }}>🗄️ {activeProject.name}</span><span style={{ color: D.txtSec, opacity: .4 }}>/</span></>}
-              <span style={{ color: D.txtPri, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{activeScript?.name ?? 'bez souboru'}</span>
+          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
+            {/* Breadcrumb */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+              {activeProject && <><span style={{ color: D.txtSec }}>🗄️ {activeProject.name}</span><span style={{ color: D.txtSec, opacity: .4 }}>/</span></>}
+              <span style={{ color: D.txtPri, fontWeight: 600 }}>{activeScript?.name ?? 'bez souboru'}</span>
               {isDirty && <span style={{ color: D.warning, fontSize: 10 }}>●</span>}
             </div>
-            {saveMsg && <span style={{ fontSize: 11, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
+            <div style={{ flex: 1 }} />
+            {/* History */}
             <button onClick={() => setShowHistory(h => !h)}
               style={{ padding: '5px 10px', background: showHistory ? accent+'20' : 'rgba(255,255,255,.04)', color: showHistory ? accent : D.txtSec, border: `1px solid ${showHistory ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
               🕐 Historie
             </button>
+            {/* Schema toggle */}
+            <button onClick={() => setShowSchema(s => !s)}
+              style={{ padding: '5px 10px', background: showSchema ? accent+'20' : 'rgba(255,255,255,.04)', color: showSchema ? accent : D.txtSec, border: `1px solid ${showSchema ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              📋 Schéma
+            </button>
+            {/* Run */}
             <button id="sql-run-btn" onClick={runSql} disabled={running || !dbRef.current}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', background: running || !dbRef.current ? D.bgMid : accent, color: running || !dbRef.current ? D.txtSec : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: running || !dbRef.current ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
               {running ? <><div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: D.txtSec, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />…</> : '▶ Spustit'}
             </button>
+            <span style={{ fontSize: 10, color: D.txtSec, opacity: .4 }}>Ctrl+Enter</span>
           </div>
 
           {/* History dropdown */}
@@ -817,8 +830,8 @@ export default function SqlEditor({ profile }: { profile: any }) {
             </div>
           )}
 
-          {/* Editor + schema */}
-          <div style={{ flex: 1, display: 'flex', background: '#0d1117', overflow: 'hidden', minHeight: 0 }}>
+          {/* Editor + (optional) Schema panel side by side */}
+          <div style={{ display: 'flex', height: '340px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden' }}>
             <div ref={editorContainerRef} style={{ flex: 1, overflow: 'hidden' }} />
             {showSchema && (
               <div style={{ width: 220, flexShrink: 0, borderLeft: `1px solid rgba(255,255,255,.08)`, background: '#1a1a2e', overflowY: 'auto', padding: '12px' }}>
@@ -845,12 +858,8 @@ export default function SqlEditor({ profile }: { profile: any }) {
             )}
           </div>
 
-        </div>
-
-        {/* ══ RIGHT: Results ══ */}
-        <div style={{ width: 340, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Results panel */}
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ ...card({ overflow: 'hidden', display: 'flex', flexDirection: 'column' }), minHeight: 160, borderRadius: `0 0 ${D.radius} ${D.radius}`, borderTop: 'none', borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
             {/* Result tabs */}
             {queryResults.length > 1 && (
               <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>

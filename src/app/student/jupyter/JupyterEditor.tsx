@@ -225,16 +225,6 @@ export default function JupyterEditor({ profile }: { profile: any }) {
       const w = window as any
       w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
       w.require(['vs/editor/editor.main'], (monaco: any) => {
-        monaco.editor.defineTheme('cb-dark', {
-          base: 'vs-dark', inherit: true,
-          rules: [
-            { token: 'keyword', foreground: 'c792ea' },
-            { token: 'string', foreground: 'c3e88d' },
-            { token: 'comment', foreground: '546e7a', fontStyle: 'italic' },
-            { token: 'number', foreground: 'f78c6c' },
-          ],
-          colors: { 'editor.background': '#0d1117', 'editor.foreground': '#e6edf3', 'editorLineNumber.foreground': '#30363d', 'editor.lineHighlightBackground': '#161b22' }
-        })
         monacoRef.current = monaco
         setMonacoLoaded(true)
       })
@@ -631,7 +621,7 @@ export default function JupyterEditor({ profile }: { profile: any }) {
   const projSel: React.CSSProperties = { width: '100%', padding: '8px 10px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 8, fontSize: 13, color: D.txtPri, fontFamily: 'inherit', outline: 'none', marginTop: 8 }
 
   return (
-    <DarkLayout profile={profile} activeRoute="/student/jupyter" fullContent>
+    <DarkLayout profile={profile} activeRoute="/student/jupyter">
 
       {/* ── Modals ── */}
       {newProjModal && (
@@ -759,32 +749,44 @@ export default function JupyterEditor({ profile }: { profile: any }) {
         @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
       `}</style>
 
-      {/* ── 3-col layout ── */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      {/* ── Page header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
+        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#F37726' + '20', border: `1px solid #F37726` + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <img src="/icons/jupyter.png" alt="Jupyter" style={{ width: 26, height: 26, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+        </div>
+        <div>
+          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>Jupyter Notebook</h1>
+          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>Ctrl+Enter spustit buňku · Ctrl+S uložit · Python 3.11 via Pyodide</p>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
+          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
+          {activeFile && <span style={{ fontSize: 11, color: D.txtSec }}>{activeFile.project} / {activeFile.name}</span>}
+        </div>
+      </div>
+
+      {/* ── 2-col layout ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
 
         {/* ══ LEFT: sidebar ══ */}
-        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-          {/* Header */}
-          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-              <img src="/icons/jupyter.png" alt="Jupyter" style={{ width: 18, height: 18, objectFit: 'contain' }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: D.txtPri }}>Jupyter</span>
-              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Actions */}
+          <div style={card({ padding: '13px' })}>
+            <SectionLabel>Soubory</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <button className="jup-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>📁</span> Nový projekt</button>
               <button className="jup-sb" style={sideBtn} onClick={() => setNewFileModal(true)}><span>📄</span> Nový notebook</button>
               <button className="jup-sb" style={sideBtn} onClick={() => { setOpenModal(true); refreshProjects() }}><span>📂</span> Otevřít</button>
-              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
+              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
               <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile || saving ? .4 : 1 }} disabled={!activeFile || saving} onClick={saveNotebook}><span>💾</span> Uložit</button>
-              <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile ? .4 : 1 }} disabled={!activeFile} onClick={downloadNotebook}><span>⬇️</span> .ipynb</button>
+              <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile ? .4 : 1 }} disabled={!activeFile} onClick={downloadNotebook}><span>⬇️</span> Stáhnout .ipynb</button>
             </div>
           </div>
 
-          {/* Scrollable: recent + projects */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
-          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Nedávné</div>
+          {/* Recent */}
+          <div style={card({ padding: '13px' })}>
+            <SectionLabel>Nedávné</SectionLabel>
             {recent.length === 0
               ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné soubory</div>
               : recent.map(r => (
@@ -799,8 +801,11 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                   </div>
                 ))
             }
-          <div style={{ height: 1, background: D.border, margin: '4px 12px' }} />
-          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Projekty</div>
+          </div>
+
+          {/* Project tree */}
+          <div style={{ ...card({ padding: '13px' }) }}>
+            <SectionLabel>Moje projekty</SectionLabel>
             {loadingProj
               ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
@@ -879,11 +884,11 @@ export default function JupyterEditor({ profile }: { profile: any }) {
           </div>
         </div>
 
-        {/* ══ CENTER: Notebook ══ */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        {/* ══ RIGHT: Notebook ══ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
 
           {/* Notebook toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
+          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
             {/* Run controls */}
             <button onClick={() => selectedCell && runCell(selectedCell)} disabled={!selectedCell}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: accent, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: !selectedCell ? .4 : 1 }}>
@@ -915,7 +920,7 @@ export default function JupyterEditor({ profile }: { profile: any }) {
           </div>
 
           {/* Notebook body */}
-          <div style={{ background: '#0d1117', flex: 1, overflowY: 'auto', padding: '16px 0' }}>
+          <div style={{ background: '#13141b', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, minHeight: 500, padding: '16px 0' }}>
             {notebook.cells.map((cell, idx) => (
               <CellView
                 key={cell.id}
@@ -953,5 +958,197 @@ export default function JupyterEditor({ profile }: { profile: any }) {
         </div>
       </div>
     </DarkLayout>
+  )
+}
+
+// ── Cell component ────────────────────────────────────────────────────────────
+function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, onEdit, onBlur, onChange, onRun, onKeyDown, onDelete, onMoveUp, onMoveDown, onAddAfter, onToggleType }: {
+  cell: Cell; idx: number; isSelected: boolean; isEditing: boolean; accent: string; monaco: any
+  onSelect: () => void; onEdit: () => void; onBlur: () => void
+  onChange: (s: string) => void; onRun: () => void
+  onKeyDown: (e: React.KeyboardEvent) => void
+  onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void
+  onAddAfter: (t: CellType) => void; onToggleType: () => void
+}) {
+  const textareaRef   = useRef<HTMLTextAreaElement>(null)
+  const monacoContRef = useRef<HTMLDivElement>(null)
+  const monacoEdRef   = useRef<any>(null)
+  const isCode = cell.type === 'code'
+  const statusColor = cell.status === 'running' ? D.warning : cell.status === 'error' ? D.danger : cell.status === 'done' ? D.success : 'transparent'
+
+  // Auto-resize textarea (markdown only)
+  function autoResize(el: HTMLTextAreaElement) {
+    el.style.height = 'auto'
+    el.style.height = Math.max(48, el.scrollHeight) + 'px'
+  }
+
+  // Monaco editor for code cells — created once, kept alive, readOnly when not editing
+  useEffect(() => {
+    if (!isCode || !monaco || !monacoContRef.current) return
+    if (monacoEdRef.current) return // already created
+    const lines = cell.source.split('\n').length
+    const height = Math.max(52, lines * 20 + 24)
+    monacoContRef.current.style.height = height + 'px'
+    const ed = monaco.editor.create(monacoContRef.current, {
+      value: cell.source,
+      language: 'python',
+      theme: 'vs-dark',
+      fontSize: 13,
+      fontFamily: "'JetBrains Mono','Fira Code',monospace",
+      minimap: { enabled: false },
+      lineNumbers: 'off' as const,
+      wordWrap: 'on' as const,
+      automaticLayout: true,
+      scrollBeyondLastLine: false,
+      readOnly: !isEditing,
+      padding: { top: 10, bottom: 10 },
+      scrollbar: { vertical: 'hidden', horizontal: 'hidden', alwaysConsumeMouseWheel: false },
+      overviewRulerLanes: 0,
+      glyphMargin: false,
+      folding: false,
+      renderLineHighlight: 'none' as const,
+      cursorBlinking: 'blink' as const,
+    })
+    monacoEdRef.current = ed
+    ed.onDidChangeModelContent(() => {
+      const val = ed.getValue()
+      onChange(val)
+      const newLines = val.split('\n').length
+      const newH = Math.max(52, newLines * 20 + 24)
+      if (monacoContRef.current) monacoContRef.current.style.height = newH + 'px'
+      ed.layout()
+    })
+    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => { onRun() })
+    ed.addCommand(monaco.KeyCode.Escape, () => { onBlur() })
+    // Clicking the editor switches to edit mode
+    ed.onMouseDown(() => { if (!isEditing) { /* parent click handler handles this */ } })
+    return () => { ed.dispose(); monacoEdRef.current = null }
+  }, [isCode, monaco])  // only create once
+
+  // Sync readOnly and focus when isEditing changes
+  useEffect(() => {
+    if (!monacoEdRef.current) return
+    monacoEdRef.current.updateOptions({ readOnly: !isEditing })
+    if (isEditing) {
+      setTimeout(() => monacoEdRef.current?.focus(), 50)
+    }
+  }, [isEditing])
+
+  // Sync value when source changes externally (e.g. cell loaded from storage)
+  useEffect(() => {
+    const ed = monacoEdRef.current
+    if (!ed || isEditing) return
+    const cur = ed.getValue()
+    if (cur !== cell.source) ed.setValue(cell.source)
+  }, [cell.source, isEditing])
+
+  useEffect(() => {
+    if (isEditing && !isCode && textareaRef.current) {
+      textareaRef.current.focus()
+      autoResize(textareaRef.current)
+    }
+  }, [isEditing, isCode])
+
+  const cellClasses = ['jup-cell', isSelected ? 'selected' : '', cell.status === 'running' ? 'running' : '', cell.status === 'error' ? 'error' : ''].filter(Boolean).join(' ')
+
+  return (
+    <div className={cellClasses}
+      onClick={onSelect}
+      style={{ margin: '0 16px 4px', border: `1px solid ${isSelected ? accent + '60' : 'rgba(255,255,255,.07)'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color .15s', position: 'relative' }}>
+
+      {/* Cell header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', background: 'rgba(255,255,255,.025)', borderBottom: `1px solid rgba(255,255,255,.05)` }}>
+        {/* Execution count / status */}
+        <div style={{ width: 28, textAlign: 'center' as const, fontSize: 10, color: D.txtSec, fontFamily: 'monospace', flexShrink: 0 }}>
+          {isCode && (
+            cell.status === 'running'
+              ? <div style={{ width: 12, height: 12, border: `2px solid rgba(255,255,255,.2)`, borderTopColor: D.warning, borderRadius: '50%', animation: 'spin .6s linear infinite', margin: '0 auto' }} />
+              : cell.executionCount !== null ? `[${cell.executionCount}]` : '[ ]'
+          )}
+        </div>
+        {/* Type badge */}
+        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isCode ? accent+'20' : '#22C55E20', color: isCode ? accent : '#22C55E', fontWeight: 700, cursor: 'pointer' }} onClick={e => { e.stopPropagation(); onToggleType() }} title="Kliknout pro změnu typu">
+          {isCode ? 'PY' : 'MD'}
+        </span>
+        <div style={{ flex: 1 }} />
+        {/* Cell actions */}
+        <div style={{ display: 'flex', gap: 2, opacity: isSelected ? 1 : 0, transition: 'opacity .15s' }}>
+          {isCode && (
+            <button onClick={e => { e.stopPropagation(); onRun() }}
+              title="Spustit (Ctrl+Enter)"
+              style={{ padding: '2px 7px', background: accent+'20', color: accent, border: 'none', borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>
+              ▶
+            </button>
+          )}
+          <button onClick={e => { e.stopPropagation(); onMoveUp() }}
+            style={{ padding: '2px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Nahoru">↑</button>
+          <button onClick={e => { e.stopPropagation(); onMoveDown() }}
+            style={{ padding: '2px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Dolů">↓</button>
+          <button onClick={e => { e.stopPropagation(); onAddAfter('code') }}
+            style={{ padding: '2px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přidat kód za">+PY</button>
+          <button onClick={e => { e.stopPropagation(); onAddAfter('markdown') }}
+            style={{ padding: '2px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přidat markdown za">+MD</button>
+          <button onClick={e => { e.stopPropagation(); onDelete() }}
+            style={{ padding: '2px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat buňku">🗑</button>
+        </div>
+      </div>
+
+      {/* Cell body */}
+      {isCode ? (
+        <div>
+          {/* Monaco container — always visible, readOnly when not editing */}
+          <div
+            ref={monacoContRef}
+            onClick={onEdit}
+            style={{ minHeight: 52, background: '#1e1e2e', cursor: isEditing ? 'text' : 'pointer' }}
+          >
+            {!monaco && (
+              <div style={{ padding: '12px 14px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 13, lineHeight: 1.6, color: '#cdd6f4', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {cell.source || <span style={{ color: 'rgba(255,255,255,.2)', fontStyle: 'italic' }}>Klikněte pro editaci…</span>}
+              </div>
+            )}
+          </div>
+          {/* Outputs */}
+          {cell.outputs.length > 0 && (
+            <div style={{ borderTop: `1px solid rgba(255,255,255,.07)`, background: '#0d0e14' }}>
+              {cell.outputs.map((out, i) => (
+                <div key={i} style={{ padding: out.type === 'image' ? '10px 14px' : '4px 14px 4px 42px' }}>
+                  {out.type === 'image'
+                    ? <img src={`data:image/png;base64,${out.b64}`} alt="output" style={{ maxWidth: '100%', borderRadius: 6 }} />
+                    : <pre style={{ margin: 0, fontFamily: "'JetBrains Mono',monospace", fontSize: 12, lineHeight: 1.6, color: out.type === 'error' ? '#f38ba8' : '#a6e3a1', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        {out.text}
+                      </pre>
+                  }
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Markdown cell */
+        <div>
+          {isEditing
+            ? <textarea
+                ref={textareaRef}
+                className="jup-ta"
+                value={cell.source}
+                onChange={e => { onChange(e.target.value); autoResize(e.target) }}
+                onKeyDown={e => { if (e.key === 'Escape') onBlur() }}
+                onBlur={onBlur}
+                spellCheck={false}
+                style={{ minHeight: 48, background: '#1a1a2e', color: '#cba6f7' }}
+              />
+            : <div
+                onClick={onEdit}
+                style={{ padding: '12px 16px', color: D.txtPri, lineHeight: 1.7, cursor: 'text', minHeight: 48, background: 'transparent' }}
+                dangerouslySetInnerHTML={{ __html: cell.source ? renderMarkdown(cell.source) : '<span style="color:rgba(255,255,255,.25);font-style:italic">Klikněte pro editaci markdownu…</span>' }}
+              />
+          }
+        </div>
+      )}
+
+      {/* Left status bar */}
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: statusColor, borderRadius: '10px 0 0 10px', transition: 'background .3s' }} />
+    </div>
   )
 }

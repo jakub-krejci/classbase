@@ -277,9 +277,8 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
       w.require(['vs/editor/editor.main'], (monaco: any) => {
         monacoRef.current = monaco
-        monaco.editor.defineTheme('cb-dark', { base: 'vs-dark', inherit: true, rules: [{ token: 'keyword', foreground: 'c792ea' },{ token: 'string', foreground: 'c3e88d' },{ token: 'comment', foreground: '546e7a', fontStyle: 'italic' },{ token: 'number', foreground: 'f78c6c' }], colors: { 'editor.background': '#0d1117', 'editor.foreground': '#e6edf3', 'editorLineNumber.foreground': '#30363d', 'editor.lineHighlightBackground': '#161b22' } })
         const commonOpts = {
-          theme: 'cb-dark', fontSize: 14,
+          theme: 'vs-dark', fontSize: 14,
           fontFamily: "'JetBrains Mono','Fira Code',monospace",
           minimap: { enabled: false }, lineNumbers: 'on' as const,
           wordWrap: 'off' as const, automaticLayout: false,
@@ -334,7 +333,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
     if (splitView && splitContainerRef.current && !splitEditorRef.current) {
       const monaco = monacoRef.current
       splitEditorRef.current = monaco.editor.create(splitContainerRef.current, {
-        theme: 'cb-dark', fontSize: 14,
+        theme: 'vs-dark', fontSize: 14,
         fontFamily: "'JetBrains Mono','Fira Code',monospace",
         minimap: { enabled: false }, lineNumbers: 'on' as const,
         wordWrap: 'off' as const, automaticLayout: false,
@@ -816,7 +815,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   }
 
   return (
-    <DarkLayout profile={profile} activeRoute="/student/html" fullContent>
+    <DarkLayout profile={profile} activeRoute="/student/html">
 
       {/* ── Modals ── */}
       {newProjModal && (
@@ -912,33 +911,45 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── 3-col layout ── */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      {/* ── Page header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
+        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#E34C2615', border: `1px solid #E34C2620`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <img src="/icons/html.png" alt="HTML" style={{ width: 24, height: 24, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+        </div>
+        <div>
+          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>HTML Editor</h1>
+          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>HTML · CSS · JavaScript · Ctrl+S uložit</p>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
+          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
+        </div>
+      </div>
+
+      {/* ── 2-col layout ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
 
         {/* ══ LEFT: Sidebar ══ */}
-        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-          {/* Header */}
-          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-              <img src="/icons/html.png" alt="HTML" style={{ width: 18, height: 18, objectFit: 'contain' }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: D.txtPri }}>HTML Editor</span>
-              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Project actions */}
+          <div style={card({ padding: '13px' })}>
+            <SectionLabel>Projekt</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <button className="w-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>🌐</span> Nový projekt</button>
               <button className="w-sb" style={sideBtn} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít projekt</button>
-              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
+              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
               <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject || saving ? .4 : 1 }} disabled={!activeProject || saving} onClick={saveAll}><span>💾</span> Uložit vše</button>
+
               <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject ? .4 : 1 }} disabled={!activeProject} onClick={() => imgInputRef.current?.click()}>
                 <span>🖼</span> {uploadingImg ? 'Nahrávám…' : 'Nahrát obrázky'}
               </button>
             </div>
           </div>
 
-          {/* Scrollable: recent + files */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
-          <div style={{ padding: '8px 12px 4px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Nedávné</div>
+          {/* Nedávné */}
+          <div style={card({ padding: '13px' })}>
+            <SectionLabel>Nedávné projekty</SectionLabel>
             {recent.length === 0
               ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné projekty</div>
               : recent.map(r => (
@@ -952,15 +963,25 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                   </div>
                 ))
             }
-          <div style={{ height: 1, background: D.border, margin: '4px 12px' }} />
-          <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>{activeProject ? activeProject.name : 'Soubory'}</span>
-            {activeProject && <div style={{ display: 'flex', gap: 3 }}>
-              <button onClick={() => setNewItemModal({ folder: '' })} style={{ padding: '1px 6px', background: accent+'20', color: accent, border: 'none', borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>+</button>
-              <button onClick={() => { setRenameProjModal(activeProject); setRenameProjVal(activeProject.name) }} style={{ padding: '1px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }}>✏</button>
-              <button onClick={() => setDeleteProjModal(activeProject)} style={{ padding: '1px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }}>🗑</button>
-            </div>}
           </div>
+
+          {/* File tree */}
+          <div style={{ ...card({ padding: '13px' }), flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                {activeProject ? activeProject.name : 'Soubory'}
+              </div>
+              {activeProject && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => setNewItemModal({ folder: '' })} title="Přidat soubor/složku"
+                    style={{ padding: '2px 7px', background: accent+'20', color: accent, border: 'none', borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>+</button>
+                  <button onClick={() => { setRenameProjModal(activeProject); setRenameProjVal(activeProject.name) }}
+                    style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přejmenovat projekt">✏</button>
+                  <button onClick={() => setDeleteProjModal(activeProject)}
+                    style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat projekt">🗑</button>
+                </div>
+              )}
+            </div>
 
             {loadingProj
               ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
@@ -1009,11 +1030,11 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           </div>
         </div>
 
-        {/* ══ CENTER: Editor ══ */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        {/* ══ RIGHT: Editor + Preview ══ */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, overflow: 'hidden' }}>
 
           {/* Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
+          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
             {/* Active file tab */}
             {activeFile && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px', background: D.bgMid, borderRadius: 7, fontSize: 12 }}>
@@ -1045,7 +1066,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
           </div>
 
           {/* Editor area */}
-          <div ref={editorAreaRef} style={{ display: 'flex', flex: 1, background: '#0d1117', overflow: 'hidden', width: '100%', minHeight: 0 }}>
+          <div ref={editorAreaRef} style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden', width: '100%', boxSizing: 'border-box' as const }}>
             {/* Primary editor */}
             <div style={{ display: 'flex', flexDirection: 'column', width: splitView ? `${splitRatio}%` : '100%', flexShrink: 0, overflow: 'hidden' }}>
               {activeFile?.type === 'img'
@@ -1085,12 +1106,15 @@ export default function HtmlEditor({ profile }: { profile: any }) {
             )}
           </div>
 
-        </div>
-
-        {/* ══ RIGHT: Preview ══ */}
-        <div style={{ width: 380, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Preview resize handle */}
+          <div onMouseDown={onPreviewDividerDown} title="Táhněte pro změnu výšky"
+            style={{ height: 7, cursor: 'ns-resize', background: 'rgba(255,255,255,.03)', border: `1px solid ${D.border}`, borderTop: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.background = accent+'22')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.03)')}>
+            <div style={{ width: 28, height: 2, borderRadius: 2, background: 'rgba(255,255,255,.15)' }} />
+          </div>
           {/* Preview */}
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ height: `${previewHeight}px`, display: 'flex', flexDirection: 'column', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: D.bgCard, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 5 }}>
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF5F56' }} />
@@ -1126,7 +1150,6 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                 }}
                 title="HTML Preview" />
             </div>
-          </div>
           </div>
         </div>
       </div>
