@@ -184,6 +184,7 @@ class MbSim {
       },
       button_a: { is_pressed: ()=>sim.buttonA, was_pressed: ()=>sim.buttonA, get_presses: ()=>sim.buttonA?1:0 },
       button_b: { is_pressed: ()=>sim.buttonB, was_pressed: ()=>sim.buttonB, get_presses: ()=>sim.buttonB?1:0 },
+      pin_logo: { is_touched: ()=>sim.pinLogo, read_digital: ()=>sim.pinLogo?1:0 },
       sleep: async (ms: number) => await delay(ms),
       running_time: () => Date.now(),
       temperature: () => sim.temperature,
@@ -229,6 +230,8 @@ class MbSim {
   stop() { this.stopFlag = true; this.running = false }
   pressA(down: boolean) { this.buttonA = down }
   pressB(down: boolean) { this.buttonB = down }
+  pinLogo = false
+  pressLogo(down: boolean) { this.pinLogo = down }
   setAccel(x:number,y:number,z:number) { this.accelerometer={x,y,z} }
   setTemp(t:number) { this.temperature=t }
 }
@@ -266,96 +269,104 @@ function getCharMap(ch: string): number[][] {
   return maps[ch.toUpperCase()] ?? maps[' ']
 }
 
-// Minimal MicroPython→async JS transpiler for the micro:bit subset
-// Uses indentation tracking to correctly open/close blocks
+// MicroPython → async JS transpiler
+// Strategy: two passes.
+// Pass 1: normalise indent to multiples of 4, tag each line with its indent level.
+// Pass 2: emit JS, inserting closing braces when indent decreases.
 function transpileMicroPython(code: string, _ctx: any): string {
-  const lines = code.split('\n')
-  const out: string[] = ['(async () => {']
-  const indentStack: number[] = [0] // stack of indent levels
-
-  function currDepth() { return indentStack.length } // total nesting inside async IIFE
-
-  for(let i = 0; i < lines.length; i++){
-    const raw = lines[i]
-    const stripped = raw.trimStart()
-    if(stripped === '' || stripped.startsWith('#')) continue
-    if(stripped.startsWith('from microbit') || stripped.startsWith('import ')) continue
-
-    const indentLevel = raw.length - stripped.length
-
-    // elif/else: close only the INNER block (not the if-block level)
-    const isElif = stripped.startsWith('elif ')
-    const isElse = stripped === 'else:'
-
-    // Close blocks whose indent is GREATER than current line
-    while(indentStack.length > 1 && indentLevel < indentStack[indentStack.length - 1]) {
-      indentStack.pop()
-      // For elif/else, don't add closing brace — the replacement handles it
-      if(!(isElif || isElse) || indentStack[indentStack.length-1] !== indentLevel) {
-        out.push('  '.repeat(indentStack.length) + '}')
-      }
-    }
-
-    const ind = '  '.repeat(currDepth())
-
-    let line = stripped
-      .replace(/^while True:$/,  'while(true){')
-      .replace(/^while False:$/, 'while(false){')
-      .replace(/^if (.+):$/,     (_,c)=>`if(${transpileExpr(c)}){`)
-      .replace(/^elif (.+):$/,   (_,c)=>`} else if(${transpileExpr(c)}){`)
-      .replace(/^else:$/,        '} else {')
-      .replace(/^while (.+):$/,  (_,c)=>`while(${transpileExpr(c)}){`)
-      .replace(/^for (\w+) in range\((.+)\):$/, (_,v,args)=>`for(const ${v} of range(${args})){`)
-      .replace(/^for (\w+) in (.+):$/,            (_,v,it)=>`for(const ${v} of ${transpileExpr(it)}){`)
-      .replace(/^def (\w+)\(([^)]*)\):$/,         (_,nm,args)=>`async function ${nm}(${args}){`)
+  function expr(s: string): string {
+    return s
       .replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false').replace(/\bNone\b/g,'null')
       .replace(/\band\b/g,'&&').replace(/\bor\b/g,'||').replace(/\bnot\b/g,'!')
-      .replace(/\bsleep\(/g,'await sleep(')
-      .replace(/^pass$/,'/* pass */')
+      .replace(/==\s*True\b/g,'=== true').replace(/==\s*False\b/g,'=== false')
+  }
 
-    // Add await to display/compass async calls
-    if((line.includes('display.scroll(') || line.includes('display.show(') || line.includes('compass.calibrate()'))
-      && !line.startsWith('await ') && !line.startsWith('}')){
-      line = 'await ' + line
-    }
+  // Filtered lines with indent
+  const raw = code.split('\n')
+  interface Ln { indent: number; text: string }
+  const lns: Ln[] = []
+  for (const r of raw) {
+    const t = r.trimStart()
+    if (!t || t.startsWith('#')) continue
+    if (t.startsWith('from microbit') || t.startsWith('import ')) continue
+    lns.push({ indent: r.length - t.length, text: t })
+  }
 
-    // Add semicolon to non-block statements
-    if(!line.endsWith('{') && !line.endsWith('}') && line.trim() !== '' && !line.startsWith('//') && !line.endsWith(';')) {
-      line += ';'
-    }
+  const out: string[] = ['(async()=>{']
+  // Stack tracks the indent level of currently open blocks
+  const stack: number[] = []
 
-    // elif/else: use same indent level as the if (don't add extra indent)
-    out.push((isElif || isElse) ? '  '.repeat(Math.max(1, currDepth()-1)) + line : ind + line)
-
-    // Push new indent level if block opener
-    if(line.endsWith('{')) {
-      if(!(isElif || isElse)) {
-        indentStack.push(indentLevel + 4)
+  function closeUntil(targetIndent: number, isElseKind = false) {
+    // Close all blocks that are DEEPER than targetIndent
+    // For else/elif, also close the block AT targetIndent (it will be reopened)
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1]
+      if (top > targetIndent) {
+        stack.pop()
+        out.push('  '.repeat(stack.length + 1) + '}')
+      } else if (isElseKind && top === targetIndent) {
+        stack.pop()
+        // don't emit '}' — the elif/else line starts with '} else'
+        break
       } else {
-        // Replace the last indent level (elif/else continues same block)
-        if(indentStack.length > 1) indentStack[indentStack.length-1] = indentLevel + 4
-        else indentStack.push(indentLevel + 4)
+        break
       }
     }
   }
 
-  // Close any remaining open blocks
-  while(indentStack.length > 1) {
-    indentStack.pop()
-    out.push('  '.repeat(indentStack.length) + '}')
+  for (const { indent, text } of lns) {
+    const isElse = text === 'else:'
+    const isElif = text.startsWith('elif ')
+
+    closeUntil(indent, isElse || isElif)
+
+    const depth = stack.length + 1 // current output indent
+    const pad = '  '.repeat(depth)
+
+    let line = text
+      .replace(/^while True:$/,  'while(true){')
+      .replace(/^while False:$/, 'while(false){')
+      .replace(/^while (.+):$/,  (_,c) => `while(${expr(c)}){`)
+      .replace(/^if (.+):$/,     (_,c) => `if(${expr(c)}){`)
+      .replace(/^elif (.+):$/,   (_,c) => `} else if(${expr(c)}){`)
+      .replace(/^else:$/,        '} else {')
+      .replace(/^for (\w+) in range\((.+)\):$/, (_,v,a) => `for(const ${v} of range(${a})){`)
+      .replace(/^for (\w+) in (.+):$/,          (_,v,it) => `for(const ${v} of ${expr(it)}){`)
+      .replace(/^def (\w+)\(([^)]*)\):$/,       (_,n,a) => `async function ${n}(${a}){`)
+      .replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false').replace(/\bNone\b/g,'null')
+      .replace(/\band\b/g,'&&').replace(/\bor\b/g,'||').replace(/\bnot\b/g,'!')
+      .replace(/\bsleep\(/g, 'await sleep(')
+      .replace(/^pass$/, '/* pass */')
+
+    // Add await to display/compass
+    if (!line.startsWith('await ') && !line.startsWith('}') && (
+      line.includes('display.scroll(') || line.includes('display.show(') || line.includes('compass.calibrate()')
+    )) line = 'await ' + line
+
+    // Semicolon
+    const opensBlock = line.endsWith('{')
+    const closesBlock = line.startsWith('}')
+    if (!opensBlock && !closesBlock && line.trim() && !line.endsWith(';')) line += ';'
+
+    out.push(pad + line)
+
+    if (opensBlock && !isElse && !isElif) {
+      stack.push(indent)
+    } else if (opensBlock && (isElse || isElif)) {
+      stack.push(indent) // push same indent level for the new block
+    }
+  }
+
+  // Close remaining open blocks
+  while (stack.length > 0) {
+    stack.pop()
+    out.push('  '.repeat(stack.length + 1) + '}')
   }
 
   out.push('})();')
   return out.join('\n')
 }
 
-function transpileExpr(expr: string): string {
-  return expr
-    .replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false').replace(/\bNone\b/g,'null')
-    .replace(/\band\b/g,'&&').replace(/\bor\b/g,'||').replace(/\bnot\b/g,'!')
-    .replace(/\.is_pressed\(\)/g,'.is_pressed()')
-    .replace(/==\s*True/g,'=== true').replace(/==\s*False/g,'=== false')
-}
 
 // ── Main Editor Component ─────────────────────────────────────────────────────
 export default function MicrobitEditor({ profile }: { profile: any }) {
@@ -605,6 +616,9 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     { label:'Image.SURPRISED', kind:'Constant', insert:'Image.SURPRISED', doc:'Surprised face' },
     { label:'Image.DIAMOND', kind:'Constant', insert:'Image.DIAMOND', doc:'Diamond shape' },
     { label:'Image.CHESSBOARD', kind:'Constant', insert:'Image.CHESSBOARD', doc:'Chessboard pattern' },
+    // pin_logo
+    { label:'pin_logo.is_touched', kind:'Method', insert:'pin_logo.is_touched()', doc:'Returns True if logo is being touched (micro:bit V2)' },
+    { label:'pin_logo.read_digital', kind:'Method', insert:'pin_logo.read_digital()', doc:'Read logo pin as digital (0 or 1)' },
   ]
 
   // ── Simulator ──────────────────────────────────────────────────────────────
@@ -622,9 +636,12 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   }
   function stopSim() { simRef.current.stop(); setSimRunning(false) }
 
-  function pressBtn(btn: 'a'|'b', down: boolean) {
+  const [logoDown, setLogoDown] = useState(false)
+
+  function pressBtn(btn: 'a'|'b'|'logo', down: boolean) {
     if (btn === 'a') { setBtnADown(down); simRef.current.pressA(down) }
-    else { setBtnBDown(down); simRef.current.pressB(down) }
+    else if (btn === 'b') { setBtnBDown(down); simRef.current.pressB(down) }
+    else { setLogoDown(down); simRef.current.pressLogo(down) }
   }
 
   // ── Web Serial ─────────────────────────────────────────────────────────────
@@ -654,22 +671,41 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     if (!serialPortRef.current) { setFlashMsg('Nejprve se připoj k zařízení'); return }
     setFlashing(true); setFlashMsg('Nahrávám…')
     try {
-      const encoder = new TextEncoder()
+      const enc = new TextEncoder()
       const writer = serialPortRef.current.writable.getWriter()
-      // Send CTRL+C to interrupt, then paste mode (CTRL+E), send code, CTRL+D to execute
-      await writer.write(encoder.encode('\x03\x03')) // Ctrl+C x2
-      await new Promise(r => setTimeout(r, 500))
-      await writer.write(encoder.encode('\x05')) // Ctrl+E (paste mode)
-      await new Promise(r => setTimeout(r, 200))
-      await writer.write(encoder.encode(code))
-      await writer.write(encoder.encode('\x04')) // Ctrl+D (execute paste)
+      const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+      // 1. Interrupt any running program
+      await writer.write(enc.encode('\r\n'))
+      await delay(100)
+      await writer.write(enc.encode('\x03')) // Ctrl+C
+      await delay(300)
+      await writer.write(enc.encode('\x03')) // Ctrl+C again
+      await delay(300)
+
+      // 2. Enter raw REPL mode (Ctrl+A)
+      await writer.write(enc.encode('\x01'))
+      await delay(200)
+
+      // 3. Send the code
+      await writer.write(enc.encode(code))
+      await delay(100)
+
+      // 4. Execute (Ctrl+D in raw REPL)
+      await writer.write(enc.encode('\x04'))
+      await delay(500)
+
+      // 5. Exit raw REPL back to friendly REPL (Ctrl+B)
+      await writer.write(enc.encode('\x02'))
+      await delay(100)
+
       writer.releaseLock()
-      setFlashMsg('✓ Kód nahrán do micro:bit')
+      setFlashMsg('✓ Kód spuštěn na micro:bit!')
     } catch (e: any) {
       setFlashMsg('❌ Chyba: ' + e.message)
     }
     setFlashing(false)
-    setTimeout(() => setFlashMsg(''), 4000)
+    setTimeout(() => setFlashMsg(''), 5000)
   }
 
   function downloadCode() {
@@ -854,12 +890,18 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
               </div>
             </div>
 
-            {/* A/B buttons */}
-            <div style={{display:'flex',gap:8,marginBottom:8}}>
+            {/* A/B/Logo buttons */}
+            <div style={{display:'flex',gap:6,marginBottom:8}}>
               <button className={`mb-btn-device${btnADown?' pressed':''}`}
                 onMouseDown={()=>pressBtn('a',true)} onMouseUp={()=>pressBtn('a',false)}
                 onTouchStart={()=>pressBtn('a',true)} onTouchEnd={()=>pressBtn('a',false)}>
                 A
+              </button>
+              <button className={`mb-btn-device${logoDown?' pressed':''}`}
+                onMouseDown={()=>pressBtn('logo',true)} onMouseUp={()=>pressBtn('logo',false)}
+                onTouchStart={()=>pressBtn('logo',true)} onTouchEnd={()=>pressBtn('logo',false)}
+                style={{fontSize:14,letterSpacing:0}}>
+                ▼
               </button>
               <button className={`mb-btn-device${btnBDown?' pressed':''}`}
                 onMouseDown={()=>pressBtn('b',true)} onMouseUp={()=>pressBtn('b',false)}
@@ -990,13 +1032,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
                     <div style={{fontSize:10,opacity:.6}}>Připoj přes USB a klikni zde</div>
                   </div>
                 </button>
-                <div style={{marginTop:7,padding:'7px 10px',background:'rgba(255,255,255,.03)',borderRadius:8,border:'1px solid rgba(255,255,255,.06)'}}>
-                  <div style={{fontSize:10,color:'rgba(255,255,255,.3)',lineHeight:1.6}}>
-                    💡 Po kliknutí se otevře <strong style={{color:'rgba(255,255,255,.45)'}}>okno prohlížeče</strong> pro výběr portu.<br/>
-                    Vyber <strong style={{color:'rgba(255,255,255,.45)'}}>mbed Serial Port (COMX)</strong> nebo <strong style={{color:'rgba(255,255,255,.45)'}}>BBC micro:bit</strong>.<br/>
-                    Toto okno je součástí prohlížeče a nelze ho nastylovat.
-                  </div>
-                </div>
+
                 {serialStatus&&<div style={{fontSize:10,color:'rgba(255,255,255,.3)',marginTop:5,textAlign:'center' as const}}>{serialStatus}</div>}
               </div>
             )}
