@@ -776,7 +776,6 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 
   // ── Simulator ──────────────────────────────────────────────────────────────
   const isRunningRef = useRef(false)
-  const isRunningRef = useRef(false)
   const [simTick, setSimTick] = useState(0) // only used to re-render buttons
 
   function runSim() {
