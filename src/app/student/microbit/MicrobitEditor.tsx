@@ -133,23 +133,44 @@ class MbSim {
     this.clearDisplay()
 
     const sim = this
-    const delay = (ms: number) => new Promise<void>(r => { sim.sleepMs=ms; setTimeout(()=>{sim.sleepMs=0;r()},Math.min(ms,2000)) })
+    let lastYield = Date.now()
 
-    // Build a safe execution context
+    // Yield to browser every 16ms minimum — prevents UI freeze
+    const yieldToBrowser = () => new Promise<void>(r => setTimeout(r, 0))
+
+    const delay = async (ms: number) => {
+      if (sim.stopFlag) throw new Error('__STOPPED__')
+      const end = Date.now() + Math.min(ms, 5000)
+      while (Date.now() < end) {
+        if (sim.stopFlag) throw new Error('__STOPPED__')
+        const remaining = end - Date.now()
+        await new Promise<void>(r => setTimeout(r, Math.min(remaining, 50)))
+      }
+    }
+
+    // Wrap while(true) loops: check stopFlag + yield each iteration
+    const checkStop = async () => {
+      if (sim.stopFlag) throw new Error('__STOPPED__')
+      const now = Date.now()
+      if (now - lastYield > 16) {
+        lastYield = now
+        await yieldToBrowser()
+      }
+    }
+
     const ImageObj: any = { ...MB_IMAGES }
-    // Allow Image.HAPPY, Image.SAD etc
     for(const k of Object.keys(MB_IMAGES)) ImageObj[k] = k
 
     const context = {
       display: {
         scroll: async (text: string, delay_ms=150) => {
+          if (sim.stopFlag) throw new Error('__STOPPED__')
           sim.serialOut.push(`[scroll] ${text}`)
-          // Animate scroll
           const msg = String(text)
-          for(let i=0;i<msg.length&&!sim.stopFlag;i++){
+          for(let i=0;i<msg.length;i++){
+            if (sim.stopFlag) throw new Error('__STOPPED__')
             sim.clearDisplay()
-            const ch = msg[i]
-            const charMap = getCharMap(ch)
+            const charMap = getCharMap(msg[i])
             for(let y=0;y<5;y++) for(let x=0;x<5;x++) sim.display[y][x]=(charMap[y]?.[x]??0)*9
             sim.emit()
             await delay(delay_ms)
@@ -157,11 +178,11 @@ class MbSim {
           sim.clearDisplay()
         },
         show: async (img: any) => {
+          if (sim.stopFlag) throw new Error('__STOPPED__')
           if(typeof img === 'string') {
             const imgData = MB_IMAGES[img]
             if(imgData) sim.showImage(imgData)
           } else if(typeof img === 'number') {
-            // show a digit
             const digitMaps: Record<number,number[][]> = {
               0:[[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
               1:[[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
@@ -178,14 +199,17 @@ class MbSim {
             if(m) { for(let y=0;y<5;y++) for(let x=0;x<3;x++) sim.display[y][x+1]=(m[y]?.[x]??0)*9; sim.emit() }
           }
         },
-        clear: () => sim.clearDisplay(),
-        set_pixel: (x:number,y:number,b:number) => { sim.setPixel(x,y,b); sim.emit() },
+        clear: () => { if(!sim.stopFlag) sim.clearDisplay() },
+        set_pixel: (x:number,y:number,b:number) => { if(!sim.stopFlag){ sim.setPixel(x,y,b); sim.emit() } },
         get_pixel: (x:number,y:number) => sim.display[y]?.[x]??0,
       },
       button_a: { is_pressed: ()=>sim.buttonA, was_pressed: ()=>sim.buttonA, get_presses: ()=>sim.buttonA?1:0 },
       button_b: { is_pressed: ()=>sim.buttonB, was_pressed: ()=>sim.buttonB, get_presses: ()=>sim.buttonB?1:0 },
       pin_logo: { is_touched: ()=>sim.pinLogo, read_digital: ()=>sim.pinLogo?1:0 },
-      sleep: async (ms: number) => await delay(ms),
+      // sleep MUST be awaited — transpiler adds 'await' prefix automatically
+      sleep: delay,
+      // __chk is injected into while loops by transpiler to allow stopping + yielding
+      __chk: checkStop,
       running_time: () => Date.now(),
       temperature: () => sim.temperature,
       print: (...args: any[]) => { const msg=args.map(String).join(' '); sim.serialOut.push(msg); sim.emit() },
@@ -209,19 +233,18 @@ class MbSim {
       len: (x: any) => x?.length??0,
       str: (x: any) => String(x),
       int: (x: any) => parseInt(x),
-      abs: Math.abs,
-      min: Math.min,
-      max: Math.max,
+      abs: Math.abs, min: Math.min, max: Math.max,
     }
 
-    // Very simplified Python→JS transpiler for micro:bit subset
     try {
       const js = transpileMicroPython(code, context)
       const fn = new Function(...Object.keys(context), js)
       await fn(...Object.values(context))
     } catch(e: any) {
-      sim.serialOut.push(`❌ Chyba: ${e.message}`)
-      sim.emit()
+      if (e.message !== '__STOPPED__') {
+        sim.serialOut.push(`❌ Chyba: ${e.message}`)
+        sim.emit()
+      }
     }
     sim.running = false
     this.emit()
@@ -273,6 +296,8 @@ function getCharMap(ch: string): number[][] {
 // Strategy: two passes.
 // Pass 1: normalise indent to multiples of 4, tag each line with its indent level.
 // Pass 2: emit JS, inserting closing braces when indent decreases.
+// Key: inject `await __chk()` as first statement in every while loop body
+// so the browser can process events and we can stop the loop.
 function transpileMicroPython(code: string, _ctx: any): string {
   function expr(s: string): string {
     return s
@@ -281,7 +306,6 @@ function transpileMicroPython(code: string, _ctx: any): string {
       .replace(/==\s*True\b/g,'=== true').replace(/==\s*False\b/g,'=== false')
   }
 
-  // Filtered lines with indent
   const raw = code.split('\n')
   interface Ln { indent: number; text: string }
   const lns: Ln[] = []
@@ -293,20 +317,20 @@ function transpileMicroPython(code: string, _ctx: any): string {
   }
 
   const out: string[] = ['(async()=>{']
-  // Stack tracks the indent level of currently open blocks
   const stack: number[] = []
+  // Track whether the next line is the first inside a while loop body
+  const whileIndents = new Set<number>()
 
   function closeUntil(targetIndent: number, isElseKind = false) {
-    // Close all blocks that are DEEPER than targetIndent
-    // For else/elif, also close the block AT targetIndent (it will be reopened)
     while (stack.length > 0) {
       const top = stack[stack.length - 1]
       if (top > targetIndent) {
         stack.pop()
+        whileIndents.delete(top)
         out.push('  '.repeat(stack.length + 1) + '}')
       } else if (isElseKind && top === targetIndent) {
         stack.pop()
-        // don't emit '}' — the elif/else line starts with '} else'
+        whileIndents.delete(top)
         break
       } else {
         break
@@ -314,13 +338,15 @@ function transpileMicroPython(code: string, _ctx: any): string {
     }
   }
 
-  for (const { indent, text } of lns) {
+  for (let i = 0; i < lns.length; i++) {
+    const { indent, text } = lns[i]
     const isElse = text === 'else:'
     const isElif = text.startsWith('elif ')
+    const isWhile = text.startsWith('while ')
 
     closeUntil(indent, isElse || isElif)
 
-    const depth = stack.length + 1 // current output indent
+    const depth = stack.length + 1
     const pad = '  '.repeat(depth)
 
     let line = text
@@ -343,21 +369,26 @@ function transpileMicroPython(code: string, _ctx: any): string {
       line.includes('display.scroll(') || line.includes('display.show(') || line.includes('compass.calibrate()')
     )) line = 'await ' + line
 
-    // Semicolon
     const opensBlock = line.endsWith('{')
     const closesBlock = line.startsWith('}')
     if (!opensBlock && !closesBlock && line.trim() && !line.endsWith(';')) line += ';'
 
     out.push(pad + line)
 
-    if (opensBlock && !isElse && !isElif) {
-      stack.push(indent)
-    } else if (opensBlock && (isElse || isElif)) {
-      stack.push(indent) // push same indent level for the new block
+    if (opensBlock) {
+      const newIndent = indent + 4
+      if (!isElse && !isElif) {
+        stack.push(indent)
+      } else {
+        stack.push(indent)
+      }
+      // If this was a while loop, inject __chk() as first statement in the body
+      if (isWhile || line.startsWith('while(')) {
+        out.push('  '.repeat(depth + 1) + 'await __chk();')
+      }
     }
   }
 
-  // Close remaining open blocks
   while (stack.length > 0) {
     stack.pop()
     out.push('  '.repeat(stack.length + 1) + '}')
@@ -671,35 +702,53 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     if (!serialPortRef.current) { setFlashMsg('Nejprve se připoj k zařízení'); return }
     setFlashing(true); setFlashMsg('Nahrávám…')
     try {
+      const port = serialPortRef.current
       const enc = new TextEncoder()
-      const writer = serialPortRef.current.writable.getWriter()
       const delay = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-      // 1. Interrupt any running program
-      await writer.write(enc.encode('\r\n'))
-      await delay(100)
-      await writer.write(enc.encode('\x03')) // Ctrl+C
-      await delay(300)
-      await writer.write(enc.encode('\x03')) // Ctrl+C again
-      await delay(300)
+      // Helper: write bytes
+      const write = async (data: string) => {
+        const writer = port.writable.getWriter()
+        await writer.write(enc.encode(data))
+        writer.releaseLock()
+      }
 
-      // 2. Enter raw REPL mode (Ctrl+A)
-      await writer.write(enc.encode('\x01'))
+      // Helper: read until timeout (drain incoming data)
+      const drain = async (ms = 200) => {
+        if (!port.readable) return
+        const reader = port.readable.getReader()
+        const timer = setTimeout(() => reader.cancel(), ms)
+        try { while(true) { const {done} = await reader.read(); if(done) break } } catch {}
+        clearTimeout(timer)
+        reader.releaseLock()
+      }
+
+      // 1. Interrupt running program
+      await write('\r\n\x03\x03')
+      await delay(500)
+      await drain(300)
+
+      // 2. Enter raw REPL (Ctrl+A) and wait for "raw REPL" prompt
+      await write('\x01')
+      await delay(300)
+      await drain(200)
+
+      // 3. Send code in chunks to avoid buffer overflow
+      const CHUNK = 256
+      for (let i = 0; i < code.length; i += CHUNK) {
+        await write(code.slice(i, i + CHUNK))
+        await delay(30)
+      }
+
+      // 4. Execute (Ctrl+D)
+      await write('\x04')
+      await delay(800)
+      await drain(500)
+
+      // 5. Return to friendly REPL (Ctrl+B)
+      await write('\x02')
       await delay(200)
 
-      // 3. Send the code
-      await writer.write(enc.encode(code))
-      await delay(100)
-
-      // 4. Execute (Ctrl+D in raw REPL)
-      await writer.write(enc.encode('\x04'))
-      await delay(500)
-
-      // 5. Exit raw REPL back to friendly REPL (Ctrl+B)
-      await writer.write(enc.encode('\x02'))
-      await delay(100)
-
-      writer.releaseLock()
       setFlashMsg('✓ Kód spuštěn na micro:bit!')
     } catch (e: any) {
       setFlashMsg('❌ Chyba: ' + e.message)
