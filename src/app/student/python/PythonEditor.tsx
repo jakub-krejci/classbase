@@ -631,18 +631,18 @@ export default function PythonEditor({ profile }: { profile: any }) {
               {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <button className="py-sb" style={{sideBtn}} onClick={() => setNewFileModal(true)}>
+              <button className="py-sb" style={{...sideBtn}} onClick={() => setNewFileModal(true)}>
                 <span>📄</span> Nový soubor
               </button>
-              <button className="py-sb" style={{sideBtn}}
+              <button className="py-sb" style={{...sideBtn}}
                 onClick={() => { setSaveAsName(activeFile?.name.replace(/\.py$/, '') ?? ''); setSaveAsProj(activeFile?.project ?? DEFAULT_PROJ); setSaveAsModal(true) }}>
                 <span>📋</span> Uložit jako…
               </button>
               <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
-              <button className="py-sb" style={{sideBtn}} onClick={() => setNewProjModal(true)}>
+              <button className="py-sb" style={{...sideBtn}} onClick={() => setNewProjModal(true)}>
                 <span>📁</span> Nový projekt
               </button>
-              <button className="py-sb" style={{sideBtn}} onClick={() => { setOpenProjModal(true); refreshProjects() }}>
+              <button className="py-sb" style={{...sideBtn}} onClick={() => { setOpenProjModal(true); refreshProjects() }}>
                 <span>📂</span> Otevřít projekt
               </button>
             </div>
