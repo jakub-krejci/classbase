@@ -28,7 +28,7 @@ interface FNode {
   id:string; type:NodeType; x:number; y:number; w:number; h:number; label:string
   textStyle?:TextStyle; nodeStyle?:NodeStyle
 }
-interface FEdge { id:string; from:string; to:string; fromPort:Port; toPort:Port; label:string; waypoints?:{x:number;y:number}[] }
+interface FEdge { id:string; from:string; to:string; fromPort:Port; toPort:Port; label:string }
 interface Diagram { nodes:FNode[]; edges:FEdge[] }
 interface FFile { path:string; name:string; project:string }
 interface Project { name:string; files:FFile[] }
@@ -72,10 +72,13 @@ function bestPorts(a:FNode,b:FNode):[Port,Port]{
   if(Math.abs(dy)>=Math.abs(dx)) return dy>0?['bottom','top']:['top','bottom']
   return dx>0?['right','left']:['left','right']
 }
-function curvePath(x1:number,y1:number,x2:number,y2:number,fromPort?:string,toPort?:string){
-  // Control points follow the port direction so arrow lands at correct angle
-  const dist=Math.max(40,Math.hypot(x2-x1,y2-y1)*0.45)
-  function ctrl(px:number,py:number,port:string,d:number):[number,number]{
+function curvePath(x1:number,y1:number,x2:number,y2:number,fromPort?:string,toPort?:string): string {
+  // Control points are port-aware so the bezier tangent at the endpoint
+  // matches the port direction → markerEnd orient="auto" draws arrow correctly.
+  // fromPort: push control point OUTWARD from the port
+  // toPort:   pull control point INWARD so tangent arrives from correct direction
+  const dist=Math.max(50,Math.hypot(x2-x1,y2-y1)*0.45)
+  function outward(px:number,py:number,port:string,d:number):[number,number]{
     switch(port){
       case 'right':  return [px+d,py]
       case 'left':   return [px-d,py]
@@ -84,22 +87,19 @@ function curvePath(x1:number,y1:number,x2:number,y2:number,fromPort?:string,toPo
       default:       return [px,py+d]
     }
   }
-  const [c1x,c1y]=ctrl(x1,y1,fromPort||'bottom',dist)
-  const [c2x,c2y]=ctrl(x2,y2,toPort||'top',-dist)
-  return `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`
-}
-function edgePathWithWaypoints(x1:number,y1:number,x2:number,y2:number,wps?:{x:number;y:number}[],fromPort?:string,toPort?:string): string {
-  if(!wps||wps.length===0) return curvePath(x1,y1,x2,y2,fromPort,toPort)
-  let path=`M${x1},${y1}`
-  const points=[{x:x1,y:y1},...wps,{x:x2,y:y2}]
-  for(let i=0;i<points.length-1;i++){
-    const a=points[i],b=points[i+1]
-    const fp2=i===0?fromPort:'bottom'
-    const tp=i===points.length-2?toPort:'top'
-    const seg=curvePath(a.x,a.y,b.x,b.y,fp2,tp)
-    path+=seg.slice(1) // strip the M from subsequent segments
+  function inward(px:number,py:number,port:string,d:number):[number,number]{
+    // opposite of outward — c2 sits on the "incoming" side of the endpoint
+    switch(port){
+      case 'top':    return [px,py-d]   // c2 above → tangent goes downward → arrow points down ✓
+      case 'bottom': return [px,py+d]   // c2 below → tangent goes upward   → arrow points up ✓
+      case 'right':  return [px+d,py]   // c2 right  → tangent goes leftward → arrow points left ✓
+      case 'left':   return [px-d,py]   // c2 left   → tangent goes rightward→ arrow points right ✓
+      default:       return [px,py-d]
+    }
   }
-  return path
+  const [c1x,c1y]=outward(x1,y1,fromPort||'bottom',dist)
+  const [c2x,c2y]=inward(x2,y2,toPort||'top',dist)
+  return `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`
 }
 
 // ── SVG shape for each node type ──────────────────────────────────────────────
@@ -251,8 +251,6 @@ export default function FlowchartEditor({profile}:{profile:any}){
   const [drawingEdge,setDrawingEdge] = useState<{fromId:string;fromPort:Port;mx:number;my:number}|null>(null)
   const drawingRef = useRef<typeof drawingEdge>(null)
   const resizeRef = useRef<{id:string;corner:string;ox:number;oy:number;ow:number;oh:number;nx:number;ny:number}|null>(null)
-  // Edge waypoint drag
-  const edgeDragRef = useRef<{edgeId:string;wpIdx:number;ox:number;oy:number}|null>(null)
 
   // Modals
   const [nfm,setNFM]=useState(false); const [nfn,setNFN]=useState(''); const [nfp,setNFP]=useState(DEFAULT_PROJ)
@@ -444,17 +442,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
         }
         setDiagramState({...diagramRef.current})
       }
-      if(edgeDragRef.current){
-        const c=clientToSvg(e.clientX,e.clientY)
-        const ed=edgeDragRef.current
-        const edge=diagramRef.current.edges.find(e=>e.id===ed.edgeId)
-        if(edge){
-          const wps=[...(edge.waypoints??[])]
-          wps[ed.wpIdx]={x:c.x,y:c.y}
-          edge.waypoints=wps
-        }
-        setDiagramState({...diagramRef.current})
-      }
+
     }
     function onUp(e:MouseEvent){
       if(drawingRef.current){
@@ -471,7 +459,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
         }
         drawingRef.current=null; setDrawingEdge(null)
       }
-      dragNode.current=null; panStart.current=null; resizeRef.current=null; edgeDragRef.current=null
+      dragNode.current=null; panStart.current=null; resizeRef.current=null
     }
     window.addEventListener('mousemove',onMove)
     window.addEventListener('mouseup',onUp)
@@ -777,33 +765,13 @@ export default function FlowchartEditor({profile}:{profile:any}){
                   const fn=diagram.nodes.find(n=>n.id===edge.from); const tn=diagram.nodes.find(n=>n.id===edge.to)
                   if(!fn||!tn) return null
                   const [fx,fy]=portXY(fn,edge.fromPort); const [tx,ty]=portXY(tn,edge.toPort)
-                  const wps=edge.waypoints??[]
-                  const path=edgePathWithWaypoints(fx,fy,tx,ty,wps,edge.fromPort,edge.toPort); const sel=selectedIds.has(edge.id)
-                  // Midpoint for adding a waypoint (center of path)
-                  const allPts=[{x:fx,y:fy},...wps,{x:tx,y:ty}]
-                  const mid=allPts[Math.floor(allPts.length/2)]
+                  const path=curvePath(fx,fy,tx,ty,edge.fromPort,edge.toPort)
+                  const sel=selectedIds.has(edge.id)
+                  const mid={x:(fx+tx)/2,y:(fy+ty)/2}
                   return<g key={edge.id} style={{cursor:'pointer'}} onClick={e=>{e.stopPropagation();setSelectedIds(new Set([edge.id]))}}>
                     <path d={path} fill="none" stroke="transparent" strokeWidth={14}/>
                     <path d={path} fill="none" stroke={sel?'#fff':'rgba(255,255,255,.35)'} strokeWidth={sel?2:1.5} markerEnd={sel?'url(#arr-sel)':'url(#arr)'}/>
                     {edge.label&&<text x={mid.x} y={mid.y-9} textAnchor="middle" fontSize={11} fill="rgba(255,255,255,.55)" fontFamily="DM Sans,system-ui" style={{pointerEvents:'none'}}>{edge.label}</text>}
-                    {/* Waypoint handles (draggable) */}
-                    {sel&&wps.map((wp,i)=>(
-                      <circle key={i} cx={wp.x} cy={wp.y} r={6} fill="#fff" fillOpacity={.25} stroke="#fff" strokeWidth={1.5}
-                        style={{cursor:'move'}}
-                        onMouseDown={e=>{e.stopPropagation();edgeDragRef.current={edgeId:edge.id,wpIdx:i,ox:e.clientX,oy:e.clientY}}}/>
-                    ))}
-                    {/* Midpoint handle to add new waypoint */}
-                    {sel&&<circle cx={mid.x} cy={mid.y} r={5} fill={accent} fillOpacity={.7} stroke="#fff" strokeWidth={1}
-                      style={{cursor:'crosshair'}}
-                      onMouseDown={e=>{
-                        e.stopPropagation()
-                        // Insert a new waypoint at mid position
-                        const newWps=[...wps]
-                        const insertIdx=Math.floor(allPts.length/2)-1
-                        newWps.splice(Math.max(0,insertIdx),0,{x:mid.x,y:mid.y})
-                        setDiagram(d=>({...d,edges:d.edges.map(ed=>ed.id===edge.id?{...ed,waypoints:newWps}:ed)}))
-                        edgeDragRef.current={edgeId:edge.id,wpIdx:Math.max(0,insertIdx),ox:e.clientX,oy:e.clientY}
-                      }}/>}
                   </g>
                 })}
                 {/* Nodes */}
