@@ -244,7 +244,66 @@ class MbSim {
       len: (x: any) => x?.length??0,
       str: (x: any) => String(x),
       int: (x: any) => parseInt(x),
-      abs: Math.abs, min: Math.min, max: Math.max,
+      abs: Math.abs, min: Math.min, max: Math.max, round: Math.round,
+      // Additional micro:bit API
+      pins: {
+        analog_read_pin: (pin: number) => 0,
+        analog_write_pin: (pin: number, val: number) => {},
+        digital_read_pin: (pin: number) => 0,
+        digital_write_pin: (pin: number, val: number) => { sim.serialOut.push(`[pin${pin}] = ${val}`); sim.emit() },
+      },
+      music: {
+        play: async (melody: any) => { sim.serialOut.push(`[music] play`); sim.emit() },
+        pitch: async (freq: number, duration=-1) => { await delay(duration > 0 ? Math.min(duration,1000) : 100) },
+        stop: () => {},
+        set_tempo: (_bpm: number) => {},
+        get_tempo: () => 120,
+        reset: () => {},
+        DADADADUM: 'DADADADUM', ENTERTAINER: 'ENTERTAINER', PRELUDE: 'PRELUDE',
+        ODE: 'ODE', NYAN: 'NYAN', RINGTONE: 'RINGTONE', FUNK: 'FUNK',
+        BLUES: 'BLUES', BIRTHDAY: 'BIRTHDAY', WEDDING: 'WEDDING', POWER_DOWN: 'POWER_DOWN',
+      },
+      speech: {
+        say: async (text: string) => { sim.serialOut.push(`[speech] ${text}`); sim.emit() },
+        pronounce: async (phonemes: string) => { sim.serialOut.push(`[speech] ${phonemes}`); sim.emit() },
+        translate: (text: string) => text,
+      },
+      radio: {
+        on: () => {},
+        off: () => {},
+        send: (msg: string) => { sim.serialOut.push(`[radio] send: ${msg}`); sim.emit() },
+        receive: () => null,
+        send_number: (n: number) => { sim.serialOut.push(`[radio] send_number: ${n}`); sim.emit() },
+        receive_number: () => 0,
+        send_bytes: (b: any) => {},
+        receive_bytes: () => null,
+        config: (_power?: number, _channel?: number) => {},
+      },
+      neopixel: {
+        NeoPixel: class {
+          constructor(pin: any, n: number) {}
+          show() {}
+          fill(r: number, g: number, b: number) {}
+          clear() {}
+        }
+      },
+      // Python builtins
+      input: async (prompt='') => { sim.serialOut.push(`[input] ${prompt}`); sim.emit(); return '' },
+      list: (x: any) => Array.from(x ?? []),
+      tuple: (x: any) => Array.from(x ?? []),
+      dict: () => ({}),
+      set: (x?: any) => new Set(x ?? []),
+      bool: (x: any) => !!x,
+      float: (x: any) => parseFloat(x),
+      type: (x: any) => typeof x,
+      isinstance: (obj: any, cls: any) => obj instanceof cls,
+      enumerate: (it: any) => Array.from(it ?? []).map((v,i)=>[i,v]),
+      zip: (...args: any[]) => { const n=Math.min(...args.map(a=>a.length)); return Array.from({length:n},(_,i)=>args.map(a=>a[i])) },
+      sorted: (x: any, ...rest: any[]) => [...(x??[])].sort(),
+      reversed: (x: any) => [...(x??[])].reverse(),
+      sum: (x: any) => (x??[]).reduce((a:number,b:number)=>a+b, 0),
+      map: (fn: any, it: any) => Array.from(it??[]).map(fn),
+      filter: (fn: any, it: any) => Array.from(it??[]).filter(fn),
     }
 
     try {
@@ -298,9 +357,41 @@ function getCharMap(ch: string): number[][] {
     'Z':[[1,1,1,1,0],[0,0,0,1,0],[0,0,1,0,0],[0,1,0,0,0],[1,1,1,1,0]],
     '!':[[0,1,0,0,0],[0,1,0,0,0],[0,1,0,0,0],[0,0,0,0,0],[0,1,0,0,0]],
     '?':[[0,1,1,0,0],[1,0,0,1,0],[0,0,1,0,0],[0,0,0,0,0],[0,0,1,0,0]],
+    '.':[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,1,0,0,0]],
+    ',':[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,1,0,0],[0,1,0,0,0]],
+    ':':[[0,0,0,0,0],[0,1,0,0,0],[0,0,0,0,0],[0,1,0,0,0],[0,0,0,0,0]],
+    '-':[[0,0,0,0,0],[0,0,0,0,0],[1,1,1,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+    '+':[[0,0,1,0,0],[0,0,1,0,0],[1,1,1,1,1],[0,0,1,0,0],[0,0,1,0,0]],
+    '0':[[0,1,1,0,0],[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[0,1,1,0,0]],
+    '1':[[0,0,1,0,0],[0,1,1,0,0],[0,0,1,0,0],[0,0,1,0,0],[0,1,1,1,0]],
+    '2':[[1,1,1,0,0],[0,0,0,1,0],[0,1,1,0,0],[1,0,0,0,0],[1,1,1,1,0]],
+    '3':[[1,1,1,0,0],[0,0,0,1,0],[0,1,1,0,0],[0,0,0,1,0],[1,1,1,0,0]],
+    '4':[[1,0,0,1,0],[1,0,0,1,0],[1,1,1,1,0],[0,0,0,1,0],[0,0,0,1,0]],
+    '5':[[1,1,1,1,0],[1,0,0,0,0],[1,1,1,0,0],[0,0,0,1,0],[1,1,1,0,0]],
+    '6':[[0,1,1,0,0],[1,0,0,0,0],[1,1,1,0,0],[1,0,0,1,0],[0,1,1,0,0]],
+    '7':[[1,1,1,1,0],[0,0,0,1,0],[0,0,1,0,0],[0,1,0,0,0],[0,1,0,0,0]],
+    '8':[[0,1,1,0,0],[1,0,0,1,0],[0,1,1,0,0],[1,0,0,1,0],[0,1,1,0,0]],
+    '9':[[0,1,1,0,0],[1,0,0,1,0],[0,1,1,1,0],[0,0,0,1,0],[0,1,1,0,0]],
+    // Czech diacritics — use base letter + diacritic dot above row 0
+    'Á':[[0,0,1,0,0],[0,1,1,0,0],[1,0,0,1,0],[1,1,1,1,0],[1,0,0,1,0]],
+    'Č':[[0,0,1,0,0],[0,1,1,1,0],[1,0,0,0,0],[1,0,0,0,0],[0,1,1,1,0]],
+    'Ď':[[0,1,0,0,0],[1,1,1,0,0],[1,0,0,1,0],[1,0,0,1,0],[1,1,1,0,0]],
+    'É':[[0,0,1,0,0],[1,1,1,1,0],[1,0,0,0,0],[1,1,1,0,0],[1,1,1,1,0]],
+    'Ě':[[1,0,1,0,0],[1,1,1,1,0],[1,0,0,0,0],[1,1,1,0,0],[1,1,1,1,0]],
+    'Í':[[0,0,1,0,0],[1,1,1,0,0],[0,1,0,0,0],[0,1,0,0,0],[1,1,1,0,0]],
+    'Ň':[[0,1,0,0,0],[1,0,0,0,1],[1,1,0,0,1],[1,0,1,0,1],[1,0,0,1,1]],
+    'Ó':[[0,0,1,0,0],[0,1,1,0,0],[1,0,0,1,0],[1,0,0,1,0],[0,1,1,0,0]],
+    'Ř':[[0,1,0,0,0],[1,1,1,0,0],[1,0,0,1,0],[1,1,1,0,0],[1,0,1,0,0]],
+    'Š':[[0,0,1,0,0],[0,1,1,1,0],[1,0,0,0,0],[0,1,1,0,0],[1,1,1,0,0]],
+    'Ť':[[0,1,0,0,0],[1,1,1,1,1],[0,0,1,0,0],[0,0,1,0,0],[0,0,1,0,0]],
+    'Ú':[[0,0,1,0,0],[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[0,1,1,0,0]],
+    'Ů':[[0,1,1,0,0],[1,0,0,1,0],[1,0,0,1,0],[1,0,0,1,0],[0,1,1,0,0]],
+    'Ý':[[0,0,1,0,0],[1,0,0,0,1],[0,1,0,1,0],[0,0,1,0,0],[0,0,1,0,0]],
+    'Ž':[[0,1,0,0,0],[1,1,1,1,0],[0,0,1,0,0],[0,1,0,0,0],[1,1,1,1,0]],
     ' ':[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
   }
-  return maps[ch.toUpperCase()] ?? maps[' ']
+  const upper = ch.toUpperCase()
+  return maps[upper] ?? maps[ch] ?? maps[' ']
 }
 
 // MicroPython → async JS transpiler
@@ -438,6 +529,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   const [simDisplay, setSimDisplay] = useState<number[][]>(Array(5).fill(null).map(()=>Array(5).fill(0)))
   const [simLog, setSimLog]         = useState<string[]>([])
   const [simRunning, setSimRunning] = useState(false)
+  const simRunningRef = useRef(false)
   const [simTab, setSimTab]         = useState<'display'|'log'|'sensors'>('display')
   const [btnADown, setBtnADown]     = useState(false)
   const [btnBDown, setBtnBDown]     = useState(false)
@@ -664,24 +756,45 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     // pin_logo
     { label:'pin_logo.is_touched', kind:'Method', insert:'pin_logo.is_touched()', doc:'Returns True if logo is being touched (micro:bit V2)' },
     { label:'pin_logo.read_digital', kind:'Method', insert:'pin_logo.read_digital()', doc:'Read logo pin as digital (0 or 1)' },
+    // music
+    { label:'music.play', kind:'Method', insert:'music.play(music.${1:DADADADUM})', doc:'Play a melody' },
+    { label:'music.pitch', kind:'Method', insert:'music.pitch(${1:440}, ${2:500})', doc:'Play a pitch for duration ms' },
+    { label:'music.stop', kind:'Method', insert:'music.stop()', doc:'Stop music' },
+    { label:'music.set_tempo', kind:'Method', insert:'music.set_tempo(${1:120})', doc:'Set tempo in BPM' },
+    // radio
+    { label:'radio.on', kind:'Method', insert:'radio.on()', doc:'Turn on radio' },
+    { label:'radio.off', kind:'Method', insert:'radio.off()', doc:'Turn off radio' },
+    { label:'radio.send', kind:'Method', insert:'radio.send(${1:message})', doc:'Send string over radio' },
+    { label:'radio.receive', kind:'Method', insert:'radio.receive()', doc:'Receive string from radio' },
+    { label:'radio.send_number', kind:'Method', insert:'radio.send_number(${1:42})', doc:'Send number over radio' },
+    // speech
+    { label:'speech.say', kind:'Method', insert:'speech.say(${1:"hello"})', doc:'Speak text (micro:bit V1)' },
+    // pins
+    { label:'pins.digital_read_pin', kind:'Method', insert:'pins.digital_read_pin(${1:pin0})', doc:'Read digital pin' },
+    { label:'pins.digital_write_pin', kind:'Method', insert:'pins.digital_write_pin(${1:pin0}, ${2:1})', doc:'Write digital pin' },
+    { label:'pins.analog_read_pin', kind:'Method', insert:'pins.analog_read_pin(${1:pin0})', doc:'Read analog pin (0-1023)' },
   ]
 
   // ── Simulator ──────────────────────────────────────────────────────────────
   function runSim() {
+    if (simRunningRef.current) return // already running
     const sim = simRef.current
-    if (sim.running) { sim.stop(); setSimRunning(false); return }
-    setSimLog([]); setSimRunning(true)
+    const currentCode = codeRef.current || code
+    if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); return }
+    setSimLog([]); setSimRunning(true); simRunningRef.current = true
     sim.setTemp(simTemp)
     sim.setAccel(simAccelX, simAccelY, -1024)
     sim.pressA(btnADown); sim.pressB(btnBDown)
-    const currentCode = codeRef.current || code
-    if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); setSimRunning(false); return }
     sim.run(currentCode, (disp, log) => {
       setSimDisplay(disp.map(r => [...r]))
       setSimLog([...log])
-    }).then(() => setSimRunning(false))
+    }).finally(() => { setSimRunning(false); simRunningRef.current = false })
   }
-  function stopSim() { simRef.current.stop(); setSimRunning(false) }
+  function stopSim() {
+    simRef.current.stop()
+    setSimRunning(false)
+    simRunningRef.current = false
+  }
 
   const [logoDown, setLogoDown] = useState(false)
 
@@ -716,6 +829,11 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
 
   async function flashToDevice() {
     if (!serialPortRef.current) { setFlashMsg('Nejprve se připoj k zařízení'); return }
+    // Auto-save current code before flashing
+    if (activeFile && isDirty) {
+      await push(activeFile.path, codeRef.current || code)
+      setIsDirty(false)
+    }
     setFlashing(true); setFlashMsg('Připravuji REPL…')
     try {
       const port = serialPortRef.current
@@ -929,14 +1047,14 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
             </div>
             <button onClick={save} disabled={saving} className="mb-btn" style={{...ghost,background:isDirty?accent+'25':undefined,borderColor:isDirty?accent+'50':undefined,color:isDirty?accent:undefined}}>{saving?'…':'💾 Uložit'}</button>
             <button onClick={downloadCode} className="mb-btn" style={ghost}>⬇ Stáhnout .py</button>
-            <button onClick={runSim} className="mb-btn" style={{...ghost,color:D.success,borderColor:D.success+'50',background:D.success+'15'}}>
+            <button onClick={runSim} disabled={simRunning} className="mb-btn"
+              style={{...ghost,color:D.success,borderColor:D.success+'50',background:D.success+'15',opacity:simRunning?.4:1,cursor:simRunning?'not-allowed':'pointer'}}>
               ▶ Spustit
             </button>
-            {simRunning && (
-              <button onClick={stopSim} className="mb-btn" style={{...ghost,color:D.danger,borderColor:D.danger+'50',background:D.danger+'15'}}>
-                ⏹ Zastavit
-              </button>
-            )}
+            <button onClick={stopSim} disabled={!simRunning} className="mb-btn"
+              style={{...ghost,color:D.danger,borderColor:D.danger+'50',background:D.danger+'15',opacity:!simRunning?.3:1,cursor:!simRunning?'not-allowed':'pointer'}}>
+              ⏹ Stop
+            </button>
           </div>
 
           {/* Monaco editor */}
