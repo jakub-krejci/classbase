@@ -777,39 +777,37 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
   // ── Simulator ──────────────────────────────────────────────────────────────
   const isRunningRef = useRef(false)
   const simBtnWrapRef = useRef<HTMLDivElement>(null)
+  const runSimRef  = useRef<()=>void>(()=>{})
+  const stopSimRef = useRef<()=>void>(()=>{})
 
   // Create sim buttons imperatively — 100% outside React, React can never override them
   useEffect(() => {
     const wrap = simBtnWrapRef.current
     if (!wrap) return
-    wrap.style.display = 'flex'
-    wrap.style.gap = '6px'
-
-    const S = (el: HTMLButtonElement, running: boolean, isRun: boolean) => {
-      el.disabled   = isRun ? running : !running
-      el.style.opacity = (isRun ? running : !running) ? '0.35' : '1'
-      el.style.cursor  = (isRun ? running : !running) ? 'not-allowed' : 'pointer'
-    }
+    wrap.style.cssText = 'display:flex;gap:6px;'
 
     const base = 'color:#fff;border:none;border-radius:8px;font-family:inherit;font-weight:700;font-size:12px;flex:1;padding:8px 7px;transition:opacity .15s;'
     const runEl  = document.createElement('button')
     runEl.textContent = '▶ Spustit'
-    runEl.setAttribute('style', base + `background:${D.success};cursor:pointer;`)
-    runEl.onclick = () => { if (!isRunningRef.current) runSim() }
+    runEl.style.cssText = base + `background:${D.success};cursor:pointer;opacity:1;`
+    runEl.onclick = () => runSimRef.current()   // always calls latest runSim via ref
 
     const stopEl = document.createElement('button')
     stopEl.textContent = '⏹ Stop'
-    stopEl.setAttribute('style', base + 'background:#EF4444;opacity:.35;cursor:not-allowed;')
+    stopEl.style.cssText = base + 'background:#EF4444;opacity:.35;cursor:not-allowed;'
     stopEl.disabled = true
-    stopEl.onclick = () => { if (isRunningRef.current) stopSim() }
+    stopEl.onclick = () => stopSimRef.current()  // always calls latest stopSim via ref
 
     wrap.appendChild(runEl)
     wrap.appendChild(stopEl)
 
-    // Expose toggle function on the wrap element for runSim/stopSim to call
     ;(wrap as any).__setRunning = (running: boolean) => {
-      S(runEl, running, true)
-      S(stopEl, running, false)
+      runEl.disabled      = running
+      runEl.style.opacity = running ? '0.35' : '1'
+      runEl.style.cursor  = running ? 'not-allowed' : 'pointer'
+      stopEl.disabled      = !running
+      stopEl.style.opacity = running ? '1' : '0.35'
+      stopEl.style.cursor  = running ? 'pointer' : 'not-allowed'
     }
 
     return () => { wrap.innerHTML = '' }
@@ -824,7 +822,7 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
     const currentCode = codeRef.current || code
     if (!currentCode.trim()) { setSimLog(['⚠️ Otevři soubor nebo napiš kód.']); return }
     isRunningRef.current = true
-    setRunBtns(true)   // direct DOM — immediate, no React needed
+    setRunBtns(true)
     setSimLog([])
     const sim = simRef.current
     sim.setTemp(simTemp)
@@ -838,12 +836,14 @@ export default function MicrobitEditor({ profile }: { profile: any }) {
       setRunBtns(false)
     })
   }
+  runSimRef.current = runSim   // keep ref current on every render
 
   function stopSim() {
     simRef.current.stop()
     isRunningRef.current = false
     setRunBtns(false)
   }
+  stopSimRef.current = stopSim  // keep ref current on every render
 
   const [logoDown, setLogoDown] = useState(false)
 
