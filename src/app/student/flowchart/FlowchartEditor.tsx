@@ -72,18 +72,32 @@ function bestPorts(a:FNode,b:FNode):[Port,Port]{
   if(Math.abs(dy)>=Math.abs(dx)) return dy>0?['bottom','top']:['top','bottom']
   return dx>0?['right','left']:['left','right']
 }
-function curvePath(x1:number,y1:number,x2:number,y2:number){
-  const dy=Math.abs(y2-y1)*0.5
-  return `M${x1},${y1} C${x1},${y1+dy} ${x2},${y2-dy} ${x2},${y2}`
+function curvePath(x1:number,y1:number,x2:number,y2:number,fromPort?:string,toPort?:string){
+  // Control points follow the port direction so arrow lands at correct angle
+  const dist=Math.max(40,Math.hypot(x2-x1,y2-y1)*0.45)
+  function ctrl(px:number,py:number,port:string,d:number):[number,number]{
+    switch(port){
+      case 'right':  return [px+d,py]
+      case 'left':   return [px-d,py]
+      case 'top':    return [px,py-d]
+      case 'bottom': return [px,py+d]
+      default:       return [px,py+d]
+    }
+  }
+  const [c1x,c1y]=ctrl(x1,y1,fromPort||'bottom',dist)
+  const [c2x,c2y]=ctrl(x2,y2,toPort||'top',-dist)
+  return `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`
 }
-function edgePathWithWaypoints(x1:number,y1:number,x2:number,y2:number,wps?:{x:number;y:number}[]): string {
-  if(!wps||wps.length===0) return curvePath(x1,y1,x2,y2)
+function edgePathWithWaypoints(x1:number,y1:number,x2:number,y2:number,wps?:{x:number;y:number}[],fromPort?:string,toPort?:string): string {
+  if(!wps||wps.length===0) return curvePath(x1,y1,x2,y2,fromPort,toPort)
   let path=`M${x1},${y1}`
   const points=[{x:x1,y:y1},...wps,{x:x2,y:y2}]
   for(let i=0;i<points.length-1;i++){
     const a=points[i],b=points[i+1]
-    const dy=Math.abs(b.y-a.y)*0.4
-    path+=` C${a.x},${a.y+dy} ${b.x},${b.y-dy} ${b.x},${b.y}`
+    const fp2=i===0?fromPort:'bottom'
+    const tp=i===points.length-2?toPort:'top'
+    const seg=curvePath(a.x,a.y,b.x,b.y,fp2,tp)
+    path+=seg.slice(1) // strip the M from subsequent segments
   }
   return path
 }
@@ -753,6 +767,9 @@ export default function FlowchartEditor({profile}:{profile:any}){
                 <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
                   <polygon points="0 0,8 3,0 6" fill="rgba(255,255,255,.45)"/>
                 </marker>
+                <marker id="arr-sel" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                  <polygon points="0 0,8 3,0 6" fill="rgba(255,255,255,.9)"/>
+                </marker>
               </defs>
               <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
                 {/* Edges */}
@@ -761,13 +778,13 @@ export default function FlowchartEditor({profile}:{profile:any}){
                   if(!fn||!tn) return null
                   const [fx,fy]=portXY(fn,edge.fromPort); const [tx,ty]=portXY(tn,edge.toPort)
                   const wps=edge.waypoints??[]
-                  const path=edgePathWithWaypoints(fx,fy,tx,ty,wps); const sel=selectedIds.has(edge.id)
+                  const path=edgePathWithWaypoints(fx,fy,tx,ty,wps,edge.fromPort,edge.toPort); const sel=selectedIds.has(edge.id)
                   // Midpoint for adding a waypoint (center of path)
                   const allPts=[{x:fx,y:fy},...wps,{x:tx,y:ty}]
                   const mid=allPts[Math.floor(allPts.length/2)]
                   return<g key={edge.id} style={{cursor:'pointer'}} onClick={e=>{e.stopPropagation();setSelectedIds(new Set([edge.id]))}}>
                     <path d={path} fill="none" stroke="transparent" strokeWidth={14}/>
-                    <path d={path} fill="none" stroke={sel?'#fff':'rgba(255,255,255,.35)'} strokeWidth={sel?2:1.5} markerEnd="url(#arr)"/>
+                    <path d={path} fill="none" stroke={sel?'#fff':'rgba(255,255,255,.35)'} strokeWidth={sel?2:1.5} markerEnd={sel?'url(#arr-sel)':'url(#arr)'}/>
                     {edge.label&&<text x={mid.x} y={mid.y-9} textAnchor="middle" fontSize={11} fill="rgba(255,255,255,.55)" fontFamily="DM Sans,system-ui" style={{pointerEvents:'none'}}>{edge.label}</text>}
                     {/* Waypoint handles (draggable) */}
                     {sel&&wps.map((wp,i)=>(
@@ -777,7 +794,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
                     ))}
                     {/* Midpoint handle to add new waypoint */}
                     {sel&&<circle cx={mid.x} cy={mid.y} r={5} fill={accent} fillOpacity={.7} stroke="#fff" strokeWidth={1}
-                      style={{cursor:'crosshair'}} title="Táhni pro ohnutí hrany"
+                      style={{cursor:'crosshair'}}
                       onMouseDown={e=>{
                         e.stopPropagation()
                         // Insert a new waypoint at mid position
@@ -832,7 +849,7 @@ export default function FlowchartEditor({profile}:{profile:any}){
                 {drawingEdge&&(()=>{
                   const fn=diagram.nodes.find(n=>n.id===drawingEdge.fromId); if(!fn) return null
                   const [fx,fy]=portXY(fn,drawingEdge.fromPort)
-                  return<path d={curvePath(fx,fy,drawingEdge.mx,drawingEdge.my)} fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1.5} strokeDasharray="6,3" markerEnd="url(#arr)"/>
+                  return<path d={curvePath(fx,fy,drawingEdge.mx,drawingEdge.my,drawingEdge.fromPort)} fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={1.5} strokeDasharray="6,3" markerEnd="url(#arr)"/>
                 })()}
               </g>
             </svg>
