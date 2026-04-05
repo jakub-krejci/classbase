@@ -49,6 +49,11 @@ export default function PythonEditor({ profile }: { profile: any }) {
   const [monacoReady, setMonacoReady] = useState(false)
 
   const [running, setRunning]     = useState(false)
+  const [outputHeight, setOutputHeight] = useState(180)
+  const outputResizingRef = useRef<{startY:number;startH:number}|null>(null)
+  const [rightTab, setRightTab] = useState<'vars'|'snippets'|'docs'>('snippets')
+  const [pyVars, setPyVars]     = useState<{name:string;type:string;value:string}[]>([])
+  const [docQuery, setDocQuery] = useState('')
   const [pyStatus, setPyStatus]   = useState('')
   const [outputLines, setOutputLines] = useState<string[]>([])
   const [runError, setRunError]   = useState<string | null>(null)
@@ -403,7 +408,38 @@ export default function PythonEditor({ profile }: { profile: any }) {
       )
       setOutputLines(result.output ? result.output.split('\n') : lines)
       setRunError(result.error); setFigures(result.images ?? [])
+      // Attach variable inspector to window so we can call it after run
+      const w = window as any
+      if (!w.__pyodide_vars_script && w.pyodide) {
+        w.__pyodide_vars_script = () => {
+          try {
+            return w.pyodide.runPython(`
+import json as _j
+_skip={'__name__','__doc__','__package__','__loader__','__spec__','__builtins__','_cb_figures','_cb_capture_show','input','warnings','plt','matplotlib','io','base64','sys','_skip','_j','_k','_v','_t','_s','_out'}
+_out=[]
+for _k,_v in list(globals().items()):
+    if _k.startswith('_') or _k in _skip: continue
+    try:
+        _t=type(_v).__name__
+        if _t in('module','function','type','builtin_function_or_method','JsProxy'): continue
+        _s=repr(_v)
+        if len(_s)>120: _s=_s[:120]+'…'
+        _out.append({'name':_k,'type':_t,'value':_s})
+    except: pass
+_j.dumps(_out)
+`)
+          } catch(e) { return '[]' }
+        }
+      }
     } catch (e: any) { setRunError(String(e)) }
+    // Extract variables for inspector
+    try {
+      const w = window as any
+      if (w.__pyodide_vars_script) {
+        const raw = w.__pyodide_vars_script()
+        if (raw) setPyVars(JSON.parse(raw))
+      }
+    } catch {}
     setRunning(false); setPyStatus('')
   }
 
@@ -728,7 +764,7 @@ export default function PythonEditor({ profile }: { profile: any }) {
           </div>
         </div>
 
-        {/* ══ CENTER: Editor ══ */}
+        {/* ══ CENTER: Editor + Output (resizable) ══ */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Toolbar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
@@ -772,7 +808,8 @@ export default function PythonEditor({ profile }: { profile: any }) {
               {running ? <><div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: D.txtSec, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Spouštím…</> : '▶ Spustit'}
             </button>
           </div>
-          {/* Monaco */}
+
+          {/* Monaco — fills remaining space */}
           <div style={{ flex: 1, background: '#0d1117', overflow: 'hidden', position: 'relative', minHeight: 0 }}>
             {!monacoReady && (
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', flexDirection: 'column', gap: 10 }}>
@@ -782,54 +819,184 @@ export default function PythonEditor({ profile }: { profile: any }) {
             )}
             <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
           </div>
-        </div>
 
-        {/* ══ RIGHT: Output ══ */}
-        <div style={{ width: 280, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-            <span style={{ fontSize: 13 }}>⚡</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: D.txtPri }}>Výstup</span>
-            {hasRun && !running && (
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: runError ? D.danger+'20' : D.success+'20', color: runError ? D.danger : D.success, fontWeight: 700 }}>
-                {runError ? '✗ Chyba' : '✓ OK'}
-              </span>
-            )}
-            <div style={{ flex: 1 }} />
-            {(outputLines.length > 0 || figures.length > 0 || runError) && (
-              <button onClick={clearOutput} style={{ padding: '2px 8px', background: 'none', border: `1px solid ${D.border}`, borderRadius: 6, fontSize: 11, color: D.txtSec, cursor: 'pointer', fontFamily: 'inherit' }}>Vymazat</button>
-            )}
+          {/* Resize handle */}
+          <div
+            style={{ height: 6, background: 'rgba(255,255,255,.04)', borderTop: `1px solid ${D.border}`, borderBottom: `1px solid ${D.border}`, cursor: 'ns-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .15s' }}
+            onMouseEnter={e => (e.currentTarget.style.background = accent+'30')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.04)')}
+            onMouseDown={e => {
+              e.preventDefault()
+              outputResizingRef.current = { startY: e.clientY, startH: outputHeight }
+              const onMove = (ev: MouseEvent) => {
+                if (!outputResizingRef.current) return
+                const delta = outputResizingRef.current.startY - ev.clientY
+                setOutputHeight(Math.max(80, Math.min(500, outputResizingRef.current.startH + delta)))
+              }
+              const onUp = () => { outputResizingRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+              window.addEventListener('mousemove', onMove)
+              window.addEventListener('mouseup', onUp)
+            }}>
+            <div style={{ width: 32, height: 3, borderRadius: 2, background: 'rgba(255,255,255,.2)' }} />
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, lineHeight: 1.7 }}>
-                          {!hasRun && (
-                <div style={{ color: D.txtSec, display: 'flex', alignItems: 'center', gap: 14, padding: '6px 0' }}>
-                  <img src="/icons/python.png" alt="" style={{ width: 26, height: 26, objectFit: 'contain', opacity: .35, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 12 }}>Stiskni ▶ Spustit nebo Ctrl+Enter</div>
-                    <div style={{ fontSize: 11, opacity: .55 }}>Výstup print(), grafy matplotlib a chyby se zobrazí zde</div>
-                  </div>
-                </div>
+
+          {/* Output panel */}
+          <div style={{ height: outputHeight, flexShrink: 0, display: 'flex', flexDirection: 'column', borderTop: 'none', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, background: D.bgCard }}>
+              <span style={{ fontSize: 12 }}>⚡</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: D.txtPri }}>Výstup</span>
+              {hasRun && !running && (
+                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: runError ? D.danger+'20' : D.success+'20', color: runError ? D.danger : D.success, fontWeight: 700 }}>
+                  {runError ? '✗ Chyba' : '✓ OK'}
+                </span>
               )}
+              <div style={{ flex: 1 }} />
+              {(outputLines.length > 0 || figures.length > 0 || runError) && (
+                <button onClick={clearOutput} style={{ padding: '2px 8px', background: 'none', border: `1px solid ${D.border}`, borderRadius: 6, fontSize: 11, color: D.txtSec, cursor: 'pointer', fontFamily: 'inherit' }}>Vymazat</button>
+              )}
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, lineHeight: 1.7, background: '#0a0c12' }}>
+              {!hasRun && <div style={{ color: D.txtSec, fontSize: 11, opacity: .5 }}>Stiskni ▶ Spustit nebo Ctrl+Enter…</div>}
               {running && outputLines.length === 0 && (
                 <div style={{ color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 13, height: 13, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite', flexShrink: 0 }} />
+                  <div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite', flexShrink: 0 }} />
                   {pyStatus || 'Inicializuji Python…'}
                 </div>
               )}
               {outputLines.map((line, i) => (
-                <div key={i} style={{ color: line.startsWith('⚠') ? D.warning : D.txtPri, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line || '\u00A0'}</div>
+                <div key={i} style={{ color: line.startsWith('⚠') ? D.warning : '#a8d8a8', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line || '\u00A0'}</div>
               ))}
               {runError && (
-                <div style={{ marginTop: 10, padding: '10px 13px', background: 'rgba(239,68,68,.1)', border: `1px solid rgba(239,68,68,.2)`, borderRadius: 9 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: D.danger, marginBottom: 4 }}>❌ Chyba</div>
+                <div style={{ marginTop: 8, padding: '8px 10px', background: 'rgba(239,68,68,.1)', border: `1px solid rgba(239,68,68,.2)`, borderRadius: 7 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: D.danger, marginBottom: 3 }}>❌ Chyba</div>
                   <pre style={{ fontSize: 11, color: '#FCA5A5', whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit' }}>{runError}</pre>
                 </div>
               )}
               {figures.map((b64, i) => (
-                <div key={i} style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 10, color: D.txtSec, marginBottom: 4 }}>📊 Graf {figures.length > 1 ? i+1 : ''}</div>
-                  <img src={`data:image/png;base64,${b64}`} alt={`Graf ${i+1}`} style={{ maxWidth: '100%', borderRadius: 8, border: `1px solid ${D.border}` }} />
+                <div key={i} style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 10, color: D.txtSec, marginBottom: 3 }}>📊 Graf {figures.length > 1 ? i+1 : ''}</div>
+                  <img src={`data:image/png;base64,${b64}`} alt={`Graf ${i+1}`} style={{ maxWidth: '100%', borderRadius: 7, border: `1px solid ${D.border}` }} />
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ══ RIGHT: Tools ══ */}
+        <div style={{ width: 260, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Tab bar */}
+          <div style={{ display: 'flex', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            {([['vars','🔍','Proměnné'],['snippets','⚡','Snippety'],['docs','📖','Docs']] as const).map(([tab, icon, label]) => (
+              <button key={tab} onClick={() => setRightTab(tab)}
+                style={{ flex: 1, padding: '8px 4px', background: rightTab === tab ? D.bgMid : 'transparent', border: 'none', borderBottom: `2px solid ${rightTab === tab ? accent : 'transparent'}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 600, color: rightTab === tab ? D.txtPri : D.txtSec, transition: 'all .12s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 14 }}>{icon}</span>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+
+            {/* ── Proměnné ── */}
+            {rightTab === 'vars' && (
+              <div style={{ padding: '10px 12px' }}>
+                {pyVars.length === 0 ? (
+                  <div style={{ color: D.txtSec, fontSize: 11, textAlign: 'center' as const, marginTop: 24, lineHeight: 1.7 }}>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>🔍</div>
+                    Spusť kód pro zobrazení<br/>proměnných z programu
+                  </div>
+                ) : pyVars.map(v => (
+                  <div key={v.name} style={{ marginBottom: 8, background: D.bgMid, borderRadius: 8, padding: '7px 10px', border: `1px solid ${D.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: accent, fontFamily: 'monospace' }}>{v.name}</span>
+                      <span style={{ fontSize: 9, padding: '1px 5px', background: accent+'20', color: accent, borderRadius: 4, fontWeight: 600 }}>{v.type}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#a8d8a8', fontFamily: 'monospace', wordBreak: 'break-all' }}>{v.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Snippety ── */}
+            {rightTab === 'snippets' && (
+              <div style={{ padding: '8px 0' }}>
+                {[
+                  { label: 'print()', desc: 'Výstup na konzoli', code: 'print("Hello, world!")' },
+                  { label: 'input()', desc: 'Vstup od uživatele', code: 'jmeno = input("Zadej jméno: ")\nprint(f"Ahoj, {jmeno}!")' },
+                  { label: 'for smyčka', desc: 'Iterace přes rozsah', code: 'for i in range(10):\n    print(i)' },
+                  { label: 'while smyčka', desc: 'Podmíněná smyčka', code: 'i = 0\nwhile i < 10:\n    print(i)\n    i += 1' },
+                  { label: 'if / elif / else', desc: 'Podmíněný výraz', code: 'x = 42\nif x > 0:\n    print("kladné")\nelif x == 0:\n    print("nula")\nelse:\n    print("záporné")' },
+                  { label: 'def funkce', desc: 'Definice funkce', code: 'def pozdrav(jmeno):\n    return f"Ahoj, {jmeno}!"\n\nprint(pozdrav("světe"))' },
+                  { label: 'list', desc: 'Práce se seznamem', code: 'cisla = [1, 2, 3, 4, 5]\nprint(sum(cisla))\nprint(max(cisla))' },
+                  { label: 'dict', desc: 'Slovník (klíč → hodnota)', code: 'student = {\n    "jmeno": "Jan",\n    "vek": 15\n}\nprint(student["jmeno"])' },
+                  { label: 'try / except', desc: 'Ošetření chyb', code: 'try:\n    x = int(input("Zadej číslo: "))\n    print(f"Dvojnásobek: {x * 2}")\nexcept ValueError:\n    print("To není číslo!")' },
+                  { label: 'list comprehension', desc: 'Generátor seznamu', code: 'kvadraty = [x**2 for x in range(1, 11)]\nprint(kvadraty)' },
+                  { label: 'matplotlib graf', desc: 'Vykreslení grafu', code: 'import matplotlib.pyplot as plt\n\nx = [1, 2, 3, 4, 5]\ny = [1, 4, 9, 16, 25]\n\nplt.plot(x, y, marker="o")\nplt.title("Kvadratická funkce")\nplt.xlabel("x")\nplt.ylabel("y")\nplt.show()' },
+                  { label: 'numpy pole', desc: 'Numerické výpočty', code: 'import numpy as np\n\na = np.array([1, 2, 3, 4, 5])\nprint("Průměr:", np.mean(a))\nprint("Součet:", np.sum(a))' },
+                ].map(s => (
+                  <div key={s.label} className="py-row"
+                    onClick={() => {
+                      const ed = editorRef.current
+                      if (!ed) return
+                      const pos = ed.getPosition()
+                      ed.executeEdits('snippet', [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text: '\n' + s.code + '\n' }])
+                      ed.focus()
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', cursor: 'pointer', borderBottom: `1px solid ${D.border}10` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: D.txtPri, fontFamily: 'monospace' }}>{s.label}</div>
+                      <div style={{ fontSize: 10, color: D.txtSec }}>{s.desc}</div>
+                    </div>
+                    <span style={{ fontSize: 10, color: D.txtSec, flexShrink: 0 }}>↵</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Dokumentace ── */}
+            {rightTab === 'docs' && (
+              <div style={{ padding: '8px 12px' }}>
+                <input
+                  value={docQuery} onChange={e => setDocQuery(e.target.value)} placeholder="Hledat funkci…"
+                  style={{ width: '100%', padding: '7px 10px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 8, fontSize: 12, color: D.txtPri, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const, marginBottom: 8 }} />
+                {[
+                  { name: 'print()', sig: 'print(*objects, sep=" ", end="\\n")', desc: 'Vypíše objekty na standardní výstup.', ex: 'print("Ahoj", "světe")\nprint(42, end="")' },
+                  { name: 'input()', sig: 'input(prompt="")', desc: 'Přečte řádek ze vstupu, vrátí string.', ex: 'jmeno = input("Jméno: ")\nprint(jmeno)' },
+                  { name: 'len()', sig: 'len(s)', desc: 'Vrátí délku objektu (seznam, string, tuple…).', ex: 'len([1,2,3])  # 3\nlen("ahoj")  # 4' },
+                  { name: 'range()', sig: 'range(stop) / range(start, stop, step)', desc: 'Generuje sekvenci čísel.', ex: 'list(range(5))    # [0,1,2,3,4]\nlist(range(2,8,2)) # [2,4,6]' },
+                  { name: 'int()', sig: 'int(x)', desc: 'Převede hodnotu na celé číslo.', ex: 'int("42")   # 42\nint(3.9)    # 3' },
+                  { name: 'float()', sig: 'float(x)', desc: 'Převede hodnotu na desetinné číslo.', ex: 'float("3.14") # 3.14\nfloat(2)      # 2.0' },
+                  { name: 'str()', sig: 'str(x)', desc: 'Převede hodnotu na řetězec.', ex: 'str(42)    # "42"\nstr(True)  # "True"' },
+                  { name: 'list()', sig: 'list(iterable)', desc: 'Vytvoří seznam z iterovatelného objektu.', ex: 'list(range(3))  # [0,1,2]\nlist("abc")     # ["a","b","c"]' },
+                  { name: 'dict()', sig: 'dict(**kwargs)', desc: 'Vytvoří slovník.', ex: 'd = dict(a=1, b=2)\nprint(d)  # {"a":1,"b":2}' },
+                  { name: 'sum()', sig: 'sum(iterable, start=0)', desc: 'Vrátí součet prvků.', ex: 'sum([1,2,3,4])  # 10\nsum(range(101)) # 5050' },
+                  { name: 'max() / min()', sig: 'max(iterable) / min(iterable)', desc: 'Vrátí největší / nejmenší prvek.', ex: 'max([3,1,4,1,5])  # 5\nmin([3,1,4,1,5])  # 1' },
+                  { name: 'abs()', sig: 'abs(x)', desc: 'Absolutní hodnota čísla.', ex: 'abs(-5)  # 5\nabs(3)   # 3' },
+                  { name: 'round()', sig: 'round(number, ndigits=0)', desc: 'Zaokrouhlí číslo.', ex: 'round(3.14159, 2)  # 3.14\nround(2.5)         # 2' },
+                  { name: 'type()', sig: 'type(object)', desc: 'Vrátí typ objektu.', ex: 'type(42)     # <class "int">\ntype("ahoj") # <class "str">' },
+                  { name: 'f-string', sig: 'f"text {výraz}"', desc: 'Formátovaný řetězec s vloženými výrazy.', ex: 'jmeno = "Jan"\nprint(f"Ahoj, {jmeno}!")\nprint(f"2+2 = {2+2}")' },
+                ].filter(d => !docQuery || d.name.toLowerCase().includes(docQuery.toLowerCase()) || d.desc.toLowerCase().includes(docQuery.toLowerCase()))
+                  .map(doc => (
+                  <div key={doc.name} style={{ marginBottom: 10, background: D.bgMid, borderRadius: 9, padding: '9px 11px', border: `1px solid ${D.border}` }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: accent, fontFamily: 'monospace', marginBottom: 2 }}>{doc.name}</div>
+                    <div style={{ fontSize: 10, color: D.txtSec, fontFamily: 'monospace', marginBottom: 5 }}>{doc.sig}</div>
+                    <div style={{ fontSize: 11, color: D.txtPri, marginBottom: 6, lineHeight: 1.5 }}>{doc.desc}</div>
+                    <pre style={{ margin: 0, padding: '5px 8px', background: '#0d1117', borderRadius: 6, fontSize: 10, color: '#a8d8a8', fontFamily: 'monospace', whiteSpace: 'pre-wrap', cursor: 'pointer', border: `1px solid ${D.border}` }}
+                      onClick={() => {
+                        const ed = editorRef.current
+                        if (!ed) return
+                        const pos = ed.getPosition()
+                        ed.executeEdits('doc', [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text: '\n' + doc.ex + '\n' }])
+                        ed.focus()
+                      }}
+                      title="Klikni pro vložení příkladu">
+                      {doc.ex}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            )}
 
           </div>
         </div>
