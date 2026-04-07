@@ -130,6 +130,11 @@ export default function JupyterEditor({ profile }: { profile: any }) {
 
   // ── UI state ────────────────────────────────────────────────────────────────
   const [saving, setSaving]             = useState(false)
+  const [rightTab, setRightTab]         = useState<'nav'|'vars'|'kernel'>('nav')
+  const [jupVars, setJupVars]           = useState<{name:string;type:string;value:string}[]>([])
+  const [totalRunTime, setTotalRunTime] = useState(0)
+  const [cellsExecuted, setCellsExecuted] = useState(0)
+  const runStartRef = useRef<number>(0)
   const [saveMsg, setSaveMsg]           = useState('')
   const [uploadingFile, setUploadingFile] = useState(false)
   const imgInputRef = useRef<HTMLInputElement>(null)
@@ -522,6 +527,7 @@ export default function JupyterEditor({ profile }: { profile: any }) {
     const lines: string[] = []
     const order = executionOrder + 1
     setExecOrder(order)
+    const cellStart = Date.now()
 
     // Before running: write all folder files to Pyodide's virtual filesystem
     // so that pd.read_csv('data/file.csv') works as expected
@@ -567,6 +573,30 @@ export default function JupyterEditor({ profile }: { profile: any }) {
     }
     kernelRunning.current = false
     setIsDirty(true)
+    const elapsed = Date.now() - cellStart
+    setTotalRunTime(prev => prev + elapsed)
+    setCellsExecuted(prev => prev + 1)
+    // Extract variables after each code cell run
+    try {
+      const varResult = await runPython(
+        `import json as _j
+_skip={'__name__','__doc__','__package__','__loader__','__spec__','__builtins__','_cb_figures','_cb_capture_show','input','warnings','plt','matplotlib','io','base64','sys'}
+_out=[]
+for _k,_v in list(globals().items()):
+    if _k.startswith('_') or _k in _skip: continue
+    try:
+        _t=type(_v).__name__
+        if _t in('module','function','type','builtin_function_or_method','JsProxy','coroutine'): continue
+        _s=repr(_v)
+        if len(_s)>200: _s=_s[:200]+'…'
+        _out.append({'name':_k,'type':_t,'value':_s})
+    except: pass
+print(_j.dumps(_out))`,
+        () => {},
+        undefined
+      )
+      if (varResult.output?.trim()) setJupVars(JSON.parse(varResult.output.trim()))
+    } catch {}
   }
 
   // ── Run all cells ───────────────────────────────────────────────────────────
@@ -620,8 +650,53 @@ export default function JupyterEditor({ profile }: { profile: any }) {
 
   const projSel: React.CSSProperties = { width: '100%', padding: '8px 10px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 8, fontSize: 13, color: D.txtPri, fontFamily: 'inherit', outline: 'none', marginTop: 8 }
 
+  // ── Export functions ──────────────────────────────────────────────────────
+  function exportIpynb() {
+    const blob = new Blob([JSON.stringify(notebook, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+    a.download = activeFile?.name ?? 'notebook.ipynb'; a.click()
+  }
+  function exportPy() {
+    const lines: string[] = []
+    for (const cell of notebook.cells) {
+      if (cell.type === 'code') {
+        lines.push('# %%')
+        lines.push(cell.source)
+        lines.push('')
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+    a.download = (activeFile?.name.replace(/\.ipynb$/, '') ?? 'notebook') + '.py'; a.click()
+  }
+  function exportMd() {
+    const lines: string[] = [`# ${activeFile?.name.replace(/\.ipynb$/, '') ?? 'Notebook'}`, '']
+    for (const cell of notebook.cells) {
+      if (cell.type === 'markdown') {
+        lines.push(cell.source); lines.push('')
+      } else {
+        lines.push('```python'); lines.push(cell.source); lines.push('```')
+        const textOut = cell.outputs.filter(o => o.type === 'text').map(o => o.text).join('\n')
+        if (textOut.trim()) { lines.push(''); lines.push('```'); lines.push(textOut); lines.push('```') }
+        lines.push('')
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+    a.download = (activeFile?.name.replace(/\.ipynb$/, '') ?? 'notebook') + '.md'; a.click()
+  }
+
+  // ── Table of contents from markdown headings ───────────────────────────────
+  const tocItems = notebook.cells
+    .filter(c => c.type === 'markdown')
+    .flatMap(c => c.source.split('\n').filter(l => /^#{1,3} /.test(l)).map(l => {
+      const level = l.match(/^(#{1,3}) /)?.[1].length ?? 1
+      const text  = l.replace(/^#{1,3} /, '')
+      return { level, text, cellId: c.id }
+    }))
+
   return (
-    <DarkLayout profile={profile} activeRoute="/student/jupyter">
+    <DarkLayout profile={profile} activeRoute="/student/jupyter" fullContent>
 
       {/* ── Modals ── */}
       {newProjModal && (
@@ -749,78 +824,59 @@ export default function JupyterEditor({ profile }: { profile: any }) {
         @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
       `}</style>
 
-      {/* ── Page header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#F37726' + '20', border: `1px solid #F37726` + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <img src="/icons/jupyter.png" alt="Jupyter" style={{ width: 26, height: 26, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>Jupyter Notebook</h1>
-          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>Ctrl+Enter spustit buňku · Ctrl+S uložit · Python 3.11 via Pyodide</p>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
-          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
-          {activeFile && <span style={{ fontSize: 11, color: D.txtSec }}>{activeFile.project} / {activeFile.name}</span>}
-        </div>
-      </div>
+      {/* ── 3-col layout ── */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-      {/* ── 2-col layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
+        {/* ══ LEFT: Sidebar ══ */}
+        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-        {/* ══ LEFT: sidebar ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Header */}
+          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <img src="/icons/jupyter.png" alt="Jupyter" style={{ width: 18, height: 18, objectFit: 'contain' }} />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, lineHeight: 1.2 }}>Jupyter</div>
+                <div style={{ fontSize: 9, fontWeight: 400, color: D.txtSec, lineHeight: 1.2 }}>Notebook Editor</div>
+              </div>
+              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
+            </div>
 
-          {/* Actions */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Soubory</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <button className="jup-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>📁</span> Nový projekt</button>
-              <button className="jup-sb" style={sideBtn} onClick={() => setNewFileModal(true)}><span>📄</span> Nový notebook</button>
-              <button className="jup-sb" style={sideBtn} onClick={() => { setOpenModal(true); refreshProjects() }}><span>📂</span> Otevřít</button>
-              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
-              <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile || saving ? .4 : 1 }} disabled={!activeFile || saving} onClick={saveNotebook}><span>💾</span> Uložit</button>
-              <button className="jup-sb" style={{ ...sideBtn, opacity: !activeFile ? .4 : 1 }} disabled={!activeFile} onClick={downloadNotebook}><span>⬇️</span> Stáhnout .ipynb</button>
+            {/* Soubory */}
+            <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>Soubory</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button className="jup-sb" style={{...sideBtn}} onClick={() => setNewProjModal(true)}><span>📁</span> Nový projekt</button>
+              <button className="jup-sb" style={{...sideBtn}} onClick={() => setNewFileModal(true)}><span>📄</span> Nový notebook</button>
+              <button className="jup-sb" style={{...sideBtn}} onClick={() => { setOpenModal(true); refreshProjects() }}><span>📂</span> Otevřít</button>
+              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
+              <button className="jup-sb" style={{...sideBtn, opacity: !activeFile || saving ? .4 : 1}} disabled={!activeFile || saving} onClick={saveNotebook}><span>💾</span> Uložit</button>
+            </div>
+
+            {/* Export */}
+            <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', margin: '10px 0 5px' }}>Export</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button className="jup-sb" style={{...sideBtn, opacity: !activeFile ? .4 : 1}} disabled={!activeFile} onClick={exportIpynb}><span>📓</span> Stáhnout .ipynb</button>
+              <button className="jup-sb" style={{...sideBtn, opacity: !activeFile ? .4 : 1}} disabled={!activeFile} onClick={exportPy}><span>🐍</span> Stáhnout .py</button>
+              <button className="jup-sb" style={{...sideBtn, opacity: !activeFile ? .4 : 1}} disabled={!activeFile} onClick={exportMd}><span>📝</span> Stáhnout .md</button>
             </div>
           </div>
 
-          {/* Recent */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Nedávné</SectionLabel>
-            {recent.length === 0
-              ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné soubory</div>
-              : recent.map(r => (
-                  <div key={r.path} className="jup-row"
-                    onClick={() => { const f = projects.flatMap(p => p.files).find(x => x.path === r.path); if (f) openNotebook(f) }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 7px', borderRadius: D.radiusSm, cursor: 'pointer', background: r.path === activeFile?.path ? accent+'15' : 'transparent', marginBottom: 2 }}>
-                    <span style={{ fontSize: 13 }}>📓</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: r.path === activeFile?.path ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-                      <div style={{ fontSize: 10, color: D.txtSec }}>{r.project}</div>
-                    </div>
-                  </div>
-                ))
-            }
-          </div>
-
-          {/* Project tree */}
-          <div style={{ ...card({ padding: '13px' }) }}>
-            <SectionLabel>Moje projekty</SectionLabel>
+          {/* Scrollable: Moje projekty */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            <div style={{ padding: '6px 12px 3px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Moje projekty</div>
             {loadingProj
-              ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
+              ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
+                  <div style={{ width: 13, height: 13, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
                 </div>
               : projects.length === 0
-                ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné projekty</div>
+                ? <div style={{ fontSize: 12, color: D.txtSec, padding: '4px 12px' }}>Žádné projekty</div>
                 : projects.map(proj => (
-                    <div key={proj.key} style={{ marginBottom: 5 }}>
-                      {/* Project header */}
-                      <div className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 6px', borderRadius: 7, background: proj.key === activeFile?.project ? accent+'10' : 'transparent' }}>
+                    <div key={proj.key} style={{ marginBottom: 3 }}>
+                      <div className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: proj.key === activeFile?.project ? accent+'10' : 'transparent' }}>
                         <div onClick={() => setExpandedProj(prev => { const n = new Set(prev); n.has(proj.key) ? n.delete(proj.key) : n.add(proj.key); return n })}
                           style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, cursor: 'pointer' }}>
                           <span style={{ fontSize: 9, color: D.txtSec, display: 'inline-block', transform: expandedProj.has(proj.key) ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
                           <span style={{ fontSize: 13 }}>📁</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: proj.key === activeFile?.project ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: proj.key === activeFile?.project ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</span>
                         </div>
                         <div className="jup-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
                           <button onClick={e => { e.stopPropagation(); setNewFolderModal(proj.key) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Nová složka">📁+</button>
@@ -828,14 +884,13 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                           <button onClick={e => { e.stopPropagation(); setDeleteProjModal(proj) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat">🗑</button>
                         </div>
                       </div>
-                      {/* Notebooks */}
                       {expandedProj.has(proj.key) && (
                         <div style={{ marginLeft: 18 }}>
                           {proj.files.map(f => (
                             <div key={f.path} className="jup-row"
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 7px', borderRadius: 6, cursor: 'pointer', background: f.path === activeFile?.path ? accent+'15' : 'transparent', marginBottom: 1 }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 12px', borderRadius: 6, cursor: 'pointer', background: f.path === activeFile?.path ? accent+'15' : 'transparent', marginBottom: 1 }}
                               onClick={() => openNotebook(f)}>
-                              <span style={{ fontSize: 13 }}>📓</span>
+                              <span style={{ fontSize: 12 }}>📓</span>
                               <span style={{ fontSize: 11, color: f.path === activeFile?.path ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
                               <div className="jup-acts" style={{ display: 'flex', gap: 1, opacity: 0 }}>
                                 <button onClick={e => { e.stopPropagation(); setRenameFileModal(f); setRenameFileVal(f.name.replace(/\.ipynb$/, '')) }}
@@ -844,33 +899,32 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                               </div>
                             </div>
                           ))}
-                          {/* Folders */}
                           {proj.folders.map(folder => (
                             <div key={folder.name} style={{ marginBottom: 3 }}>
-                              <div className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 7px', borderRadius: 6 }}>
+                              <div className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 12px', borderRadius: 6 }}>
                                 <span style={{ fontSize: 12 }}>📂</span>
                                 <span style={{ fontSize: 11, color: D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
                                 <div className="jup-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
                                   <button onClick={e => { e.stopPropagation(); uploadFolderTarget.current = `${proj.key}::${folder.name}`; imgInputRef.current?.click() }}
-                                    style={{ padding: '1px 5px', background: accent+'20', color: accent, border: 'none', borderRadius: 4, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }} title="Nahrát soubory">
+                                    style={{ padding: '1px 5px', background: accent+'20', color: accent, border: 'none', borderRadius: 4, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }} title="Nahrát">
                                     {uploadingFile ? '…' : '⬆'}
                                   </button>
                                   <button onClick={e => { e.stopPropagation(); setRenameFolderModal({ proj: proj.key, folder }); setRenameFolderVal(folder.name) }}
-                                    style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 10 }} title="Přejmenovat">✏</button>
+                                    style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 10 }}>✏</button>
                                   <button onClick={e => { e.stopPropagation(); setDeleteFolderModal({ proj: proj.key, folder }) }}
-                                    style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 10 }} title="Smazat složku">🗑</button>
+                                    style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 10 }}>🗑</button>
                                 </div>
                               </div>
                               {folder.files.map(f => (
-                                <div key={f.path} className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 7px 2px 22px', borderRadius: 5, marginBottom: 1 }}>
+                                <div key={f.path} className="jup-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 12px 2px 26px', borderRadius: 5, marginBottom: 1 }}>
                                   <span style={{ fontSize: 10 }}>📄</span>
                                   <span style={{ fontSize: 10, color: D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.name}>{f.name}</span>
                                   {f.size && <span style={{ fontSize: 9, color: D.txtSec, opacity: .7 }}>{f.size < 1024 ? f.size + 'B' : (f.size/1024).toFixed(1) + 'kB'}</span>}
                                   <div className="jup-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
                                     <button onClick={e => { e.stopPropagation(); setRenameFolderFileModal({ proj: proj.key, folder: folder.name, file: f }); setRenameFolderFileVal(f.name) }}
-                                      style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 9 }} title="Přejmenovat">✏</button>
+                                      style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 9 }}>✏</button>
                                     <button onClick={e => { e.stopPropagation(); setDeleteFolderFileModal({ proj: proj.key, folder: folder.name, file: f }) }}
-                                      style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 9 }} title="Smazat">🗑</button>
+                                      style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 9 }}>🗑</button>
                                   </div>
                                 </div>
                               ))}
@@ -882,80 +936,249 @@ export default function JupyterEditor({ profile }: { profile: any }) {
                   ))
             }
           </div>
+
+          {saveMsg && <div style={{ padding: '6px 12px', borderTop: `1px solid ${D.border}`, fontSize: 11, color: saveMsg.startsWith('❌') ? D.danger : D.success, flexShrink: 0 }}>{saveMsg}</div>}
         </div>
 
-        {/* ══ RIGHT: Notebook ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {/* ══ CENTER: Notebook ══ */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
-          {/* Notebook toolbar */}
-          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
-            {/* Run controls */}
+          {/* Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+              {activeFile ? `📓 ${activeFile.project} / ${activeFile.name}${isDirty ? ' ●' : ''}` : '📓 Bez souboru'}
+            </span>
             <button onClick={() => selectedCell && runCell(selectedCell)} disabled={!selectedCell}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: accent, color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: !selectedCell ? .4 : 1 }}>
               ▶ Spustit
             </button>
             <button onClick={runAllCells}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(255,255,255,.05)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ padding: '5px 10px', background: 'rgba(255,255,255,.05)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
               ⏩ Vše
             </button>
             <button onClick={clearAllOutputs}
-              style={{ padding: '5px 12px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ padding: '5px 10px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
               ✕ Výstupy
             </button>
             <div style={{ width: 1, height: 20, background: D.border }} />
-            {/* Add cell buttons */}
             <button onClick={() => { if (selectedCell) addCellAfter(selectedCell, 'code'); else { const c = newCell('code'); setNotebook(prev => ({ ...prev, cells: [...prev.cells, c] })); setSelectedCell(c.id); setEditingCell(c.id); setIsDirty(true) } }}
-              style={{ padding: '5px 12px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ padding: '5px 10px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
               + Kód
             </button>
             <button onClick={() => { if (selectedCell) addCellAfter(selectedCell, 'markdown'); else { const c = newCell('markdown'); setNotebook(prev => ({ ...prev, cells: [...prev.cells, c] })); setSelectedCell(c.id); setEditingCell(c.id); setIsDirty(true) } }}
-              style={{ padding: '5px 12px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-              + Markdown
+              style={{ padding: '5px 10px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              + MD
             </button>
-            <div style={{ flex: 1 }} />
             <button onClick={() => { id: 'jup-save-btn' as any; saveNotebook() }} id="jup-save-btn" disabled={!activeFile || saving}
-              style={{ padding: '5px 13px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: !activeFile ? .4 : 1 }}>
+              style={{ padding: '5px 11px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: !activeFile ? .4 : 1 }}>
               {saving ? '…' : '💾 Uložit'}
             </button>
           </div>
 
           {/* Notebook body */}
-          <div style={{ background: '#13141b', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, minHeight: 500, padding: '16px 0' }}>
-            {notebook.cells.map((cell, idx) => (
-              <CellView
-                key={cell.id}
-                cell={cell}
-                idx={idx}
-                isSelected={selectedCell === cell.id}
-                isEditing={editingCell === cell.id}
-                accent={accent}
-                monaco={monacoRef.current}
-                onSelect={() => setSelectedCell(cell.id)}
-                onEdit={() => { setSelectedCell(cell.id); setEditingCell(cell.id) }}
-                onBlur={() => setEditingCell(null)}
-                onChange={source => updateCell(cell.id, { source })}
-                onRun={() => runCell(cell.id)}
-                onKeyDown={e => onCellKeyDown(e, cell)}
-                onDelete={() => deleteCell(cell.id)}
-                onMoveUp={() => moveCellUp(cell.id)}
-                onMoveDown={() => moveCellDown(cell.id)}
-                onAddAfter={type => addCellAfter(cell.id, type)}
-                onToggleType={() => updateCell(cell.id, { type: cell.type === 'code' ? 'markdown' : 'code', outputs: [] })}
-              />
-            ))}
-            {/* Add cell at bottom */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '8px 0 4px' }}>
-              <button onClick={() => { const c = newCell('code'); setNotebook(prev => ({ ...prev, cells: [...prev.cells, c] })); setSelectedCell(c.id); setEditingCell(c.id); setIsDirty(true) }}
-                style={{ padding: '4px 14px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px dashed ${D.border}`, borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-                + Kód
-              </button>
-              <button onClick={() => { const c = newCell('markdown'); setNotebook(prev => ({ ...prev, cells: [...prev.cells, c] })); setSelectedCell(c.id); setEditingCell(c.id); setIsDirty(true) }}
-                style={{ padding: '4px 14px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px dashed ${D.border}`, borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-                + Markdown
-              </button>
-            </div>
+          <div style={{ flex: 1, overflowY: 'auto', background: '#0d1117', padding: '12px 0' }}>
+            {!activeFile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 14, color: 'rgba(255,255,255,.25)' }}>
+                <img src="/icons/jupyter.png" alt="" style={{ width: 52, height: 52, objectFit: 'contain', opacity: .2 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,.3)' }}>Jupyter Notebook</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,.2)', textAlign: 'center' as const, lineHeight: 1.7 }}>
+                  Vytvoř nový projekt nebo otevři existující notebook<br/>z levého panelu.
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button onClick={() => setNewProjModal(true)}
+                    style={{ padding: '9px 18px', background: accent+'20', border: `1px solid ${accent}50`, borderRadius: 9, cursor: 'pointer', color: accent, fontFamily: 'inherit', fontWeight: 600, fontSize: 13 }}>
+                    + Nový projekt
+                  </button>
+                  <button onClick={() => { setOpenModal(true); refreshProjects() }}
+                    style={{ padding: '9px 18px', background: 'rgba(255,255,255,.05)', border: `1px solid rgba(255,255,255,.1)`, borderRadius: 9, cursor: 'pointer', color: 'rgba(255,255,255,.5)', fontFamily: 'inherit', fontWeight: 600, fontSize: 13 }}>
+                    📂 Otevřít
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {notebook.cells.map((cell, idx) => (
+                  <CellView
+                    key={cell.id}
+                    cell={cell}
+                    idx={idx}
+                    isSelected={selectedCell === cell.id}
+                    isEditing={editingCell === cell.id}
+                    accent={accent}
+                    monaco={monacoRef.current}
+                    onSelect={() => setSelectedCell(cell.id)}
+                    onEdit={() => { setSelectedCell(cell.id); setEditingCell(cell.id) }}
+                    onBlur={() => setEditingCell(null)}
+                    onChange={source => updateCell(cell.id, { source })}
+                    onRun={() => runCell(cell.id)}
+                    onKeyDown={e => onCellKeyDown(e, cell)}
+                    onDelete={() => deleteCell(cell.id)}
+                    onMoveUp={() => moveCellUp(cell.id)}
+                    onMoveDown={() => moveCellDown(cell.id)}
+                    onAddAfter={type => addCellAfter(cell.id, type)}
+                    onToggleType={() => updateCell(cell.id, { type: cell.type === 'code' ? 'markdown' : 'code', outputs: [] })}
+                  />
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '10px 0' }}>
+                  <button onClick={() => { const c = newCell('code'); setNotebook(prev => ({ ...prev, cells: [...prev.cells, c] })); setSelectedCell(c.id); setEditingCell(c.id); setIsDirty(true) }}
+                    style={{ padding: '4px 14px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px dashed ${D.border}`, borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    + Kód
+                  </button>
+                  <button onClick={() => { const c = newCell('markdown'); setNotebook(prev => ({ ...prev, cells: [...prev.cells, c] })); setSelectedCell(c.id); setEditingCell(c.id); setIsDirty(true) }}
+                    style={{ padding: '4px 14px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px dashed ${D.border}`, borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    + Markdown
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
+
+        {/* ══ RIGHT: Tools ══ */}
+        <div style={{ width: 260, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Tab bar */}
+          <div style={{ display: 'flex', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            {([['nav','🗂','Obsah'],['vars','📦','Proměnné'],['kernel','⚙️','Kernel']] as const).map(([tab, icon, label]) => (
+              <button key={tab} onClick={() => setRightTab(tab)}
+                style={{ flex: 1, padding: '8px 4px', background: rightTab === tab ? D.bgMid : 'transparent', border: 'none', borderBottom: `2px solid ${rightTab === tab ? accent : 'transparent'}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 600, color: rightTab === tab ? D.txtPri : D.txtSec, transition: 'all .12s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 14 }}>{icon}</span>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+
+            {/* ── Navigace & přehled ── */}
+            {rightTab === 'nav' && (
+              <div style={{ padding: '10px 0' }}>
+                {tocItems.length === 0 ? (
+                  <div style={{ color: D.txtSec, fontSize: 11, textAlign: 'center' as const, marginTop: 24, lineHeight: 1.7, padding: '0 16px' }}>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>🗂</div>
+                    Přidej Markdown buňky s nadpisy<br/>
+                    <code style={{ fontSize: 10, background: 'rgba(255,255,255,.08)', padding: '1px 5px', borderRadius: 4 }}># Nadpis 1</code>{' '}
+                    <code style={{ fontSize: 10, background: 'rgba(255,255,255,.08)', padding: '1px 5px', borderRadius: 4 }}>## Nadpis 2</code>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ padding: '0 12px 6px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Obsah</div>
+                    {tocItems.map((item, i) => (
+                      <div key={i}
+                        className="jup-row"
+                        onClick={() => {
+                          setSelectedCell(item.cellId)
+                          document.getElementById(`cell-${item.cellId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        }}
+                        style={{ padding: `5px 12px 5px ${8 + (item.level - 1) * 14}px`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 9, color: D.txtSec, flexShrink: 0 }}>{'#'.repeat(item.level)}</span>
+                        <span style={{ fontSize: item.level === 1 ? 12 : 11, fontWeight: item.level === 1 ? 700 : 400, color: selectedCell === item.cellId ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{item.text}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                <div style={{ height: 1, background: D.border, margin: '10px 12px' }} />
+                <div style={{ padding: '0 12px 6px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Buňky</div>
+                {notebook.cells.map((cell, i) => (
+                  <div key={cell.id}
+                    className="jup-row"
+                    onClick={() => {
+                      setSelectedCell(cell.id)
+                      document.getElementById(`cell-${cell.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }}
+                    style={{ padding: '4px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, background: selectedCell === cell.id ? accent+'12' : 'transparent' }}>
+                    <span style={{ fontSize: 9, color: D.txtSec, flexShrink: 0, minWidth: 16, textAlign: 'right' as const }}>{cell.executionCount != null ? `[${cell.executionCount}]` : `${i+1}`}</span>
+                    <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: cell.type === 'code' ? '#1e3a5f' : '#2a1f3d', color: cell.type === 'code' ? '#60A5FA' : '#c084fc', flexShrink: 0 }}>{cell.type === 'code' ? 'KÓD' : 'MD'}</span>
+                    <span style={{ fontSize: 10, color: cell.status === 'error' ? D.danger : cell.status === 'running' ? D.warning : D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                      {cell.source.split('\n')[0].slice(0, 40) || '(prázdná)'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Průzkumník proměnných ── */}
+            {rightTab === 'vars' && (
+              <div style={{ padding: '10px 12px' }}>
+                {jupVars.length === 0 ? (
+                  <div style={{ color: D.txtSec, fontSize: 11, textAlign: 'center' as const, marginTop: 24, lineHeight: 1.7 }}>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>📦</div>
+                    Spusť kódové buňky pro zobrazení<br/>proměnných z notebooku
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                      {jupVars.length} proměnných
+                    </div>
+                    {jupVars.map(v => (
+                      <div key={v.name} style={{ marginBottom: 7, background: D.bgMid, borderRadius: 8, padding: '7px 10px', border: `1px solid ${D.border}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: accent, fontFamily: 'monospace' }}>{v.name}</span>
+                          <span style={{ fontSize: 9, padding: '1px 5px', background: accent+'20', color: accent, borderRadius: 4, fontWeight: 600 }}>{v.type}</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: '#a8d8a8', fontFamily: 'monospace', wordBreak: 'break-all' as const }}>{v.value}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── Kernel / Spouštění ── */}
+            {rightTab === 'kernel' && (
+              <div style={{ padding: '12px' }}>
+                {/* Kernel status */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Stav kernelu</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: D.bgMid, borderRadius: 9, border: `1px solid ${D.border}` }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: kernelRunning.current ? D.warning : D.success, boxShadow: `0 0 6px ${kernelRunning.current ? D.warning : D.success}`, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: D.txtPri }}>{kernelRunning.current ? 'Běží…' : 'Připraven'}</div>
+                      <div style={{ fontSize: 10, color: D.txtSec }}>Python 3.11 via Pyodide</div>
+                    </div>
+                  </div>
+                </div>
+                {/* Stats */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Statistiky</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {[
+                      { label: 'Spuštěno buněk', value: cellsExecuted },
+                      { label: 'Celkový čas', value: totalRunTime > 0 ? `${(totalRunTime / 1000).toFixed(1)}s` : '—' },
+                      { label: 'Kódové buňky', value: notebook.cells.filter(c => c.type === 'code').length },
+                      { label: 'Markdown buňky', value: notebook.cells.filter(c => c.type === 'markdown').length },
+                      { label: 'Celkem buněk', value: notebook.cells.length },
+                      { label: 'Proměnné', value: jupVars.length },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px', background: D.bgMid, borderRadius: 7 }}>
+                        <span style={{ fontSize: 11, color: D.txtSec }}>{label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, fontFamily: 'monospace' }}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Actions */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Akce</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button onClick={runAllCells}
+                      style={{ padding: '8px', background: accent+'20', border: `1px solid ${accent}40`, borderRadius: 8, cursor: 'pointer', color: accent, fontFamily: 'inherit', fontWeight: 600, fontSize: 12 }}>
+                      ⏩ Spustit všechny buňky
+                    </button>
+                    <button onClick={clearAllOutputs}
+                      style={{ padding: '8px', background: 'rgba(255,255,255,.04)', border: `1px solid ${D.border}`, borderRadius: 8, cursor: 'pointer', color: D.txtSec, fontFamily: 'inherit', fontSize: 12 }}>
+                      ✕ Vymazat všechny výstupy
+                    </button>
+                    <button onClick={() => { clearAllOutputs(); setJupVars([]); setCellsExecuted(0); setTotalRunTime(0) }}
+                      style={{ padding: '8px', background: 'rgba(239,68,68,.08)', border: `1px solid rgba(239,68,68,.2)`, borderRadius: 8, cursor: 'pointer', color: D.danger, fontFamily: 'inherit', fontSize: 12 }}>
+                      🔄 Restartovat kernel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </DarkLayout>
   )
