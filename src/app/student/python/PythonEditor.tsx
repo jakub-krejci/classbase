@@ -408,36 +408,29 @@ export default function PythonEditor({ profile }: { profile: any }) {
       )
       setOutputLines(result.output ? result.output.split('\n') : lines)
       setRunError(result.error); setFigures(result.images ?? [])
-      // Attach variable inspector to window so we can call it after run
-      const w = window as any
-      if (!w.__pyodide_vars_script && w.pyodide) {
-        w.__pyodide_vars_script = () => {
-          try {
-            return w.pyodide.runPython(`
-import json as _j
-_skip={'__name__','__doc__','__package__','__loader__','__spec__','__builtins__','_cb_figures','_cb_capture_show','input','warnings','plt','matplotlib','io','base64','sys','_skip','_j','_k','_v','_t','_s','_out'}
+    } catch (e: any) { setRunError(String(e)) }
+    // Extract variables for inspector via separate runPython call
+    try {
+      const varResult = await runPython(
+        `import json as _j
+_skip={'__name__','__doc__','__package__','__loader__','__spec__','__builtins__','_cb_figures','_cb_capture_show','input','warnings','plt','matplotlib','io','base64','sys'}
 _out=[]
 for _k,_v in list(globals().items()):
     if _k.startswith('_') or _k in _skip: continue
     try:
         _t=type(_v).__name__
-        if _t in('module','function','type','builtin_function_or_method','JsProxy'): continue
+        if _t in('module','function','type','builtin_function_or_method','JsProxy','coroutine'): continue
         _s=repr(_v)
-        if len(_s)>120: _s=_s[:120]+'…'
+        if len(_s)>200: _s=_s[:200]+'…'
         _out.append({'name':_k,'type':_t,'value':_s})
     except: pass
-_j.dumps(_out)
-`)
-          } catch(e) { return '[]' }
-        }
-      }
-    } catch (e: any) { setRunError(String(e)) }
-    // Extract variables for inspector
-    try {
-      const w = window as any
-      if (w.__pyodide_vars_script) {
-        const raw = w.__pyodide_vars_script()
-        if (raw) setPyVars(JSON.parse(raw))
+print(_j.dumps(_out))`,
+        () => {},
+        undefined
+      )
+      if (varResult.output && varResult.output.trim()) {
+        const parsed = JSON.parse(varResult.output.trim())
+        setPyVars(parsed)
       }
     } catch {}
     setRunning(false); setPyStatus('')
@@ -663,7 +656,10 @@ _j.dumps(_out)
           <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <img src="/icons/python.png" alt="Python" style={{ width: 18, height: 18, objectFit: 'contain' }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: D.txtPri }}>Python</span>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, lineHeight: 1.2 }}>PyEditor</div>
+                <div style={{ fontSize: 9, fontWeight: 400, color: D.txtSec, lineHeight: 1.2 }}>by Jakub Krejčí</div>
+              </div>
               {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -684,28 +680,9 @@ _j.dumps(_out)
             </div>
           </div>
 
-          {/* Scrollable: recent + projects */}
+          {/* Scrollable: projects */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
-            <div style={{ padding: '6px 12px 3px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Nedávné</div>
-            {recent.length === 0
-              ? <div style={{ fontSize: 11, color: D.txtSec, padding: '4px 12px' }}>Žádné nedávné soubory</div>
-              : recent.map(r => (
-                  <div key={r.path} className="py-row"
-                    onClick={async () => {
-                      const f = projects.flatMap(p => p.files).find(x => x.path === r.path)
-                      if (f) await openFile(f)
-                    }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 12px', cursor: 'pointer', background: r.path === activeFile?.path ? accent+'15' : 'transparent' }}>
-                    <img src="/icons/python.png" alt="" style={{ width: 13, height: 13, objectFit: 'contain', flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: r.path === activeFile?.path ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-                      <div style={{ fontSize: 10, color: D.txtSec }}>{r.project}</div>
-                    </div>
-                  </div>
-                ))
-            }
-            <div style={{ height: 1, background: D.border, margin: '6px 12px 3px' }} />
-            <div style={{ padding: '6px 12px 3px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Projekty</div>
+            <div style={{ padding: '6px 12px 3px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Moje projekty</div>
                         {loadingProj
               ? <div style={{ fontSize: 12, color: D.txtSec, textAlign: 'center', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />
@@ -797,7 +774,7 @@ _j.dumps(_out)
             </span>}
             <button onClick={downloadFile} disabled={!activeFile}
               style={{ padding: '5px 10px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 12, cursor: activeFile ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeFile ? 1 : .4 }}>
-              ⬇ .py
+              ⬇ {activeFile?.name ?? '.py'}
             </button>
             <button id="py-save-btn" onClick={saveCurrentFile} disabled={!activeFile || saving}
               style={{ padding: '5px 11px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeFile || saving ? .4 : 1 }}>
@@ -811,6 +788,25 @@ _j.dumps(_out)
 
           {/* Monaco — fills remaining space */}
           <div style={{ flex: 1, background: '#0d1117', overflow: 'hidden', position: 'relative', minHeight: 0 }}>
+            {!activeFile && monacoReady && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14, background: '#090B10', zIndex: 10 }}>
+                <img src="/icons/python.png" alt="Python" style={{ width: 48, height: 48, objectFit: 'contain', opacity: .25 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,.3)' }}>Vítej v PyEditor</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,.2)', textAlign: 'center' as const, lineHeight: 1.7 }}>
+                  Vytvoř nový soubor nebo otevři existující projekt<br/>z levého panelu a začni programovat.
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button onClick={() => setNewFileModal(true)}
+                    style={{ padding: '9px 18px', background: accent+'20', border: `1px solid ${accent}50`, borderRadius: 9, cursor: 'pointer', color: accent, fontFamily: 'inherit', fontWeight: 600, fontSize: 13 }}>
+                    + Nový soubor
+                  </button>
+                  <button onClick={() => setNewProjModal(true)}
+                    style={{ padding: '9px 18px', background: 'rgba(255,255,255,.05)', border: `1px solid rgba(255,255,255,.1)`, borderRadius: 9, cursor: 'pointer', color: 'rgba(255,255,255,.5)', fontFamily: 'inherit', fontWeight: 600, fontSize: 13 }}>
+                    📁 Nový projekt
+                  </button>
+                </div>
+              </div>
+            )}
             {!monacoReady && (
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', flexDirection: 'column', gap: 10 }}>
                 <div style={{ width: 26, height: 26, border: `3px solid rgba(255,255,255,.06)`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
@@ -843,7 +839,6 @@ _j.dumps(_out)
           {/* Output panel */}
           <div style={{ height: outputHeight, flexShrink: 0, display: 'flex', flexDirection: 'column', borderTop: 'none', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, background: D.bgCard }}>
-              <span style={{ fontSize: 12 }}>⚡</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: D.txtPri }}>Výstup</span>
               {hasRun && !running && (
                 <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: runError ? D.danger+'20' : D.success+'20', color: runError ? D.danger : D.success, fontWeight: 700 }}>
@@ -886,7 +881,7 @@ _j.dumps(_out)
         <div style={{ width: 260, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-            {([['vars','🔍','Proměnné'],['snippets','⚡','Snippety'],['docs','📖','Docs']] as const).map(([tab, icon, label]) => (
+            {([['vars','📦','Proměnné'],['snippets','🧩','Snippety'],['docs','📖','Docs']] as const).map(([tab, icon, label]) => (
               <button key={tab} onClick={() => setRightTab(tab)}
                 style={{ flex: 1, padding: '8px 4px', background: rightTab === tab ? D.bgMid : 'transparent', border: 'none', borderBottom: `2px solid ${rightTab === tab ? accent : 'transparent'}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 600, color: rightTab === tab ? D.txtPri : D.txtSec, transition: 'all .12s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                 <span style={{ fontSize: 14 }}>{icon}</span>
@@ -968,15 +963,38 @@ _j.dumps(_out)
                   { name: 'int()', sig: 'int(x)', desc: 'Převede hodnotu na celé číslo.', ex: 'int("42")   # 42\nint(3.9)    # 3' },
                   { name: 'float()', sig: 'float(x)', desc: 'Převede hodnotu na desetinné číslo.', ex: 'float("3.14") # 3.14\nfloat(2)      # 2.0' },
                   { name: 'str()', sig: 'str(x)', desc: 'Převede hodnotu na řetězec.', ex: 'str(42)    # "42"\nstr(True)  # "True"' },
+                  { name: 'bool()', sig: 'bool(x)', desc: 'Převede hodnotu na bool (True/False).', ex: 'bool(0)    # False\nbool(1)    # True\nbool("")   # False' },
                   { name: 'list()', sig: 'list(iterable)', desc: 'Vytvoří seznam z iterovatelného objektu.', ex: 'list(range(3))  # [0,1,2]\nlist("abc")     # ["a","b","c"]' },
+                  { name: 'tuple()', sig: 'tuple(iterable)', desc: 'Vytvoří neměnnou n-tici.', ex: 'tuple([1,2,3])  # (1,2,3)\nt = (1, 2, 3)\nprint(t[0])    # 1' },
                   { name: 'dict()', sig: 'dict(**kwargs)', desc: 'Vytvoří slovník.', ex: 'd = dict(a=1, b=2)\nprint(d)  # {"a":1,"b":2}' },
+                  { name: 'set()', sig: 'set(iterable)', desc: 'Vytvoří množinu (unikátní hodnoty).', ex: 's = set([1,2,2,3])\nprint(s)  # {1,2,3}' },
                   { name: 'sum()', sig: 'sum(iterable, start=0)', desc: 'Vrátí součet prvků.', ex: 'sum([1,2,3,4])  # 10\nsum(range(101)) # 5050' },
                   { name: 'max() / min()', sig: 'max(iterable) / min(iterable)', desc: 'Vrátí největší / nejmenší prvek.', ex: 'max([3,1,4,1,5])  # 5\nmin([3,1,4,1,5])  # 1' },
                   { name: 'abs()', sig: 'abs(x)', desc: 'Absolutní hodnota čísla.', ex: 'abs(-5)  # 5\nabs(3)   # 3' },
                   { name: 'round()', sig: 'round(number, ndigits=0)', desc: 'Zaokrouhlí číslo.', ex: 'round(3.14159, 2)  # 3.14\nround(2.5)         # 2' },
                   { name: 'type()', sig: 'type(object)', desc: 'Vrátí typ objektu.', ex: 'type(42)     # <class "int">\ntype("ahoj") # <class "str">' },
+                  { name: 'isinstance()', sig: 'isinstance(obj, class)', desc: 'Ověří, zda je objekt instancí třídy.', ex: 'isinstance(42, int)    # True\nisinstance("x", str)   # True' },
+                  { name: 'sorted()', sig: 'sorted(iterable, key=None, reverse=False)', desc: 'Vrátí seřazený seznam.', ex: 'sorted([3,1,4,1,5])        # [1,1,3,4,5]\nsorted([3,1,5], reverse=True) # [5,3,1]' },
+                  { name: 'reversed()', sig: 'reversed(sequence)', desc: 'Vrátí iterátor v obráceném pořadí.', ex: 'list(reversed([1,2,3]))  # [3,2,1]' },
+                  { name: 'enumerate()', sig: 'enumerate(iterable, start=0)', desc: 'Vrátí indexy spolu s hodnotami.', ex: 'for i, v in enumerate(["a","b","c"]):\n    print(i, v)  # 0 a, 1 b, 2 c' },
+                  { name: 'zip()', sig: 'zip(*iterables)', desc: 'Spojí více sekvencí prvek po prvku.', ex: 'a = [1,2,3]\nb = ["a","b","c"]\nfor x,y in zip(a,b):\n    print(x, y)' },
+                  { name: 'map()', sig: 'map(function, iterable)', desc: 'Aplikuje funkci na každý prvek.', ex: 'list(map(str, [1,2,3]))   # ["1","2","3"]\nlist(map(abs, [-1,2,-3]))  # [1,2,3]' },
+                  { name: 'filter()', sig: 'filter(function, iterable)', desc: 'Vrátí prvky splňující podmínku.', ex: 'list(filter(lambda x: x>0, [-1,2,-3,4]))  # [2,4]' },
+                  { name: 'any() / all()', sig: 'any(iterable) / all(iterable)', desc: 'Ověří zda alespoň jeden / všechny prvky jsou True.', ex: 'any([False, True, False])  # True\nall([True, True, True])    # True' },
+                  { name: '.append()', sig: 'list.append(item)', desc: 'Přidá prvek na konec seznamu.', ex: 'lst = [1,2]\nlst.append(3)\nprint(lst)  # [1,2,3]' },
+                  { name: '.extend()', sig: 'list.extend(iterable)', desc: 'Rozšíří seznam o všechny prvky.', ex: 'lst = [1,2]\nlst.extend([3,4])\nprint(lst)  # [1,2,3,4]' },
+                  { name: '.pop()', sig: 'list.pop(index=-1)', desc: 'Odebere a vrátí prvek na indexu.', ex: 'lst = [1,2,3]\nlst.pop()   # 3\nlst.pop(0)  # 1' },
+                  { name: '.split()', sig: 'str.split(sep=None)', desc: 'Rozdělí řetězec na seznam.', ex: '"a,b,c".split(",")  # ["a","b","c"]\n"ahoj svete".split()  # ["ahoj","svete"]' },
+                  { name: '.join()', sig: 'sep.join(iterable)', desc: 'Spojí seznam řetězců.', ex: '",".join(["a","b","c"])  # "a,b,c"\n" ".join(["ahoj","světe"])' },
+                  { name: '.strip()', sig: 'str.strip(chars=None)', desc: 'Odstraní bílé znaky (nebo zadané znaky) z okrajů.', ex: '"  ahoj  ".strip()    # "ahoj"\n"..hello..".strip(".")' },
+                  { name: '.replace()', sig: 'str.replace(old, new)', desc: 'Nahradí výskyt podřetězce.', ex: '"ahoj světe".replace("světe","Pythone")' },
+                  { name: '.upper() / .lower()', sig: 'str.upper() / str.lower()', desc: 'Převede na velká / malá písmena.', ex: '"ahoj".upper()  # "AHOJ"\n"SVĚT".lower()  # "svět"' },
                   { name: 'f-string', sig: 'f"text {výraz}"', desc: 'Formátovaný řetězec s vloženými výrazy.', ex: 'jmeno = "Jan"\nprint(f"Ahoj, {jmeno}!")\nprint(f"2+2 = {2+2}")' },
-                ].filter(d => !docQuery || d.name.toLowerCase().includes(docQuery.toLowerCase()) || d.desc.toLowerCase().includes(docQuery.toLowerCase()))
+                  { name: 'lambda', sig: 'lambda args: výraz', desc: 'Anonymní funkce (jedna linka).', ex: 'double = lambda x: x * 2\nprint(double(5))  # 10\nsorted([3,1,2], key=lambda x: -x)' },
+                  { name: 'open()', sig: 'open(file, mode="r")', desc: 'Otevře soubor. Použij with pro automatické zavření.', ex: 'with open("soubor.txt", "w") as f:\n    f.write("Ahoj!\\n")\nwith open("soubor.txt") as f:\n    print(f.read())' },
+                  { name: 'math modul', sig: 'import math', desc: 'Matematické funkce a konstanty.', ex: 'import math\nprint(math.pi)       # 3.14159…\nprint(math.sqrt(16))  # 4.0\nprint(math.floor(3.7)) # 3' },
+                  { name: 'random modul', sig: 'import random', desc: 'Generování náhodných čísel.', ex: 'import random\nprint(random.randint(1, 6))  # hod kostkou\nprint(random.random())       # 0.0 – 1.0\nrandom.shuffle([1,2,3,4,5])' },
+                ].filter(doc => !docQuery || doc.name.toLowerCase().includes(docQuery.toLowerCase()) || doc.desc.toLowerCase().includes(docQuery.toLowerCase()))
                   .map(doc => (
                   <div key={doc.name} style={{ marginBottom: 10, background: D.bgMid, borderRadius: 9, padding: '9px 11px', border: `1px solid ${D.border}` }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: accent, fontFamily: 'monospace', marginBottom: 2 }}>{doc.name}</div>
