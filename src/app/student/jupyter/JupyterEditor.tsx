@@ -835,8 +835,8 @@ print(_j.dumps(_out))`,
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <img src="/icons/jupyter.png" alt="Jupyter" style={{ width: 18, height: 18, objectFit: 'contain' }} />
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, lineHeight: 1.2 }}>Jupyter</div>
-                <div style={{ fontSize: 9, fontWeight: 400, color: D.txtSec, lineHeight: 1.2 }}>Notebook Editor</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, lineHeight: 1.2 }}>JupyterEdit</div>
+                <div style={{ fontSize: 9, fontWeight: 400, color: D.txtSec, lineHeight: 1.2 }}>by Jakub Krejčí</div>
               </div>
               {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
             </div>
@@ -1275,7 +1275,7 @@ function CellView({ cell, idx, isSelected, isEditing, accent, monaco, onSelect, 
   const cellClasses = ['jup-cell', isSelected ? 'selected' : '', cell.status === 'running' ? 'running' : '', cell.status === 'error' ? 'error' : ''].filter(Boolean).join(' ')
 
   return (
-    <div className={cellClasses}
+    <div id={`cell-${cell.id}`} className={cellClasses}
       onClick={onSelect}
       style={{ margin: '0 16px 4px', border: `1px solid ${isSelected ? accent + '60' : 'rgba(255,255,255,.07)'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color .15s', position: 'relative' }}>
 
