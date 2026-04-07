@@ -170,6 +170,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   // ── UI state ──────────────────────────────────────────────────────────────
   const [saving, setSaving]     = useState(false)
   const [saveMsg, setSaveMsg]   = useState('')
+  const [rightTab, setRightTab] = useState<'validator'|'design'|'reference'>('validator')
   const [draggingFile, setDraggingFile] = useState<WebFile | null>(null)
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
   // Modals
@@ -277,8 +278,26 @@ export default function HtmlEditor({ profile }: { profile: any }) {
       w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
       w.require(['vs/editor/editor.main'], (monaco: any) => {
         monacoRef.current = monaco
+        monaco.editor.defineTheme('cb-dark', {
+          base: 'vs-dark', inherit: true,
+          rules: [
+            { token: 'tag', foreground: 'f47067' },
+            { token: 'attribute.name', foreground: 'c792ea' },
+            { token: 'attribute.value', foreground: 'c3e88d' },
+            { token: 'comment', foreground: '546e7a', fontStyle: 'italic' },
+            { token: 'string', foreground: 'c3e88d' },
+            { token: 'keyword', foreground: 'c792ea' },
+            { token: 'number', foreground: 'f78c6c' },
+          ],
+          colors: {
+            'editor.background': '#0d1117',
+            'editor.foreground': '#e6edf3',
+            'editorLineNumber.foreground': '#30363d',
+            'editor.lineHighlightBackground': '#161b22',
+          },
+        })
         const commonOpts = {
-          theme: 'vs-dark', fontSize: 14,
+          theme: 'cb-dark', fontSize: 14,
           fontFamily: "'JetBrains Mono','Fira Code',monospace",
           minimap: { enabled: false }, lineNumbers: 'on' as const,
           wordWrap: 'off' as const, automaticLayout: false,
@@ -815,7 +834,7 @@ export default function HtmlEditor({ profile }: { profile: any }) {
   }
 
   return (
-    <DarkLayout profile={profile} activeRoute="/student/html">
+    <DarkLayout profile={profile} activeRoute="/student/html" fullContent>
 
       {/* ── Modals ── */}
       {newProjModal && (
@@ -911,116 +930,74 @@ export default function HtmlEditor({ profile }: { profile: any }) {
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Page header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#E34C2615', border: `1px solid #E34C2620`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <img src="/icons/html.png" alt="HTML" style={{ width: 24, height: 24, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>HTML Editor</h1>
-          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>HTML · CSS · JavaScript · Ctrl+S uložit</p>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
-          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
-        </div>
-      </div>
-
-      {/* ── 2-col layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
+      {/* ── 3-col layout ── */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
         {/* ══ LEFT: Sidebar ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-          {/* Project actions */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Projekt</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <button className="w-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>🌐</span> Nový projekt</button>
-              <button className="w-sb" style={sideBtn} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít projekt</button>
-              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
-              <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject || saving ? .4 : 1 }} disabled={!activeProject || saving} onClick={saveAll}><span>💾</span> Uložit vše</button>
-
-              <button className="w-sb" style={{ ...sideBtn, opacity: !activeProject ? .4 : 1 }} disabled={!activeProject} onClick={() => imgInputRef.current?.click()}>
+          {/* Header */}
+          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <img src="/icons/html.png" alt="HTML" style={{ width: 18, height: 18, objectFit: 'contain' }} />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, lineHeight: 1.2 }}>WebEdit</div>
+                <div style={{ fontSize: 9, fontWeight: 400, color: D.txtSec, lineHeight: 1.2 }}>by Jakub Krejčí</div>
+              </div>
+              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button className="w-sb" style={{...sideBtn}} onClick={() => setNewProjModal(true)}><span>🌐</span> Nový projekt</button>
+              <button className="w-sb" style={{...sideBtn}} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít projekt</button>
+              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
+              <button className="w-sb" style={{...sideBtn, opacity: !activeProject || saving ? .4 : 1}} disabled={!activeProject || saving} onClick={saveAll}><span>💾</span> Uložit vše</button>
+              <button className="w-sb" style={{...sideBtn, opacity: !activeProject ? .4 : 1}} disabled={!activeProject} onClick={() => imgInputRef.current?.click()}>
                 <span>🖼</span> {uploadingImg ? 'Nahrávám…' : 'Nahrát obrázky'}
               </button>
             </div>
           </div>
 
-          {/* Nedávné */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Nedávné projekty</SectionLabel>
-            {recent.length === 0
-              ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné projekty</div>
-              : recent.map(r => (
-                  <div key={r.key} className="w-row" onClick={() => { const p = projects.find(x => x.key === r.key); if (p) openProject(p) }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 7px', borderRadius: D.radiusSm, cursor: 'pointer', background: r.key === activeProject?.key ? accent+'15' : 'transparent', marginBottom: 2 }}>
-                    <span>🌐</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: r.key === activeProject?.key ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-                      <div style={{ fontSize: 10, color: D.txtSec }}>{fmtDate(r.openedAt)}</div>
-                    </div>
-                  </div>
-                ))
-            }
-          </div>
-
-          {/* File tree */}
-          <div style={{ ...card({ padding: '13px' }), flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.07em' }}>
-                {activeProject ? activeProject.name : 'Soubory'}
-              </div>
-              {activeProject && (
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => setNewItemModal({ folder: '' })} title="Přidat soubor/složku"
-                    style={{ padding: '2px 7px', background: accent+'20', color: accent, border: 'none', borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>+</button>
-                  <button onClick={() => { setRenameProjModal(activeProject); setRenameProjVal(activeProject.name) }}
-                    style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přejmenovat projekt">✏</button>
-                  <button onClick={() => setDeleteProjModal(activeProject)}
-                    style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat projekt">🗑</button>
-                </div>
-              )}
+          {/* Scrollable: Moje projekty */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            <div style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>{activeProject ? activeProject.name : 'Moje projekty'}</span>
+              {activeProject && <div style={{ display: 'flex', gap: 3 }}>
+                <button onClick={() => setNewItemModal({ folder: '' })} style={{ padding: '1px 6px', background: accent+'20', color: accent, border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>+</button>
+                <button onClick={() => { setRenameProjModal(activeProject); setRenameProjVal(activeProject.name) }} style={{ padding: '1px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }}>✏</button>
+                <button onClick={() => setDeleteProjModal(activeProject)} style={{ padding: '1px 5px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }}>🗑</button>
+              </div>}
             </div>
-
             {loadingProj
-              ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
-                  <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
+              ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
+                  <div style={{ width: 13, height: 13, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
                 </div>
               : !activeProject
-                ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádný projekt není otevřen</div>
+                ? <div style={{ fontSize: 11, color: D.txtSec, padding: '4px 12px' }}>Žádný projekt není otevřen</div>
                 : folders.map(folder => (
-                    <div key={folder} style={{ marginBottom: 4 }}>
-                      {/* Folder header */}
+                    <div key={folder} style={{ marginBottom: 2 }}>
                       <div className="w-row"
                         onDragOver={e => { e.preventDefault(); setDragOverFolder(folder) }}
                         onDragLeave={() => setDragOverFolder(null)}
                         onDrop={e => { e.preventDefault(); if (draggingFile) dropFileOnFolder(draggingFile, folder) }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 6px', borderRadius: 7, cursor: 'pointer', background: dragOverFolder === folder ? accent+'15' : 'transparent' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', cursor: 'pointer', background: dragOverFolder === folder ? accent+'15' : 'transparent' }}
                         onClick={() => setExpanded(prev => { const n = new Set(prev); n.has(folder) ? n.delete(folder) : n.add(folder); return n })}>
                         <span style={{ fontSize: 9, color: D.txtSec, display: 'inline-block', transform: expanded.has(folder) ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: D.txtSec, flex: 1 }}>{folderLabel(folder)}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: D.txtSec, flex: 1 }}>{folderLabel(folder)}</span>
                         <button onClick={e => { e.stopPropagation(); setNewItemModal({ folder }) }}
                           style={{ opacity: 0, padding: '1px 5px', background: 'none', border: 'none', cursor: 'pointer', color: accent, fontSize: 12, fontWeight: 700 }} className="w-acts">+</button>
                       </div>
-                      {/* Files */}
                       {expanded.has(folder) && (filesByFolder().get(folder) ?? []).filter(f => f.name !== '.gitkeep').map(f => (
                         <div key={f.path} className="w-row"
                           draggable onDragStart={() => setDraggingFile(f)} onDragEnd={() => { setDraggingFile(null); setDragOverFolder(null) }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 7px 4px 16px', borderRadius: 7, cursor: 'pointer', marginBottom: 1, background: f.path === activeFile?.path ? accent+'18' : 'transparent', border: `1px solid ${f.path === activeFile?.path ? accent+'30' : 'transparent'}` }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px 4px 22px', borderRadius: 6, cursor: 'pointer', marginBottom: 1, background: f.path === activeFile?.path ? accent+'18' : 'transparent', border: `1px solid ${f.path === activeFile?.path ? accent+'30' : 'transparent'}` }}
                           onClick={() => clickFile(f)}>
-                          <img src={f.type === 'img' ? '/icons/img.png' : `/icons/${f.type}.png`} alt={f.type} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-                          <span style={{ fontSize: 12, color: f.path === activeFile?.path ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
+                          <img src={f.type === 'img' ? '/icons/img.png' : `/icons/${f.type}.png`} alt={f.type} style={{ width: 13, height: 13, objectFit: 'contain', flexShrink: 0 }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+                          <span style={{ fontSize: 11, color: f.path === activeFile?.path ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: f.path === activeFile?.path ? 600 : 400 }}>{f.name}</span>
                           {f.size ? <span style={{ fontSize: 9, color: D.txtSec }}>{fmtSize(f.size)}</span> : null}
                           <div className="w-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
-                            {f.type !== 'img' && (
-                              <button onClick={e => { e.stopPropagation(); setSplitView(true); openInSplit(f) }}
-                                style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 10, borderRadius: 4 }} title="Otevřít v druhém editoru">⊞</button>
-                            )}
-                            <button onClick={e => { e.stopPropagation(); setRenameModal(f); setRenameVal(f.name.split('.')[0]) }}
-                              style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11, borderRadius: 4 }} title="Přejmenovat">✏</button>
-                            <button onClick={e => { e.stopPropagation(); setDeleteModal(f) }}
-                              style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11, borderRadius: 4 }} title="Smazat">🗑</button>
+                            {f.type !== 'img' && <button onClick={e => { e.stopPropagation(); setSplitView(true); openInSplit(f) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 10 }} title="Split">⊞</button>}
+                            <button onClick={e => { e.stopPropagation(); setRenameModal(f); setRenameVal(f.name.split('.')[0]) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }}>✏</button>
+                            <button onClick={e => { e.stopPropagation(); setDeleteModal(f) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }}>🗑</button>
                           </div>
                         </div>
                       ))}
@@ -1028,49 +1005,48 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                   ))
             }
           </div>
+          {saveMsg && <div style={{ padding: '6px 12px', borderTop: `1px solid ${D.border}`, fontSize: 11, color: saveMsg.startsWith('❌') ? D.danger : D.success, flexShrink: 0 }}>{saveMsg}</div>}
         </div>
 
-        {/* ══ RIGHT: Editor + Preview ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0, overflow: 'hidden' }}>
+        {/* ══ CENTER: Editor + Preview ══ */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
           {/* Toolbar */}
-          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${D.border}`, flexShrink: 0, flexWrap: 'wrap' as const }}>
             {/* Active file tab */}
             {activeFile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px', background: D.bgMid, borderRadius: 7, fontSize: 12 }}>
-                {activeFile.type === 'img' ? <span style={{ fontSize: 13 }}>🖼</span> : <img src={`/icons/${activeFile.type}.png`} alt={activeFile.type} style={{ width: 15, height: 15, objectFit: 'contain', flexShrink: 0 }} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', background: D.bgMid, borderRadius: 6, fontSize: 12 }}>
+                {activeFile.type === 'img' ? <span style={{ fontSize: 13 }}>🖼</span> : <img src={`/icons/${activeFile.type}.png`} alt={activeFile.type} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0 }} />}
                 <span style={{ color: D.txtPri, fontWeight: 600 }}>{activeFile.folder ? activeFile.folder + '/' : ''}{activeFile.name}</span>
                 {isDirty && <span style={{ color: D.warning, fontSize: 10 }}>●</span>}
               </div>
             )}
             <div style={{ flex: 1 }} />
-            {/* Split view */}
             <button onClick={() => { if (splitView) { setSplitView(false); setSplitFile(null) } else { setSplitView(true) } }}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: splitView ? accent+'20' : 'rgba(255,255,255,.04)', color: splitView ? accent : D.txtSec, border: `1px solid ${splitView ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ padding: '5px 10px', background: splitView ? accent+'20' : 'rgba(255,255,255,.04)', color: splitView ? accent : D.txtSec, border: `1px solid ${splitView ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
               ⊞ {splitView ? 'Split ON' : 'Split OFF'}
             </button>
             <button onClick={() => setLivePreview(p => !p)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: livePreview ? D.success+'18' : 'rgba(255,255,255,.04)', color: livePreview ? D.success : D.txtSec, border: `1px solid ${livePreview ? D.success+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ padding: '5px 10px', background: livePreview ? D.success+'18' : 'rgba(255,255,255,.04)', color: livePreview ? D.success : D.txtSec, border: `1px solid ${livePreview ? D.success+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
               {livePreview ? '⚡ Live' : '⏸ Live'}
             </button>
             {!livePreview && (
               <button onClick={() => updatePreview()}
-                style={{ padding: '5px 12px', background: accent+'20', color: accent, border: `1px solid ${accent}40`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>▶ Obnovit</button>
+                style={{ padding: '5px 10px', background: accent+'20', color: accent, border: `1px solid ${accent}40`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>▶ Obnovit</button>
             )}
             <button onClick={downloadProject} disabled={!activeProject}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: activeProject ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeProject ? 1 : .4 }}>⬇️ ZIP</button>
+              style={{ padding: '5px 10px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: activeProject ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeProject ? 1 : .4 }}>⬇ ZIP</button>
             <button id="html-save-btn" onClick={saveActiveFile} disabled={!activeFile || saving}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 13px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeFile || saving ? .4 : 1 }}>
+              style={{ padding: '5px 11px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s', opacity: !activeFile || saving ? .4 : 1 }}>
               {saving ? '…' : '💾 Uložit'}
             </button>
           </div>
 
           {/* Editor area */}
-          <div ref={editorAreaRef} style={{ display: 'flex', height: '380px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden', width: '100%', boxSizing: 'border-box' as const }}>
-            {/* Primary editor */}
+          <div ref={editorAreaRef} style={{ flex: 1, display: 'flex', background: '#0d1117', overflow: 'hidden', minHeight: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', width: splitView ? `${splitRatio}%` : '100%', flexShrink: 0, overflow: 'hidden' }}>
               {activeFile?.type === 'img'
-                ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#252526', flexDirection: 'column', gap: 12 }}>
+                ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0d1117', flexDirection: 'column', gap: 12 }}>
                     {contents.get(activeFile.path)
                       ? <img src={contents.get(activeFile.path)} alt={activeFile.name} style={{ maxWidth: '80%', maxHeight: 300, borderRadius: 8, border: `1px solid ${D.border}` }} />
                       : <div style={{ fontSize: 13, color: D.txtSec }}>Načítám obrázek…</div>}
@@ -1079,18 +1055,15 @@ export default function HtmlEditor({ profile }: { profile: any }) {
                 : <div ref={editorContainerRef} style={{ flex: 1, overflow: 'hidden' }} />
               }
             </div>
-            {/* Split divider */}
             {splitView && (
               <div onMouseDown={onSplitDividerDown}
                 style={{ width: 5, flexShrink: 0, cursor: 'col-resize', background: 'rgba(255,255,255,.07)' }}
                 onMouseEnter={e => (e.currentTarget.style.background = accent+'80')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.07)')} />
             )}
-            {/* Split editor */}
             {splitView && (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                {/* Split header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#252526', borderBottom: '1px solid rgba(255,255,255,.08)', borderLeft: '1px solid rgba(255,255,255,.06)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: '#161b22', borderBottom: '1px solid rgba(255,255,255,.08)', flexShrink: 0 }}>
                   {splitFile
                     ? <><img src={`/icons/${splitFile.type}.png`} alt={splitFile.type} style={{ width: 13, height: 13, objectFit: 'contain', flexShrink: 0 }} onError={e=>{(e.target as HTMLImageElement).style.display='none'}} />
                        <span style={{ fontSize: 11, color: D.txtSec }}>{splitFile.name}</span></>
@@ -1108,50 +1081,321 @@ export default function HtmlEditor({ profile }: { profile: any }) {
 
           {/* Preview resize handle */}
           <div onMouseDown={onPreviewDividerDown} title="Táhněte pro změnu výšky"
-            style={{ height: 7, cursor: 'ns-resize', background: 'rgba(255,255,255,.03)', border: `1px solid ${D.border}`, borderTop: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            style={{ height: 6, cursor: 'ns-resize', background: 'rgba(255,255,255,.03)', borderTop: `1px solid ${D.border}`, borderBottom: `1px solid ${D.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             onMouseEnter={e => (e.currentTarget.style.background = accent+'22')}
             onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.03)')}>
-            <div style={{ width: 28, height: 2, borderRadius: 2, background: 'rgba(255,255,255,.15)' }} />
+            <div style={{ width: 28, height: 2, borderRadius: 2, background: 'rgba(255,255,255,.2)' }} />
           </div>
+
           {/* Preview */}
-          <div style={{ height: `${previewHeight}px`, display: 'flex', flexDirection: 'column', border: `1px solid ${D.border}`, borderTop: 'none', borderRadius: `0 0 ${D.radius} ${D.radius}`, overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', background: D.bgCard, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+          <div style={{ height: `${previewHeight}px`, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: D.bgCard, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 5 }}>
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF5F56' }} />
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FFBD2E' }} />
                 <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#27C93F' }} />
               </div>
-              {/* Responsive viewport buttons */}
-              <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
-                {([
-                  { label: '📱', title: 'Mobil (375px)', w: 375 },
-                  { label: '📟', title: 'Tablet (768px)', w: 768 },
-                  { label: '🖥', title: 'Desktop (100%)', w: null },
-                ] as { label: string; title: string; w: number | null }[]).map(({ label, title, w }) => (
+              <div style={{ display: 'flex', gap: 3, marginLeft: 6 }}>
+                {([{ label: '📱', title: 'Mobil (375px)', w: 375 }, { label: '📟', title: 'Tablet (768px)', w: 768 }, { label: '🖥', title: 'Desktop', w: null }] as { label: string; title: string; w: number | null }[]).map(({ label, title, w }) => (
                   <button key={title} onClick={() => setPreviewWidth(w)} title={title}
-                    style={{ padding: '2px 7px', background: previewWidth === w ? accent+'25' : 'none', color: previewWidth === w ? accent : D.txtSec, border: `1px solid ${previewWidth === w ? accent+'40' : D.border}`, borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                    style={{ padding: '2px 6px', background: previewWidth === w ? accent+'25' : 'none', color: previewWidth === w ? accent : D.txtSec, border: `1px solid ${previewWidth === w ? accent+'40' : D.border}`, borderRadius: 5, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
                     {label}
                   </button>
                 ))}
               </div>
               <span style={{ fontSize: 11, color: D.txtSec, flex: 1, textAlign: 'center' as const }}>
-                {activeProject ? `${activeProject.name}${previewWidth ? ` — ${previewWidth}px` : ' — desktop'}` : 'Náhled'}
+                {activeProject ? `${activeProject.name}${previewWidth ? ` — ${previewWidth}px` : ''}` : 'Náhled'}
               </span>
               <button onClick={() => updatePreview()} style={{ padding: '2px 8px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 5, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>↺ Obnovit</button>
             </div>
-            {/* Responsive preview container */}
             <div style={{ flex: 1, overflow: 'auto', background: previewWidth ? '#1a1a2a' : '#fff', display: 'flex', justifyContent: 'center' }}>
               <iframe ref={previewRef} sandbox="allow-scripts"
-                style={{ border: 'none', background: '#fff', display: 'block',
-                  width: previewWidth ? `${previewWidth}px` : '100%',
-                  height: '100%',
-                  flexShrink: 0,
-                  boxShadow: previewWidth ? '0 0 0 1px rgba(255,255,255,.1), 0 8px 32px rgba(0,0,0,.5)' : 'none',
-                }}
+                style={{ border: 'none', background: '#fff', display: 'block', width: previewWidth ? `${previewWidth}px` : '100%', height: '100%', flexShrink: 0, boxShadow: previewWidth ? '0 0 0 1px rgba(255,255,255,.1), 0 8px 32px rgba(0,0,0,.5)' : 'none' }}
                 title="HTML Preview" />
             </div>
           </div>
         </div>
+
+        {/* ══ RIGHT: Tools ══ */}
+        <div style={{ width: 270, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Tab bar */}
+          <div style={{ display: 'flex', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            {([['validator','🔍','Validátor'],['design','🎨','Design'],['reference','📖','Reference']] as const).map(([tab, icon, label]) => (
+              <button key={tab} onClick={() => setRightTab(tab)}
+                style={{ flex: 1, padding: '8px 2px', background: rightTab === tab ? D.bgMid : 'transparent', border: 'none', borderBottom: `2px solid ${rightTab === tab ? accent : 'transparent'}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 600, color: rightTab === tab ? D.txtPri : D.txtSec, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 14 }}>{icon}</span>{label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+
+            {/* ── Validátor & výkon & SEO ── */}
+            {rightTab === 'validator' && (() => {
+              const html = activeFile?.type === 'html' ? (contents.get(activeFile.path) ?? '') : ''
+              const allHtml = activeProject ? activeProject.files.filter(f => f.type === 'html').map(f => contents.get(f.path) ?? '').join('\n') : ''
+
+              // HTML checks
+              const checks = [
+                { label: '<title> tag', ok: /<title>[^<]+<\/title>/i.test(html), tip: 'Každá stránka by měla mít <title>' },
+                { label: 'meta description', ok: /<meta[^>]+name=["']description["'][^>]*>/i.test(html), tip: 'Přidej <meta name="description" content="...">' },
+                { label: 'lang atribut', ok: /<html[^>]+lang=/i.test(html), tip: 'Přidej lang="cs" do <html>' },
+                { label: 'meta charset', ok: /<meta[^>]+charset/i.test(html), tip: 'Přidej <meta charset="UTF-8">' },
+                { label: 'viewport meta', ok: /<meta[^>]+viewport/i.test(html), tip: 'Přidej <meta name="viewport" ...>' },
+                { label: 'alt u obrázků', ok: !/<img(?![^>]*alt=)[^>]*>/i.test(html), tip: 'Všechny <img> by měly mít alt atribut' },
+                { label: 'h1 nadpis', ok: /<h1[^>]*>/i.test(html), tip: 'Stránka by měla mít právě jeden <h1>' },
+                { label: 'doctype', ok: /<!DOCTYPE html>/i.test(html), tip: 'Přidej <!DOCTYPE html> na začátek' },
+              ]
+
+              // Open/close tag balance check (simple)
+              const pairedTags = ['div','section','article','header','footer','nav','main','aside','ul','ol','table','form']
+              const tagErrors: string[] = []
+              for (const tag of pairedTags) {
+                const opens  = (html.match(new RegExp(`<${tag}[\\s>]`, 'gi')) ?? []).length
+                const closes = (html.match(new RegExp(`<\\/${tag}>`, 'gi')) ?? []).length
+                if (opens !== closes) tagErrors.push(`<${tag}>: ${opens}× otevřen, ${closes}× zavřen`)
+              }
+
+              // CSS stats
+              const cssContent = activeProject?.files.filter(f => f.type === 'css').map(f => contents.get(f.path) ?? '').join('\n') ?? ''
+              const ruleCount = (cssContent.match(/\{[^}]*\}/g) ?? []).length
+              const colors = [...new Set((cssContent.match(/#[0-9a-fA-F]{3,6}|rgb\([^)]+\)/g) ?? []))].slice(0, 12)
+
+              const passed = checks.filter(c => c.ok).length
+
+              return (
+                <div style={{ padding: '10px 12px' }}>
+                  {/* SEO score */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>SEO & Přístupnost</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: passed >= 7 ? D.success : passed >= 4 ? D.warning : D.danger }}>{passed}/{checks.length}</span>
+                    </div>
+                    <div style={{ height: 5, background: D.bgMid, borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', width: `${(passed/checks.length)*100}%`, background: passed >= 7 ? D.success : passed >= 4 ? D.warning : D.danger, borderRadius: 3, transition: 'width .3s' }} />
+                    </div>
+                    {checks.map(c => (
+                      <div key={c.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 5 }} title={c.tip}>
+                        <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>{c.ok ? '✅' : '❌'}</span>
+                        <div>
+                          <div style={{ fontSize: 11, color: c.ok ? D.txtPri : D.txtSec, fontFamily: 'monospace' }}>{c.label}</div>
+                          {!c.ok && <div style={{ fontSize: 10, color: D.txtSec, lineHeight: 1.4 }}>{c.tip}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Tag balance */}
+                  {tagErrors.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: D.danger, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>⚠ Nespárované tagy</div>
+                      {tagErrors.map(e => (
+                        <div key={e} style={{ fontSize: 11, color: D.warning, fontFamily: 'monospace', marginBottom: 3, padding: '3px 8px', background: D.warning+'10', borderRadius: 5 }}>{e}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* CSS stats */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>CSS statistiky</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                      {[
+                        { label: 'Pravidel', value: ruleCount },
+                        { label: 'HTML souborů', value: activeProject?.files.filter(f => f.type === 'html').length ?? 0 },
+                        { label: 'CSS souborů', value: activeProject?.files.filter(f => f.type === 'css').length ?? 0 },
+                        { label: 'JS souborů', value: activeProject?.files.filter(f => f.type === 'js').length ?? 0 },
+                      ].map(s => (
+                        <div key={s.label} style={{ flex: '1 1 45%', padding: '7px 9px', background: D.bgMid, borderRadius: 8, textAlign: 'center' as const }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{s.value}</div>
+                          <div style={{ fontSize: 10, color: D.txtSec }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color palette from CSS */}
+                  {colors.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Barvy v CSS</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 5 }}>
+                        {colors.map(color => (
+                          <div key={color} title={color}
+                            onClick={() => navigator.clipboard?.writeText(color)}
+                            style={{ width: 28, height: 28, borderRadius: 6, background: color, border: `1px solid rgba(255,255,255,.15)`, cursor: 'pointer', flexShrink: 0 }} />
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 10, color: D.txtSec, marginTop: 4 }}>Klikni pro zkopírování</div>
+                    </div>
+                  )}
+
+                  {!activeFile && <div style={{ color: D.txtSec, fontSize: 11, textAlign: 'center' as const, marginTop: 24 }}>Otevři HTML soubor pro analýzu</div>}
+                </div>
+              )
+            })()}
+
+            {/* ── Nástroje pro design ── */}
+            {rightTab === 'design' && (() => {
+              const cssContent = activeProject?.files.filter(f => f.type === 'css').map(f => contents.get(f.path) ?? '').join('\n') ?? ''
+              const colors = [...new Set((cssContent.match(/#[0-9a-fA-F]{3,6}|rgb\([^)]+\)/g) ?? []))].slice(0, 16)
+              const fontFamilies = [...new Set((cssContent.match(/font-family:\s*([^;]+)/g) ?? []).map(m => m.replace('font-family:', '').trim()))].slice(0, 6)
+
+              return (
+                <div style={{ padding: '10px 12px' }}>
+                  {/* Color picker */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Color picker</div>
+                    <input type="color" defaultValue="#7C3AED"
+                      onChange={e => navigator.clipboard?.writeText(e.target.value)}
+                      style={{ width: '100%', height: 40, border: 'none', borderRadius: 8, cursor: 'pointer', background: 'none' }} />
+                    <div style={{ fontSize: 10, color: D.txtSec, marginTop: 4, textAlign: 'center' as const }}>Změna barvy = zkopíruje HEX</div>
+                  </div>
+
+                  {/* Colors from CSS */}
+                  {colors.length > 0 && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Barvy z projektu</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6 }}>
+                        {colors.map(color => (
+                          <div key={color} onClick={() => navigator.clipboard?.writeText(color)}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+                            title={`Kopírovat ${color}`}>
+                            <div style={{ width: 34, height: 34, borderRadius: 7, background: color, border: `1px solid rgba(255,255,255,.15)` }} />
+                            <span style={{ fontSize: 8, color: D.txtSec, fontFamily: 'monospace' }}>{color.length > 9 ? color.slice(0,9) : color}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Typography */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Typografie v projektu</div>
+                    {fontFamilies.length === 0
+                      ? <div style={{ fontSize: 11, color: D.txtSec }}>Žádné font-family nenalezeny</div>
+                      : fontFamilies.map(f => (
+                          <div key={f} style={{ padding: '7px 10px', background: D.bgMid, borderRadius: 8, marginBottom: 5, fontSize: 12, color: D.txtPri, fontFamily: f }}>{f}</div>
+                        ))
+                    }
+                  </div>
+
+                  {/* Useful CSS snippets */}
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>CSS snippety</div>
+                    {[
+                      { label: 'Flexbox centrum', code: 'display: flex;\njustify-content: center;\nalign-items: center;' },
+                      { label: 'CSS Grid 3 sloupce', code: 'display: grid;\ngrid-template-columns: repeat(3, 1fr);\ngap: 16px;' },
+                      { label: 'Box shadow', code: 'box-shadow: 0 4px 20px rgba(0,0,0,.15);' },
+                      { label: 'Gradient pozadí', code: 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);' },
+                      { label: 'Přechod (transition)', code: 'transition: all 0.3s ease;' },
+                      { label: 'Border radius zaoblený', code: 'border-radius: 12px;' },
+                      { label: 'Text přetečení', code: 'overflow: hidden;\ntext-overflow: ellipsis;\nwhite-space: nowrap;' },
+                      { label: 'Responsive obrázek', code: 'max-width: 100%;\nheight: auto;' },
+                      { label: 'Sticky header', code: 'position: sticky;\ntop: 0;\nz-index: 100;' },
+                    ].map(s => (
+                      <div key={s.label} className="w-row"
+                        onClick={() => {
+                          const ed = editorRef.current
+                          if (!ed) return
+                          const pos = ed.getPosition()
+                          ed.executeEdits('snippet', [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text: s.code }])
+                          ed.focus()
+                        }}
+                        style={{ padding: '6px 10px', borderRadius: 7, cursor: 'pointer', marginBottom: 4, border: `1px solid ${D.border}`, background: D.bgMid }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: D.txtPri, marginBottom: 2 }}>{s.label}</div>
+                        <pre style={{ fontSize: 9, color: '#60A5FA', margin: 0, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{s.code}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* ── Reference ── */}
+            {rightTab === 'reference' && (() => {
+              const [refSearch, setRefSearch] = useState('')
+              const htmlTags = [
+                { tag: 'div', desc: 'Blokový kontejner', ex: '<div class="box">...</div>' },
+                { tag: 'span', desc: 'Řádkový kontejner', ex: '<span style="color:red">text</span>' },
+                { tag: 'h1–h6', desc: 'Nadpisy', ex: '<h1>Hlavní nadpis</h1>' },
+                { tag: 'p', desc: 'Odstavec textu', ex: '<p>Text odstavce.</p>' },
+                { tag: 'a', desc: 'Odkaz', ex: '<a href="https://example.com">Klikni</a>' },
+                { tag: 'img', desc: 'Obrázek', ex: '<img src="foto.jpg" alt="Popis">' },
+                { tag: 'ul / ol / li', desc: 'Seznamy', ex: '<ul>\n  <li>Položka</li>\n</ul>' },
+                { tag: 'table', desc: 'Tabulka', ex: '<table>\n  <tr><th>Název</th></tr>\n  <tr><td>Hodnota</td></tr>\n</table>' },
+                { tag: 'form', desc: 'Formulář', ex: '<form action="/odeslat" method="POST">\n  <input type="text" name="jmeno">\n  <button>Odeslat</button>\n</form>' },
+                { tag: 'input', desc: 'Vstupní pole', ex: '<input type="text" placeholder="Zadej text">' },
+                { tag: 'button', desc: 'Tlačítko', ex: '<button onclick="klik()">Klikni</button>' },
+                { tag: 'header / footer', desc: 'Záhlaví / zápatí stránky', ex: '<header>\n  <nav>...</nav>\n</header>' },
+                { tag: 'nav', desc: 'Navigace', ex: '<nav>\n  <a href="/">Domů</a>\n</nav>' },
+                { tag: 'section / article', desc: 'Sekce / článek obsahu', ex: '<section>\n  <h2>Sekce</h2>\n</section>' },
+                { tag: 'main', desc: 'Hlavní obsah stránky', ex: '<main>\n  <h1>Obsah</h1>\n</main>' },
+              ]
+              const cssProps = [
+                { prop: 'color', desc: 'Barva textu', ex: 'color: #333;\ncolor: red;' },
+                { prop: 'background', desc: 'Pozadí elementu', ex: 'background: #f0f0f0;\nbackground: linear-gradient(...)' },
+                { prop: 'font-size', desc: 'Velikost písma', ex: 'font-size: 16px;\nfont-size: 1.2rem;' },
+                { prop: 'font-weight', desc: 'Tloušťka písma', ex: 'font-weight: bold;\nfont-weight: 700;' },
+                { prop: 'margin / padding', desc: 'Vnější / vnitřní odsazení', ex: 'margin: 16px;\npadding: 8px 16px;' },
+                { prop: 'display', desc: 'Způsob zobrazení', ex: 'display: flex;\ndisplay: grid;\ndisplay: none;' },
+                { prop: 'flex', desc: 'Flexbox vlastnosti', ex: 'display: flex;\njustify-content: space-between;\nalign-items: center;' },
+                { prop: 'grid', desc: 'CSS Grid', ex: 'display: grid;\ngrid-template-columns: 1fr 2fr;\ngap: 20px;' },
+                { prop: 'width / height', desc: 'Rozměry elementu', ex: 'width: 100%;\nheight: 200px;\nmin-height: 50px;' },
+                { prop: 'border', desc: 'Ohraničení', ex: 'border: 1px solid #ccc;\nborder-radius: 8px;' },
+                { prop: 'position', desc: 'Pozicování', ex: 'position: relative;\nposition: absolute;\ntop: 0; left: 0;' },
+                { prop: 'overflow', desc: 'Přetečení obsahu', ex: 'overflow: hidden;\noverflow-y: auto;' },
+                { prop: 'opacity', desc: 'Průhlednost (0–1)', ex: 'opacity: 0.5;' },
+                { prop: 'cursor', desc: 'Kurzor myši', ex: 'cursor: pointer;\ncursor: not-allowed;' },
+                { prop: 'transition', desc: 'Animace změn', ex: 'transition: all 0.3s ease;\ntransition: color 0.2s;' },
+                { prop: 'box-shadow', desc: 'Stín elementu', ex: 'box-shadow: 0 2px 8px rgba(0,0,0,0.2);' },
+                { prop: 'z-index', desc: 'Vrstvení elementů', ex: 'position: relative;\nz-index: 10;' },
+              ]
+
+              const filteredTags = htmlTags.filter(t => !refSearch || t.tag.toLowerCase().includes(refSearch.toLowerCase()) || t.desc.toLowerCase().includes(refSearch.toLowerCase()))
+              const filteredCss  = cssProps.filter(t => !refSearch || t.prop.toLowerCase().includes(refSearch.toLowerCase()) || t.desc.toLowerCase().includes(refSearch.toLowerCase()))
+
+              return (
+                <div style={{ padding: '8px 12px' }}>
+                  <input value={refSearch} onChange={e => setRefSearch(e.target.value)} placeholder="Hledat…"
+                    style={{ width: '100%', padding: '7px 10px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 8, fontSize: 12, color: D.txtPri, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' as const, marginBottom: 10 }} />
+
+                  {filteredTags.length > 0 && <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>HTML tagy</div>
+                    {filteredTags.map(t => (
+                      <div key={t.tag} style={{ marginBottom: 8, background: D.bgMid, borderRadius: 8, padding: '8px 10px', border: `1px solid ${D.border}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <code style={{ fontSize: 11, fontWeight: 700, color: '#f47067', fontFamily: 'monospace' }}>{t.tag}</code>
+                          <span style={{ fontSize: 10, color: D.txtSec }}>{t.desc}</span>
+                        </div>
+                        <pre onClick={() => { const ed = editorRef.current; if (!ed) return; const pos = ed.getPosition(); ed.executeEdits('ref', [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text: t.ex }]); ed.focus() }}
+                          style={{ margin: 0, padding: '4px 7px', background: '#0d1117', borderRadius: 5, fontSize: 10, color: '#a8d8a8', fontFamily: 'monospace', whiteSpace: 'pre-wrap', cursor: 'pointer', border: `1px solid ${D.border}` }}>
+                          {t.ex}
+                        </pre>
+                      </div>
+                    ))}
+                  </>}
+
+                  {filteredCss.length > 0 && <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', margin: '10px 0 6px' }}>CSS vlastnosti</div>
+                    {filteredCss.map(t => (
+                      <div key={t.prop} style={{ marginBottom: 8, background: D.bgMid, borderRadius: 8, padding: '8px 10px', border: `1px solid ${D.border}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <code style={{ fontSize: 11, fontWeight: 700, color: '#c792ea', fontFamily: 'monospace' }}>{t.prop}</code>
+                          <span style={{ fontSize: 10, color: D.txtSec }}>{t.desc}</span>
+                        </div>
+                        <pre onClick={() => { const ed = editorRef.current; if (!ed) return; const pos = ed.getPosition(); ed.executeEdits('ref', [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text: t.ex }]); ed.focus() }}
+                          style={{ margin: 0, padding: '4px 7px', background: '#0d1117', borderRadius: 5, fontSize: 10, color: '#a8d8a8', fontFamily: 'monospace', whiteSpace: 'pre-wrap', cursor: 'pointer', border: `1px solid ${D.border}` }}>
+                          {t.ex}
+                        </pre>
+                      </div>
+                    ))}
+                  </>}
+                </div>
+              )
+            })()}
+
+          </div>
+        </div>
+
       </div>
     </DarkLayout>
   )
