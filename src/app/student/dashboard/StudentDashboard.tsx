@@ -1051,25 +1051,25 @@ export default function StudentDashboard({
                             label="SQL editor"
                             accent={accent}
                         />
-                        <SideIconImg
+                        <SideIcon
                             icon="📊"
                             href="/student/flowchart"
                             label="Flowchart editor"
                             accent={accent}
                         />
-                        <SideIconImg
+                        <SideIcon
                             icon="🧱"
                             href="/student/builder"
                             label="3D Builder"
                             accent={accent}
                         />
-                        <SideIconImg
+                        <SideIcon
                             icon="🔬"
                             href="/student/microbit"
                             label="Micro:bit Editor"
                             accent={accent}
                         />
-                        <SideIconImg
+                        <SideIcon
                             icon="🤖"
                             href="/student/vex"
                             label="Flowchart editor"
@@ -1332,6 +1332,26 @@ export default function StudentDashboard({
                                             icon: "/icons/database.png",
                                             label: "Spustit SQL editor",
                                             href: "/student/sql",
+                                        },
+                                        {
+                                            icon: "🔬",
+                                            label: "Spustit BBC micro:bit editor",
+                                            href: "/student/microbit",
+                                        },
+                                        {
+                                            icon: "📊",
+                                            label: "Spustit Flowchart editor",
+                                            href: "/student/flowchart",
+                                        },
+                                        {
+                                            icon: "🧱",
+                                            label: "Spustit 3D Builder",
+                                            href: "/student/builder",
+                                        },
+                                        {
+                                            icon: "🤖",
+                                            label: "Spustit VEX IQ Robot editor",
+                                            href: "/student/vex",
                                         },
                                     ].map(({ icon, label, href }) => (
                                         <a
