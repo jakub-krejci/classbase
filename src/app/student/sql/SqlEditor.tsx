@@ -149,6 +149,13 @@ export default function SqlEditor({ profile }: { profile: any }) {
   const [showSchema, setShowSchema]     = useState(false)
   const [queryHistory, setQueryHistory] = useState<string[]>([])
   const [showHistory, setShowHistory]   = useState(false)
+  const [rightTab, setRightTab]         = useState<'schema'|'snippets'|'history'|'data'>('schema')
+  const [erPositions, setErPositions]   = useState<Record<string, {x:number;y:number}>>({})
+  const erDragRef = useRef<{table:string;startX:number;startY:number;origX:number;origY:number}|null>(null)
+  const erContainerRef = useRef<HTMLDivElement>(null)
+  const [centerTab, setCenterTab]       = useState<'editor'|'schema'>('editor')
+  const [dataPreviewTable, setDataPreviewTable] = useState<string|null>(null)
+  const [dataPreviewRows, setDataPreviewRows]   = useState<{cols:string[];rows:any[][]}>({cols:[],rows:[]})
 
   // ── Monaco editor ─────────────────────────────────────────────────────────
   const editorContainerRef = useRef<HTMLDivElement>(null)
@@ -199,11 +206,26 @@ export default function SqlEditor({ profile }: { profile: any }) {
       w.require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } })
       w.require(['vs/editor/editor.main'], (monaco: any) => {
         monacoRef.current = monaco
+        monaco.editor.defineTheme('cb-dark', {
+          base: 'vs-dark', inherit: true,
+          rules: [
+            { token: 'keyword', foreground: 'c792ea' },
+            { token: 'string', foreground: 'c3e88d' },
+            { token: 'comment', foreground: '546e7a', fontStyle: 'italic' },
+            { token: 'number', foreground: 'f78c6c' },
+          ],
+          colors: {
+            'editor.background': '#0d1117',
+            'editor.foreground': '#e6edf3',
+            'editorLineNumber.foreground': '#30363d',
+            'editor.lineHighlightBackground': '#161b22',
+          },
+        })
         if (!editorContainerRef.current) return
         const ed = monaco.editor.create(editorContainerRef.current, {
           value: '-- Vyber nebo vytvoř projekt\n',
           language: 'sql',
-          theme: 'vs-dark',
+          theme: 'cb-dark',
           fontSize: 14,
           fontFamily: "'JetBrains Mono','Fira Code',monospace",
           minimap: { enabled: false },
@@ -334,6 +356,7 @@ export default function SqlEditor({ profile }: { profile: any }) {
         }
       }
       setSchema(tables)
+      initErPositions(tables)
       // Update Monaco autocomplete with table/column names
       updateSqlCompletions(tables)
     } catch {}
@@ -377,6 +400,64 @@ export default function SqlEditor({ profile }: { profile: any }) {
   }, [sqlReady])
 
   function flash(msg: string) { setSaveMsg(msg); setTimeout(() => setSaveMsg(''), 2800) }
+
+  // ── Init ER positions when schema changes ────────────────────────────────
+  function initErPositions(tables: TableInfo[]) {
+    setErPositions(prev => {
+      const next: Record<string, {x:number;y:number}> = {}
+      tables.forEach((t, i) => {
+        next[t.name] = prev[t.name] ?? { x: 20 + (i % 3) * 220, y: 20 + Math.floor(i / 3) * 180 }
+      })
+      return next
+    })
+  }
+
+  // ── Data preview ──────────────────────────────────────────────────────────
+  function previewTable(tableName: string) {
+    if (!dbRef.current) return
+    try {
+      const res = dbRef.current.exec(`SELECT * FROM "${tableName}" LIMIT 10`)
+      if (res.length > 0) {
+        setDataPreviewRows({ cols: res[0].columns, rows: res[0].values })
+      } else {
+        setDataPreviewRows({ cols: [], rows: [] })
+      }
+      setDataPreviewTable(tableName)
+      setRightTab('data')
+    } catch {}
+  }
+
+  // ── Detect tables mentioned in current SQL ────────────────────────────────
+  function getActiveTables(): string[] {
+    const sql = editorRef.current?.getValue() ?? ''
+    return schema.map(t => t.name).filter(name =>
+      new RegExp(`\\b${name}\\b`, 'i').test(sql)
+    )
+  }
+
+  // ── Detect FK relations heuristically ────────────────────────────────────
+  interface Relation { from: string; fromCol: string; to: string; toCol: string; real: boolean }
+  function detectRelations(): Relation[] {
+    const relations: Relation[] = []
+    const tableNames = schema.map(t => t.name.toLowerCase())
+    for (const table of schema) {
+      for (const col of table.columns) {
+        // Real FK: column has references in schema
+        if (col.name.toLowerCase().endsWith('_id')) {
+          const refTableName = col.name.toLowerCase().replace(/_id$/, '')
+          const refTable = schema.find(t => t.name.toLowerCase() === refTableName ||
+            t.name.toLowerCase() === refTableName + 'e' ||
+            t.name.toLowerCase() === refTableName + 'y' ||
+            t.name.toLowerCase() === refTableName + 'i')
+          if (refTable) {
+            const pkCol = refTable.columns.find(c => c.pk) ?? refTable.columns[0]
+            relations.push({ from: table.name, fromCol: col.name, to: refTable.name, toCol: pkCol?.name ?? 'id', real: false })
+          }
+        }
+      }
+    }
+    return relations
+  }
 
   // ── Run SQL ────────────────────────────────────────────────────────────────
   function runSql() {
@@ -588,7 +669,7 @@ export default function SqlEditor({ profile }: { profile: any }) {
   const projSel: React.CSSProperties = { width: '100%', padding: '8px 10px', background: D.bgMid, border: `1px solid ${D.border}`, borderRadius: 8, fontSize: 13, color: D.txtPri, fontFamily: 'inherit', outline: 'none', marginTop: 8 }
 
   return (
-    <DarkLayout profile={profile} activeRoute="/student/sql">
+    <DarkLayout profile={profile} activeRoute="/student/sql" fullContent>
 
       {/* ── Modals ── */}
       {newProjModal && (
@@ -664,286 +745,397 @@ export default function SqlEditor({ profile }: { profile: any }) {
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Page header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 11, background: '#336791' + '20', border: `1px solid #336791` + '40', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <img src="/icons/database.png" alt="SQL" style={{ width: 24, height: 24, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 19, fontWeight: 800, color: D.txtPri, margin: '0 0 2px' }}>SQL Editor</h1>
-          <p style={{ fontSize: 11, color: D.txtSec, margin: 0 }}>SQLite in-browser · Ctrl+Enter spustit · Ctrl+S uložit</p>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {saveMsg && <span style={{ fontSize: 12, color: saveMsg.startsWith('❌') ? D.danger : D.success, fontWeight: 600 }}>{saveMsg}</span>}
-          {isDirty && !saveMsg && <span style={{ fontSize: 11, color: D.warning }}>● neuloženo</span>}
-          {!sqlReady && <span style={{ fontSize: 11, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám SQLite…</span>}
-          {sqlReady && activeProject && <span style={{ fontSize: 11, padding: '3px 9px', background: '#336791' + '20', color: '#60A5FA', borderRadius: 20, fontWeight: 600 }}>🗄️ SQLite</span>}
-        </div>
-      </div>
+      {/* ── 3-col layout ── */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-      {/* ── 2-col layout ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '230px minmax(0,1fr)', gap: 14, alignItems: 'start' }}>
-
-        {/* ══ LEFT: sidebar ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-          {/* Actions */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Soubory</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <button className="sql-sb" style={sideBtn} onClick={() => setNewProjModal(true)}><span>🗄️</span> Nový projekt</button>
-              <button className="sql-sb" style={sideBtn} onClick={() => setNewScriptModal(true)}><span>📄</span> Nový skript</button>
-              <button className="sql-sb" style={sideBtn} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít</button>
-              <div style={{ height: 1, background: D.border, margin: '3px 0' }} />
-              <button id="sql-save-btn" className="sql-sb" style={{ ...sideBtn, opacity: !activeProject || saving ? .4 : 1 }} disabled={!activeProject || saving} onClick={saveScript}><span>💾</span> Uložit</button>
-              <button className="sql-sb" style={{ ...sideBtn, opacity: !activeScript ? .4 : 1 }} disabled={!activeScript} onClick={downloadScript}><span>⬇️</span> Stáhnout .sql</button>
-              <button className="sql-sb" style={{ ...sideBtn, opacity: !dbRef.current ? .4 : 1 }} disabled={!dbRef.current} onClick={downloadDb}><span>⬇️</span> Stáhnout .db</button>
+        {/* ══ LEFT: Sidebar ══ */}
+        <div style={{ width: 200, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <img src="/icons/database.png" alt="SQL" style={{ width: 18, height: 18, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, lineHeight: 1.2 }}>SQLEdit</div>
+                <div style={{ fontSize: 9, color: D.txtSec, lineHeight: 1.2 }}>SQLite in-browser</div>
+              </div>
+              {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <button className="sql-sb" style={{...sideBtn}} onClick={() => setNewProjModal(true)}><span>🗄️</span> Nový projekt</button>
+              <button className="sql-sb" style={{...sideBtn}} onClick={() => setNewScriptModal(true)}><span>📄</span> Nový skript</button>
+              <button className="sql-sb" style={{...sideBtn}} onClick={() => { setOpenProjModal(true); refreshProjects() }}><span>📂</span> Otevřít</button>
+              <div style={{ height: 1, background: D.border, margin: '2px 0' }} />
+              <button id="sql-save-btn" className="sql-sb" style={{...sideBtn, opacity: !activeProject || saving ? .4 : 1}} disabled={!activeProject || saving} onClick={saveScript}><span>💾</span> Uložit</button>
+              <button className="sql-sb" style={{...sideBtn, opacity: !activeScript ? .4 : 1}} disabled={!activeScript} onClick={downloadScript}><span>⬇️</span> .sql</button>
+              <button className="sql-sb" style={{...sideBtn, opacity: !dbRef.current ? .4 : 1}} disabled={!dbRef.current} onClick={downloadDb}><span>⬇️</span> .db</button>
             </div>
           </div>
-
-          {/* Recent */}
-          <div style={card({ padding: '13px' })}>
-            <SectionLabel>Nedávné</SectionLabel>
-            {recent.length === 0
-              ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné nedávné projekty</div>
-              : recent.map(r => (
-                  <div key={r.key} className="sql-row" onClick={() => { const p = projects.find(x => x.key === r.key); if (p) openProject(p) }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 7px', borderRadius: D.radiusSm, cursor: 'pointer', background: r.key === activeProject?.key ? accent+'15' : 'transparent', marginBottom: 2 }}>
-                    <span>🗄️</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: r.key === activeProject?.key ? accent : D.txtPri, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-                    </div>
-                  </div>
-                ))
-            }
-          </div>
-
-          {/* Project / schema tree */}
-          <div style={{ ...card({ padding: '13px' }) }}>
-            <SectionLabel>Moje projekty</SectionLabel>
+          {/* Moje projekty */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+            <div style={{ padding: '6px 12px 3px', fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em' }}>Moje projekty</div>
             {loadingProj
-              ? <div style={{ fontSize: 12, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 14, height: 14, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
+              ? <div style={{ fontSize: 11, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }}>
+                  <div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…
                 </div>
-              : projects.length === 0 ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádné projekty</div>
+              : projects.length === 0 ? <div style={{ fontSize: 11, color: D.txtSec, padding: '4px 12px' }}>Žádné projekty</div>
               : projects.map(proj => (
-                  <div key={proj.key} style={{ marginBottom: 5 }}>
-                    <div className="sql-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 6px', borderRadius: 7, background: proj.key === activeProject?.key ? accent+'10' : 'transparent' }}>
+                  <div key={proj.key} style={{ marginBottom: 2 }}>
+                    <div className="sql-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: proj.key === activeProject?.key ? accent+'10' : 'transparent' }}>
                       <div onClick={() => { setExpandedProj(prev => { const n = new Set(prev); n.has(proj.key) ? n.delete(proj.key) : n.add(proj.key); return n }); openProject(proj) }}
                         style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, cursor: 'pointer' }}>
                         <span style={{ fontSize: 9, color: D.txtSec, display: 'inline-block', transform: expandedProj.has(proj.key) ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
-                        <span style={{ fontSize: 13 }}>🗄️</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: proj.key === activeProject?.key ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</span>
+                        <span style={{ fontSize: 12 }}>🗄️</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: proj.key === activeProject?.key ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</span>
                       </div>
                       <div className="sql-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
-                        <button onClick={e => { e.stopPropagation(); setDeleteModal({ type: 'project', item: proj }) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat">🗑</button>
+                        <button onClick={e => { e.stopPropagation(); setDeleteModal({ type: 'project', item: proj }) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }}>🗑</button>
                       </div>
                     </div>
                     {expandedProj.has(proj.key) && (
-                      <div style={{ marginLeft: 18 }}>
-                        {/* SQL scripts */}
+                      <div style={{ marginLeft: 16 }}>
                         {proj.scripts.map(s => (
-                          <div key={s.path} className="sql-row" onClick={() => { openProject(proj, s) }}
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 7px', borderRadius: 6, cursor: 'pointer', background: s.path === activeScript?.path ? accent+'15' : 'transparent', marginBottom: 1 }}>
-                            <span style={{ fontSize: 11 }}>📄</span>
-                            <span style={{ fontSize: 11, color: s.path === activeScript?.path ? accent : D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: s.path === activeScript?.path ? 600 : 400 }}>{s.name}</span>
+                          <div key={s.path} className="sql-row" onClick={() => openProject(proj, s)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 12px', borderRadius: 5, cursor: 'pointer', background: s.path === activeScript?.path ? accent+'15' : 'transparent', marginBottom: 1 }}>
+                            <span style={{ fontSize: 10 }}>📄</span>
+                            <span style={{ fontSize: 10, color: s.path === activeScript?.path ? accent : D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                             <div className="sql-acts" style={{ display: 'flex', gap: 1, opacity: 0 }}>
-                              <button onClick={e => { e.stopPropagation(); setRenameModal({ type: 'script', item: s }); setRenameVal(s.name.replace(/\.sql$/, '')) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přejmenovat">✏</button>
-                              <button onClick={e => { e.stopPropagation(); setDeleteModal({ type: 'script', item: s }) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }} title="Smazat">🗑</button>
+                              <button onClick={e => { e.stopPropagation(); setRenameModal({ type: 'script', item: s }); setRenameVal(s.name.replace(/\.sql$/, '')) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 10 }}>✏</button>
+                              <button onClick={e => { e.stopPropagation(); setDeleteModal({ type: 'script', item: s }) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 10 }}>🗑</button>
                             </div>
                           </div>
                         ))}
-                        {/* DB schema (tables) */}
-                        {proj.key === activeProject?.key && schema.length > 0 && (
-                          <div style={{ marginTop: 4 }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.05em', padding: '3px 7px' }}>📋 Tabulky</div>
-                            {schema.map(t => (
-                              <div key={t.name} style={{ marginBottom: 2 }}>
-                                <div className="sql-row" onClick={() => { editorRef.current?.trigger('', 'type', { text: t.name }) }}
-                                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 7px', borderRadius: 5, cursor: 'pointer' }} title="Vložit název tabulky">
-                                  <span style={{ fontSize: 10 }}>📊</span>
-                                  <span style={{ fontSize: 11, color: '#60A5FA', fontWeight: 600, flex: 1 }}>{t.name}</span>
-                                  <span style={{ fontSize: 9, color: D.txtSec }}>{t.columns.length}</span>
-                                </div>
-                                {t.columns.map(c => (
-                                  <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '1px 7px 1px 18px' }}>
-                                    <span style={{ fontSize: 9, color: c.pk ? D.warning : D.txtSec }}>{c.pk ? '🔑' : '▸'}</span>
-                                    <span style={{ fontSize: 10, color: D.txtSec }}>{c.name}</span>
-                                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', marginLeft: 3 }}>{c.type}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
                 ))
             }
           </div>
+          {saveMsg && <div style={{ padding: '6px 12px', borderTop: `1px solid ${D.border}`, fontSize: 11, color: saveMsg.startsWith('❌') ? D.danger : D.success, flexShrink: 0 }}>{saveMsg}</div>}
         </div>
 
-        {/* ══ RIGHT: Editor + Results ══ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {/* ══ CENTER: Editor + ER Diagram (split) ══ */}
+        <div style={{ flex: 1, display: 'flex', minWidth: 0, overflow: 'hidden' }}>
 
-          {/* Toolbar */}
-          <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderRadius: `${D.radius} ${D.radius} 0 0`, borderBottomWidth: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', flexShrink: 0, flexWrap: 'wrap' as const }}>
-            {/* Breadcrumb */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-              {activeProject && <><span style={{ color: D.txtSec }}>🗄️ {activeProject.name}</span><span style={{ color: D.txtSec, opacity: .4 }}>/</span></>}
-              <span style={{ color: D.txtPri, fontWeight: 600 }}>{activeScript?.name ?? 'bez souboru'}</span>
-              {isDirty && <span style={{ color: D.warning, fontSize: 10 }}>●</span>}
+          {/* Editor + Results (left half) */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: `1px solid ${D.border}` }}>
+            {/* Toolbar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+              <span style={{ fontSize: 11, color: D.txtSec }}>
+                {activeProject ? <><span style={{ color: D.txtSec }}>🗄️ {activeProject.name}</span><span style={{ opacity: .4 }}> / </span></> : null}
+                <span style={{ color: D.txtPri, fontWeight: 600 }}>{activeScript?.name ?? 'bez souboru'}</span>
+                {isDirty && <span style={{ color: D.warning }}> ●</span>}
+              </span>
+              <div style={{ flex: 1 }} />
+              {!sqlReady && <span style={{ fontSize: 10, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…</span>}
+              <button id="sql-run-btn" onClick={runSql} disabled={running || !dbRef.current}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 14px', background: running || !dbRef.current ? D.bgMid : accent, color: running || !dbRef.current ? D.txtSec : '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: running || !dbRef.current ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
+                {running ? <><div style={{ width: 11, height: 11, border: `2px solid rgba(255,255,255,.3)`, borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .6s linear infinite' }} />…</> : '▶ Spustit'}
+              </button>
             </div>
-            <div style={{ flex: 1 }} />
-            {/* History */}
-            <button onClick={() => setShowHistory(h => !h)}
-              style={{ padding: '5px 10px', background: showHistory ? accent+'20' : 'rgba(255,255,255,.04)', color: showHistory ? accent : D.txtSec, border: `1px solid ${showHistory ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-              🕐 Historie
-            </button>
-            {/* Schema toggle */}
-            <button onClick={() => setShowSchema(s => !s)}
-              style={{ padding: '5px 10px', background: showSchema ? accent+'20' : 'rgba(255,255,255,.04)', color: showSchema ? accent : D.txtSec, border: `1px solid ${showSchema ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-              📋 Schéma
-            </button>
-            {/* Run */}
-            <button id="sql-run-btn" onClick={runSql} disabled={running || !dbRef.current}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', background: running || !dbRef.current ? D.bgMid : accent, color: running || !dbRef.current ? D.txtSec : '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: running || !dbRef.current ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
-              {running ? <><div style={{ width: 12, height: 12, border: `2px solid ${D.border}`, borderTopColor: D.txtSec, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />…</> : '▶ Spustit'}
-            </button>
-            <span style={{ fontSize: 10, color: D.txtSec, opacity: .4 }}>Ctrl+Enter</span>
+            {/* Monaco editor */}
+            <div ref={editorContainerRef} style={{ flex: 1, background: '#0d1117', overflow: 'hidden', minHeight: 0 }} />
+            {/* Results */}
+            <div style={{ height: 220, flexShrink: 0, borderTop: `1px solid ${D.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {queryResults.length > 1 && (
+                <div style={{ display: 'flex', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+                  {queryResults.map((r, i) => (
+                    <button key={i} onClick={() => setActiveResult(i)} className="sql-result-tab"
+                      style={{ padding: '5px 12px', background: activeResult === i ? D.bgMid : 'transparent', color: r.error ? D.danger : activeResult === i ? D.txtPri : D.txtSec, border: 'none', borderRight: `1px solid ${D.border}`, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', fontWeight: activeResult === i ? 600 : 400 }}>
+                      {r.error ? '❌' : r.rows.length > 0 ? '📊' : '✓'} #{i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
+                {queryResults.length === 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px', color: D.txtSec }}>
+                    <span style={{ fontSize: 22, opacity: .3 }}>🗄️</span>
+                    <div>
+                      <div style={{ fontSize: 12 }}>Spusť SQL dotaz (Ctrl+Enter)</div>
+                      <div style={{ fontSize: 11, opacity: .6 }}>SELECT, INSERT, CREATE TABLE…</div>
+                    </div>
+                  </div>
+                ) : (() => {
+                  const r = queryResults[activeResult] ?? queryResults[0]
+                  if (!r) return null
+                  return (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${D.border}` }}>
+                        <span style={{ fontSize: 10, fontFamily: 'monospace', color: D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }} title={r.sql}>{r.sql.slice(0, 50)}{r.sql.length > 50 ? '…' : ''}</span>
+                        {r.error ? <span style={{ fontSize: 10, color: D.danger, fontWeight: 600 }}>❌ Chyba</span>
+                          : r.rows.length > 0 ? <span style={{ fontSize: 10, color: D.success, fontWeight: 600 }}>✓ {r.rows.length} řádků · {fmtMs(r.ms)}</span>
+                          : <span style={{ fontSize: 10, color: D.success, fontWeight: 600 }}>✓ {r.rowsAffected} ovlivněno · {fmtMs(r.ms)}</span>}
+                        {r.rows.length > 0 && <button onClick={() => exportCsv(r)} style={{ padding: '2px 7px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 5, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>⬇ CSV</button>}
+                      </div>
+                      {r.error && <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,.08)' }}><pre style={{ margin: 0, fontFamily: 'monospace', fontSize: 11, color: '#FCA5A5', whiteSpace: 'pre-wrap' }}>{r.error}</pre></div>}
+                      {r.rows.length > 0 && (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ borderCollapse: 'collapse', fontSize: 11, minWidth: '100%', fontFamily: 'monospace' }}>
+                            <thead><tr>
+                              <th style={{ padding: '5px 10px', background: D.bgMid, color: D.txtSec, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', border: `1px solid ${D.border}`, textAlign: 'center' as const, minWidth: 32 }}>#</th>
+                              {r.columns.map((col, i) => <th key={i} style={{ padding: '5px 10px', background: D.bgMid, color: D.txtSec, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', border: `1px solid ${D.border}`, textAlign: 'left' as const, whiteSpace: 'nowrap' }}>{col}</th>)}
+                            </tr></thead>
+                            <tbody>{r.rows.map((row, ri) => (
+                              <tr key={ri} style={{ background: ri % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
+                                <td style={{ padding: '4px 10px', border: `1px solid ${D.border}`, color: 'rgba(255,255,255,.2)', fontSize: 9, textAlign: 'center' as const }}>{ri + 1}</td>
+                                {row.map((cell, ci) => <td key={ci} style={{ padding: '4px 10px', border: `1px solid ${D.border}`, color: cell === null ? 'rgba(255,255,255,.25)' : D.txtPri, fontStyle: cell === null ? 'italic' : 'normal', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={String(cell ?? '')}>{cell === null ? 'NULL' : String(cell)}</td>)}
+                              </tr>
+                            ))}</tbody>
+                          </table>
+                        </div>
+                      )}
+                      {!r.error && r.rows.length === 0 && <div style={{ padding: '12px', color: D.txtSec, fontSize: 11 }}>✓ Příkaz proveden — {r.rowsAffected > 0 ? `${r.rowsAffected} řádků ovlivněno` : 'žádné výsledky'} — {fmtMs(r.ms)}</div>}
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
           </div>
 
-          {/* History dropdown */}
-          {showHistory && (
-            <div style={{ background: D.bgCard, border: `1px solid ${D.border}`, borderTop: 'none', padding: '10px 14px', maxHeight: 180, overflowY: 'auto' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Posledních {Math.min(queryHistory.length, MAX_HISTORY)} dotazů</div>
-              {queryHistory.length === 0 ? <div style={{ fontSize: 12, color: D.txtSec }}>Žádná historie</div>
-                : queryHistory.map((h, i) => (
-                    <div key={i} onClick={() => { editorRef.current?.setValue(h); setShowHistory(false) }}
-                      style={{ padding: '5px 8px', borderRadius: 6, cursor: 'pointer', marginBottom: 2, fontFamily: 'monospace', fontSize: 11, color: D.txtSec, background: 'rgba(255,255,255,.03)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      className="sql-row" title={h}>
-                      {h.replace(/\s+/g, ' ').slice(0, 80)}
-                    </div>
-                  ))
-              }
+          {/* ER Diagram (right half of center) */}
+          <div style={{ width: '42%', flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#080a0f' }}>
+            <div style={{ padding: '7px 12px', borderBottom: `1px solid ${D.border}`, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: D.txtPri }}>ER Diagram</span>
+              {schema.length > 0 && <span style={{ fontSize: 10, color: D.txtSec }}>{schema.length} tabulek</span>}
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setErPositions({})} style={{ padding: '2px 8px', background: 'none', border: `1px solid ${D.border}`, borderRadius: 5, fontSize: 10, color: D.txtSec, cursor: 'pointer', fontFamily: 'inherit' }} title="Resetovat rozmístění">↺</button>
             </div>
-          )}
+            {schema.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'rgba(255,255,255,.2)' }}>
+                <span style={{ fontSize: 36, opacity: .3 }}>🗄️</span>
+                <div style={{ fontSize: 12 }}>Vytvoř tabulky pro zobrazení diagramu</div>
+                <div style={{ fontSize: 10, opacity: .6 }}>CREATE TABLE → Spustit</div>
+              </div>
+            ) : (() => {
+              const activeTables = getActiveTables()
+              const relations = detectRelations()
 
-          {/* Editor + (optional) Schema panel side by side */}
-          <div style={{ display: 'flex', height: '340px', background: '#1E1E1E', border: `1px solid ${D.border}`, borderTop: 'none', overflow: 'hidden' }}>
-            <div ref={editorContainerRef} style={{ flex: 1, overflow: 'hidden' }} />
-            {showSchema && (
-              <div style={{ width: 220, flexShrink: 0, borderLeft: `1px solid rgba(255,255,255,.08)`, background: '#1a1a2e', overflowY: 'auto', padding: '12px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: D.txtSec, textTransform: 'uppercase', marginBottom: 10 }}>Schéma databáze</div>
-                {schema.length === 0
-                  ? <div style={{ fontSize: 11, color: D.txtSec }}>Žádné tabulky</div>
-                  : schema.map(t => (
-                      <div key={t.name} style={{ marginBottom: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                          <span style={{ fontSize: 12 }}>📊</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#60A5FA' }}>{t.name}</span>
+              const onErMouseDown = (e: React.MouseEvent, tableName: string) => {
+                e.preventDefault()
+                const pos = erPositions[tableName] ?? { x: 0, y: 0 }
+                erDragRef.current = { table: tableName, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y }
+                const onMove = (ev: MouseEvent) => {
+                  if (!erDragRef.current) return
+                  const dx = ev.clientX - erDragRef.current.startX
+                  const dy = ev.clientY - erDragRef.current.startY
+                  setErPositions(prev => ({ ...prev, [erDragRef.current!.table]: { x: Math.max(0, erDragRef.current!.origX + dx), y: Math.max(0, erDragRef.current!.origY + dy) } }))
+                }
+                const onUp = () => { erDragRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                window.addEventListener('mousemove', onMove)
+                window.addEventListener('mouseup', onUp)
+              }
+
+              // Card dimensions for SVG lines
+              const CARD_W = 160, COL_H = 22, HEADER_H = 32
+
+              return (
+                <div ref={erContainerRef} style={{ flex: 1, overflow: 'auto', position: 'relative', cursor: 'default' }}>
+                  {/* SVG lines for relations */}
+                  <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
+                    {relations.map((rel, i) => {
+                      const fromPos = erPositions[rel.from]
+                      const toPos   = erPositions[rel.to]
+                      if (!fromPos || !toPos) return null
+                      const fromTable = schema.find(t => t.name === rel.from)
+                      const fromColIdx = fromTable?.columns.findIndex(c => c.name === rel.fromCol) ?? 0
+                      const x1 = fromPos.x + CARD_W
+                      const y1 = fromPos.y + HEADER_H + fromColIdx * COL_H + COL_H / 2
+                      const x2 = toPos.x
+                      const y2 = toPos.y + HEADER_H / 2
+                      const isActive = activeTables.includes(rel.from) && activeTables.includes(rel.to)
+                      const mx = (x1 + x2) / 2
+                      return (
+                        <g key={i}>
+                          <path d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`}
+                            stroke={isActive ? accent : 'rgba(255,255,255,.2)'}
+                            strokeWidth={isActive ? 2 : 1}
+                            strokeDasharray={rel.real ? 'none' : '4 3'}
+                            fill="none" />
+                          <circle cx={x2} cy={y2} r={3} fill={isActive ? accent : 'rgba(255,255,255,.3)'} />
+                          <text x={(x1+x2)/2} y={Math.min(y1,y2) - 4} fontSize={8} fill="rgba(255,255,255,.35)" textAnchor="middle">1:N</text>
+                        </g>
+                      )
+                    })}
+                  </svg>
+                  {/* Table cards */}
+                  {schema.map(table => {
+                    const pos = erPositions[table.name] ?? { x: 20, y: 20 }
+                    const isActive = activeTables.includes(table.name)
+                    return (
+                      <div key={table.name}
+                        onMouseDown={e => onErMouseDown(e, table.name)}
+                        style={{
+                          position: 'absolute', left: pos.x, top: pos.y,
+                          width: CARD_W, userSelect: 'none',
+                          borderRadius: 9, overflow: 'hidden', cursor: 'grab',
+                          border: `1.5px solid ${isActive ? accent : 'rgba(255,255,255,.15)'}`,
+                          boxShadow: isActive ? `0 0 12px ${accent}40` : '0 2px 12px rgba(0,0,0,.5)',
+                          transition: 'border-color .2s, box-shadow .2s',
+                        }}>
+                        {/* Header */}
+                        <div style={{ background: isActive ? accent+'30' : '#1a1f2e', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10 }}>📊</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: isActive ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{table.name}</span>
+                          <button onMouseDown={e => e.stopPropagation()} onClick={() => previewTable(table.name)}
+                            style={{ padding: '1px 5px', background: 'rgba(255,255,255,.1)', border: 'none', borderRadius: 4, cursor: 'pointer', color: D.txtSec, fontSize: 9, fontFamily: 'inherit' }} title="Náhled dat">
+                            👁
+                          </button>
                         </div>
-                        {t.columns.map(c => (
-                          <div key={c.name} style={{ display: 'flex', gap: 4, padding: '2px 0 2px 14px' }}>
-                            <span style={{ fontSize: 10, color: c.pk ? D.warning : D.txtSec, flexShrink: 0 }}>{c.pk ? '🔑' : '▸'}</span>
-                            <span style={{ fontSize: 10, color: D.txtPri }}>{c.name}</span>
-                            <span style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', marginLeft: 'auto' }}>{c.type}</span>
+                        {/* Columns */}
+                        {table.columns.map(col => (
+                          <div key={col.name}
+                            onMouseDown={e => e.stopPropagation()}
+                            onClick={() => {
+                              const ed = editorRef.current
+                              if (!ed) return
+                              const pos2 = ed.getPosition()
+                              ed.executeEdits('er', [{ range: { startLineNumber: pos2.lineNumber, startColumn: pos2.column, endLineNumber: pos2.lineNumber, endColumn: pos2.column }, text: col.name }])
+                              ed.focus()
+                            }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: '#0d1117', borderTop: '1px solid rgba(255,255,255,.06)', cursor: 'pointer', height: COL_H }}
+                            className="sql-row" title={`Vložit ${col.name} do editoru`}>
+                            <span style={{ fontSize: 9, color: col.pk ? '#FBBF24' : 'rgba(255,255,255,.3)', flexShrink: 0 }}>{col.pk ? '🔑' : '▸'}</span>
+                            <span style={{ fontSize: 10, color: col.pk ? '#FBBF24' : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, fontWeight: col.pk ? 600 : 400 }}>{col.name}</span>
+                            <span style={{ fontSize: 8, color: 'rgba(255,255,255,.25)', flexShrink: 0 }}>{col.type.slice(0,7)}</span>
                           </div>
                         ))}
                       </div>
-                    ))
+                    )
+                  })}
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+
+        {/* ══ RIGHT: Tools ══ */}
+        <div style={{ width: 255, flexShrink: 0, borderLeft: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
+            {([['schema','🗂','Schéma'],['snippets','🧩','Snippety'],['history','🕐','Historie'],['data','📊','Data']] as const).map(([tab, icon, label]) => (
+              <button key={tab} onClick={() => setRightTab(tab)}
+                style={{ flex: 1, padding: '7px 1px', background: rightTab === tab ? D.bgMid : 'transparent', border: 'none', borderBottom: `2px solid ${rightTab === tab ? accent : 'transparent'}`, cursor: 'pointer', fontFamily: 'inherit', fontSize: 9, fontWeight: 600, color: rightTab === tab ? D.txtPri : D.txtSec, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span style={{ fontSize: 13 }}>{icon}</span>{label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+
+            {/* ── Schéma ── */}
+            {rightTab === 'schema' && (
+              <div style={{ padding: '8px 0' }}>
+                {schema.length === 0
+                  ? <div style={{ color: D.txtSec, fontSize: 11, textAlign: 'center' as const, padding: '24px 16px' }}>Žádné tabulky v databázi</div>
+                  : schema.map(t => (
+                    <div key={t.name} style={{ marginBottom: 2 }}>
+                      <div className="sql-row" onClick={() => { const ed = editorRef.current; if (!ed) return; const p = ed.getPosition(); ed.executeEdits('schema', [{ range: { startLineNumber: p.lineNumber, startColumn: p.column, endLineNumber: p.lineNumber, endColumn: p.column }, text: t.name }]); ed.focus() }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', cursor: 'pointer', background: getActiveTables().includes(t.name) ? accent+'12' : 'transparent' }}>
+                        <span style={{ fontSize: 11 }}>📊</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: getActiveTables().includes(t.name) ? accent : '#60A5FA', flex: 1 }}>{t.name}</span>
+                        <span style={{ fontSize: 9, color: D.txtSec }}>{t.columns.length}</span>
+                        <button onMouseDown={e => e.stopPropagation()} onClick={ev => { ev.stopPropagation(); previewTable(t.name) }}
+                          style={{ padding: '1px 5px', background: 'rgba(255,255,255,.06)', border: 'none', borderRadius: 4, cursor: 'pointer', color: D.txtSec, fontSize: 9, fontFamily: 'inherit' }}>👁</button>
+                      </div>
+                      {t.columns.map(c => (
+                        <div key={c.name} className="sql-row" onClick={() => { const ed = editorRef.current; if (!ed) return; const p = ed.getPosition(); ed.executeEdits('col', [{ range: { startLineNumber: p.lineNumber, startColumn: p.column, endLineNumber: p.lineNumber, endColumn: p.column }, text: c.name }]); ed.focus() }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 12px 2px 28px', cursor: 'pointer' }}>
+                          <span style={{ fontSize: 9, color: c.pk ? '#FBBF24' : 'rgba(255,255,255,.3)' }}>{c.pk ? '🔑' : '▸'}</span>
+                          <span style={{ fontSize: 10, color: c.pk ? '#FBBF24' : D.txtSec, flex: 1 }}>{c.name}</span>
+                          <span style={{ fontSize: 8, color: 'rgba(255,255,255,.25)', fontFamily: 'monospace' }}>{c.type}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))
                 }
               </div>
             )}
-          </div>
 
-          {/* Results panel */}
-          <div style={{ ...card({ overflow: 'hidden', display: 'flex', flexDirection: 'column' }), minHeight: 160, borderRadius: `0 0 ${D.radius} ${D.radius}`, borderTop: 'none', borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
-            {/* Result tabs */}
-            {queryResults.length > 1 && (
-              <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-                {queryResults.map((r, i) => (
-                  <button key={i} onClick={() => setActiveResult(i)} className="sql-result-tab"
-                    style={{ padding: '6px 14px', background: activeResult === i ? D.bgMid : 'transparent', color: r.error ? D.danger : activeResult === i ? D.txtPri : D.txtSec, border: 'none', borderRight: `1px solid ${D.border}`, cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', fontWeight: activeResult === i ? 600 : 400 }}>
-                    {r.error ? '❌' : r.rows.length > 0 ? '📊' : '✓'} #{i + 1}
-                  </button>
+            {/* ── Snippety ── */}
+            {rightTab === 'snippets' && (
+              <div style={{ padding: '6px 0' }}>
+                {[
+                  { label: 'SELECT vše', code: 'SELECT * FROM tabulka\nLIMIT 10;' },
+                  { label: 'SELECT sloupce', code: 'SELECT sloupec1, sloupec2\nFROM tabulka\nWHERE podminka = hodnota;' },
+                  { label: 'JOIN tabulek', code: 'SELECT a.*, b.sloupec\nFROM tabulka_a a\nJOIN tabulka_b b ON a.id = b.a_id;' },
+                  { label: 'LEFT JOIN', code: 'SELECT a.*, b.sloupec\nFROM tabulka_a a\nLEFT JOIN tabulka_b b ON a.id = b.a_id;' },
+                  { label: 'GROUP BY + COUNT', code: 'SELECT sloupec, COUNT(*) AS pocet\nFROM tabulka\nGROUP BY sloupec\nORDER BY pocet DESC;' },
+                  { label: 'GROUP BY + SUM', code: 'SELECT kategorie, SUM(hodnota) AS celkem\nFROM tabulka\nGROUP BY kategorie;' },
+                  { label: 'WHERE s podmínkami', code: "SELECT *\nFROM tabulka\nWHERE sloupec = 'hodnota'\n  AND cislo > 10\nORDER BY sloupec ASC;" },
+                  { label: 'INSERT INTO', code: "INSERT INTO tabulka (sloupec1, sloupec2)\nVALUES ('hodnota1', 42);" },
+                  { label: 'UPDATE', code: "UPDATE tabulka\nSET sloupec = 'nova_hodnota'\nWHERE id = 1;" },
+                  { label: 'DELETE', code: 'DELETE FROM tabulka\nWHERE id = 1;' },
+                  { label: 'CREATE TABLE', code: 'CREATE TABLE nova_tabulka (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  nazev TEXT NOT NULL,\n  hodnota REAL,\n  datum DATE DEFAULT CURRENT_DATE\n);' },
+                  { label: 'CREATE s FK', code: 'CREATE TABLE objednavky (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  uzivatel_id INTEGER REFERENCES uzivatele(id),\n  castka REAL NOT NULL\n);' },
+                  { label: 'Subquery', code: 'SELECT *\nFROM tabulka\nWHERE id IN (\n  SELECT id FROM jina_tabulka\n  WHERE podminka = 1\n);' },
+                  { label: 'HAVING', code: 'SELECT kategorie, COUNT(*) AS pocet\nFROM tabulka\nGROUP BY kategorie\nHAVING pocet > 5;' },
+                  { label: 'DROP TABLE', code: 'DROP TABLE IF EXISTS tabulka;' },
+                ].map(s => (
+                  <div key={s.label} className="sql-row"
+                    onClick={() => { const ed = editorRef.current; if (!ed) return; ed.setValue(ed.getValue() + '\n\n' + s.code); ed.focus() }}
+                    style={{ padding: '7px 12px', cursor: 'pointer', borderBottom: `1px solid ${D.border}10` }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: D.txtPri, marginBottom: 2 }}>{s.label}</div>
+                    <pre style={{ margin: 0, fontSize: 9, color: '#60A5FA', fontFamily: 'monospace', whiteSpace: 'pre-wrap', opacity: .8 }}>{s.code.slice(0, 60)}{s.code.length > 60 ? '…' : ''}</pre>
+                  </div>
                 ))}
               </div>
             )}
-            {/* Result content */}
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
-              {queryResults.length === 0 ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '20px', color: D.txtSec }}>
-                  <span style={{ fontSize: 28, opacity: .3 }}>🗄️</span>
-                  <div>
-                    <div style={{ fontSize: 13 }}>Spusť SQL dotaz (Ctrl+Enter)</div>
-                    <div style={{ fontSize: 11, opacity: .6 }}>SELECT, INSERT, CREATE TABLE — výsledky se zobrazí zde</div>
-                  </div>
-                </div>
-              ) : (() => {
-                const r = queryResults[activeResult] ?? queryResults[0]
-                if (!r) return null
-                return (
-                  <div>
-                    {/* Status bar */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
-                      <span style={{ fontSize: 11, fontFamily: 'monospace', color: D.txtSec, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.sql}>{r.sql.slice(0, 60)}{r.sql.length > 60 ? '…' : ''}</span>
-                      {r.error
-                        ? <span style={{ fontSize: 11, color: D.danger, fontWeight: 600 }}>❌ Chyba</span>
-                        : r.rows.length > 0
-                          ? <span style={{ fontSize: 11, color: D.success, fontWeight: 600 }}>✓ {r.rows.length} řádků · {fmtMs(r.ms)}</span>
-                          : <span style={{ fontSize: 11, color: D.success, fontWeight: 600 }}>✓ {r.rowsAffected} ovlivněno · {fmtMs(r.ms)}</span>
-                      }
-                      {r.rows.length > 0 && (
-                        <button onClick={() => exportCsv(r)} style={{ padding: '2px 8px', background: D.bgMid, color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 5, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>⬇ CSV</button>
-                      )}
-                    </div>
-                    {/* Error */}
-                    {r.error && (
-                      <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,.08)', borderBottom: `1px solid rgba(239,68,68,.2)` }}>
-                        <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: 12, color: '#FCA5A5', whiteSpace: 'pre-wrap' }}>{r.error}</pre>
+
+            {/* ── Historie ── */}
+            {rightTab === 'history' && (
+              <div style={{ padding: '8px 0' }}>
+                {queryHistory.length === 0
+                  ? <div style={{ color: D.txtSec, fontSize: 11, textAlign: 'center' as const, padding: '24px 16px' }}>Žádná historie dotazů</div>
+                  : queryHistory.map((h, i) => (
+                    <div key={i} className="sql-row"
+                      onClick={() => { editorRef.current?.setValue(h); editorRef.current?.focus() }}
+                      style={{ padding: '7px 12px', cursor: 'pointer', borderBottom: `1px solid ${D.border}15` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                        <span style={{ fontSize: 9, padding: '1px 5px', background: D.bgMid, borderRadius: 4, color: D.txtSec, fontFamily: 'monospace' }}>#{queryHistory.length - i}</span>
+                        <span style={{ fontSize: 9, color: D.txtSec }}>{h.trim().split('\n')[0].slice(0,6).toUpperCase()}</span>
                       </div>
-                    )}
-                    {/* Table */}
-                    {r.rows.length > 0 && (
+                      <pre style={{ margin: 0, fontSize: 9, color: D.txtSec, fontFamily: 'monospace', whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: 56, overflow: 'hidden' }}>{h.slice(0, 120)}{h.length > 120 ? '…' : ''}</pre>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+
+            {/* ── Data preview ── */}
+            {rightTab === 'data' && (
+              <div style={{ padding: '0' }}>
+                {!dataPreviewTable
+                  ? <div style={{ color: D.txtSec, fontSize: 11, textAlign: 'center' as const, padding: '24px 16px' }}>
+                      <div style={{ fontSize: 24, marginBottom: 8 }}>📊</div>
+                      Klikni na 👁 u tabulky<br/>pro náhled prvních 10 řádků
+                    </div>
+                  : <>
+                    <div style={{ padding: '7px 12px', borderBottom: `1px solid ${D.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#60A5FA' }}>{dataPreviewTable}</span>
+                      <span style={{ fontSize: 10, color: D.txtSec }}>{dataPreviewRows.rows.length} řádků</span>
+                      <button onClick={() => { const ed = editorRef.current; if (!ed) return; ed.setValue(`SELECT * FROM "${dataPreviewTable}" LIMIT 10;`); ed.focus() }}
+                        style={{ marginLeft: 'auto', padding: '2px 7px', background: accent+'20', color: accent, border: 'none', borderRadius: 5, fontSize: 9, cursor: 'pointer', fontFamily: 'inherit' }}>→ Editor</button>
+                    </div>
+                    {dataPreviewRows.cols.length > 0 ? (
                       <div style={{ overflowX: 'auto' }}>
-                        <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: '100%', fontFamily: 'monospace' }}>
-                          <thead>
-                            <tr>
-                              <th style={{ padding: '6px 12px', background: D.bgMid, color: D.txtSec, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', border: `1px solid ${D.border}`, textAlign: 'center' as const, minWidth: 40 }}>#</th>
-                              {r.columns.map((col, i) => (
-                                <th key={i} style={{ padding: '6px 12px', background: D.bgMid, color: D.txtSec, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', border: `1px solid ${D.border}`, textAlign: 'left' as const, whiteSpace: 'nowrap' }}>{col}</th>
-                              ))}
+                        <table style={{ borderCollapse: 'collapse', fontSize: 10, minWidth: '100%', fontFamily: 'monospace' }}>
+                          <thead><tr>
+                            {dataPreviewRows.cols.map((col, i) => <th key={i} style={{ padding: '4px 8px', background: D.bgMid, color: D.txtSec, fontSize: 9, fontWeight: 700, border: `1px solid ${D.border}`, textAlign: 'left' as const, whiteSpace: 'nowrap' }}>{col}</th>)}
+                          </tr></thead>
+                          <tbody>{dataPreviewRows.rows.map((row, ri) => (
+                            <tr key={ri} style={{ background: ri % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
+                              {row.map((cell, ci) => <td key={ci} style={{ padding: '3px 8px', border: `1px solid ${D.border}`, color: cell === null ? 'rgba(255,255,255,.25)' : D.txtPri, fontStyle: cell === null ? 'italic' : 'normal', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={String(cell ?? '')}>{cell === null ? 'NULL' : String(cell)}</td>)}
                             </tr>
-                          </thead>
-                          <tbody>
-                            {r.rows.map((row, ri) => (
-                              <tr key={ri} style={{ background: ri % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
-                                <td style={{ padding: '5px 12px', border: `1px solid ${D.border}`, color: 'rgba(255,255,255,.2)', fontSize: 10, textAlign: 'center' as const }}>{ri + 1}</td>
-                                {row.map((cell, ci) => (
-                                  <td key={ci} style={{ padding: '5px 12px', border: `1px solid ${D.border}`, color: cell === null ? 'rgba(255,255,255,.25)' : D.txtPri, fontStyle: cell === null ? 'italic' : 'normal', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={String(cell ?? '')}>
-                                    {cell === null ? 'NULL' : String(cell)}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
+                          ))}</tbody>
                         </table>
                       </div>
-                    )}
-                    {/* No rows for DML */}
-                    {!r.error && r.rows.length === 0 && (
-                      <div style={{ padding: '14px 16px', color: D.txtSec, fontSize: 12 }}>
-                        ✓ Příkaz proveden — {r.rowsAffected > 0 ? `${r.rowsAffected} řádků ovlivněno` : 'žádné výsledky'} — {fmtMs(r.ms)}
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-            </div>
+                    ) : <div style={{ padding: '12px', color: D.txtSec, fontSize: 11 }}>Tabulka je prázdná</div>}
+                  </>
+                }
+              </div>
+            )}
+
           </div>
         </div>
+
       </div>
     </DarkLayout>
   )
