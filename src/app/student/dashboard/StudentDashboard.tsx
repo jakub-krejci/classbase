@@ -1051,26 +1051,26 @@ export default function StudentDashboard({
                             label="SQL editor"
                             accent={accent}
                         />
-                        <SideIcon
-                            icon="📊"
+                        <SideIconImg
+                            src="/icons/flowchart.png"
                             href="/student/flowchart"
                             label="Flowchart editor"
                             accent={accent}
                         />
-                        <SideIcon
-                            icon="🧱"
+                        <SideIconImg
+                            src="/icons/3Dbuilder.png"
                             href="/student/builder"
                             label="3D Builder"
                             accent={accent}
                         />
-                        <SideIcon
-                            icon="🔬"
+                        <SideIconImg
+                            src="/icons/microbit.png"
                             href="/student/microbit"
                             label="Micro:bit Editor"
                             accent={accent}
                         />
-                        <SideIcon
-                            icon="🤖"
+                        <SideIconImg
+                            src="/icons/vex.png"
                             href="/student/vex"
                             label="Flowchart editor"
                             accent={accent}
@@ -1334,22 +1334,22 @@ export default function StudentDashboard({
                                             href: "/student/sql",
                                         },
                                         {
-                                            icon: "🔬",
+                                            icon: "/icons/microbit.png",
                                             label: "Spustit BBC micro:bit editor",
                                             href: "/student/microbit",
                                         },
                                         {
-                                            icon: "📊",
+                                            icon: "/icons/flowchart.png",
                                             label: "Spustit Flowchart editor",
                                             href: "/student/flowchart",
                                         },
                                         {
-                                            icon: "🧱",
+                                            icon: "/icons/3Dbuilder.png",
                                             label: "Spustit 3D Builder",
                                             href: "/student/builder",
                                         },
                                         {
-                                            icon: "🤖",
+                                            icon: "/icons/vex.png",
                                             label: "Spustit VEX IQ Robot editor",
                                             href: "/student/vex",
                                         },
