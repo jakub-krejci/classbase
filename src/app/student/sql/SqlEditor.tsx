@@ -356,7 +356,7 @@ export default function SqlEditor({ profile }: { profile: any }) {
               }
             }
           } catch {}
-          tables.push({ name: String(tname), columns: cols })
+          if (!String(tname).startsWith('sqlite_')) tables.push({ name: String(tname), columns: cols })
         }
       }
       setSchema(tables)
