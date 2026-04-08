@@ -1028,49 +1028,49 @@ export default function StudentDashboard({
                         />
                         {/* Editors */}
                         <SideIconImg
-                            src="/icons/menu_python.png"
+                            src="/icons/python.png"
                             href="/student/python"
                             label="Python editor"
                             accent={accent}
                         />
                         <SideIconImg
-                            src="/icons/menu_html.png"
+                            src="/icons/html.png"
                             href="/student/html"
                             label="HTML editor"
                             accent={accent}
                         />
                         <SideIconImg
-                            src="/icons/menu_jupyter.png"
+                            src="/icons/jupyter.png"
                             href="/student/jupyter"
                             label="Jupyter Notebook"
                             accent={accent}
                         />
                         <SideIconImg
-                            src="/icons/menu_sql.png"
+                            src="/icons/database.png"
                             href="/student/sql"
                             label="SQL editor"
                             accent={accent}
                         />
                         <SideIconImg
-                            src="/icons/menu_flowchart.png"
+                            icon="📊"
                             href="/student/flowchart"
                             label="Flowchart editor"
                             accent={accent}
                         />
                         <SideIconImg
-                            src="/icons/menu_3D.png"
+                            icon="🧱"
                             href="/student/builder"
-                            label="Flowchart editor"
+                            label="3D Builder"
                             accent={accent}
                         />
                         <SideIconImg
-                            src="/icons/menu_microbit.png"
+                            icon="🔬"
                             href="/student/microbit"
-                            label="Flowchart editor"
+                            label="Micro:bit Editor"
                             accent={accent}
                         />
                         <SideIconImg
-                            src="/icons/menu_vex.png"
+                            icon="🤖"
                             href="/student/vex"
                             label="Flowchart editor"
                             accent={accent}
