@@ -156,6 +156,10 @@ export default function SqlEditor({ profile }: { profile: any }) {
   const [centerTab, setCenterTab]       = useState<'editor'|'schema'>('editor')
   const [dataPreviewTable, setDataPreviewTable] = useState<string|null>(null)
   const [dataPreviewRows, setDataPreviewRows]   = useState<{cols:string[];rows:any[][]}>({cols:[],rows:[]})
+  const [resultsHeight, setResultsHeight] = useState(220)
+  const resultsResizeRef = useRef<{startY:number;startH:number}|null>(null)
+  const [erWidth, setErWidth]             = useState(42)  // percent
+  const erResizeRef = useRef<{startX:number;startW:number}|null>(null)
 
   // ── Monaco editor ─────────────────────────────────────────────────────────
   const editorContainerRef = useRef<HTMLDivElement>(null)
@@ -637,6 +641,20 @@ export default function SqlEditor({ profile }: { profile: any }) {
       const projs = await refreshProjects()
       const p = projs.find(x => x.key === script.project); if (p) setActiveProject(p)
       if (activeScript?.path === script.path) { const s = p?.scripts.find(x => x.path === newPath); if (s) setActiveScript(s) }
+    } else if (renameModal.type === 'project') {
+      const proj = renameModal.item as SqlProject
+      const newName = renameVal.trim()
+      // Rename all files in the project by moving them
+      const allFiles = [...proj.scripts.map(s => s.path)]
+      const dbPath = `zaci/${uid}/${proj.key}/${proj.key}.db`
+      allFiles.push(dbPath)
+      // We store project name in a metadata file
+      const metaPath = `zaci/${uid}/${proj.key}/_name.txt`
+      await pushText(metaPath, newName)
+      const projs = await refreshProjects()
+      const p = projs.find(x => x.key === proj.key)
+      if (p) setActiveProject(p)
+      flash('✓ Projekt přejmenován')
     }
     setRenameModal(null); setSaving(false)
   }
@@ -729,8 +747,8 @@ export default function SqlEditor({ profile }: { profile: any }) {
         </Modal>
       )}
       {renameModal && (
-        <Modal title="✏ Přejmenovat skript" onClose={() => setRenameModal(null)}>
-          <input value={renameVal} onChange={e => setRenameVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && renameVal.trim() && doRename()} autoFocus placeholder={(renameModal.item as SqlScript).name} style={{ ...modalInp, marginBottom: 14 }} />
+        <Modal title={renameModal.type === 'project' ? '✏ Přejmenovat projekt' : '✏ Přejmenovat skript'} onClose={() => setRenameModal(null)}>
+          <input value={renameVal} onChange={e => setRenameVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && renameVal.trim() && doRename()} autoFocus placeholder={renameModal.type === 'project' ? (renameModal.item as SqlProject).name : (renameModal.item as SqlScript).name} style={{ ...modalInp, marginBottom: 14 }} />
           <MBtns onOk={doRename} onCancel={() => setRenameModal(null)} label="Přejmenovat" disabled={!renameVal.trim()} />
         </Modal>
       )}
@@ -755,7 +773,7 @@ export default function SqlEditor({ profile }: { profile: any }) {
               <img src="/icons/database.png" alt="SQL" style={{ width: 18, height: 18, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: D.txtPri, lineHeight: 1.2 }}>SQLEdit</div>
-                <div style={{ fontSize: 9, color: D.txtSec, lineHeight: 1.2 }}>SQLite in-browser</div>
+                <div style={{ fontSize: 9, color: D.txtSec, lineHeight: 1.2 }}>by Jakub Krejčí</div>
               </div>
               {isDirty && <span style={{ fontSize: 9, color: D.warning, marginLeft: 'auto' }}>● neuloženo</span>}
             </div>
@@ -780,13 +798,14 @@ export default function SqlEditor({ profile }: { profile: any }) {
               : projects.map(proj => (
                   <div key={proj.key} style={{ marginBottom: 2 }}>
                     <div className="sql-row" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', background: proj.key === activeProject?.key ? accent+'10' : 'transparent' }}>
-                      <div onClick={() => { setExpandedProj(prev => { const n = new Set(prev); n.has(proj.key) ? n.delete(proj.key) : n.add(proj.key); return n }); openProject(proj) }}
+                      <div onClick={() => { setExpandedProj(prev => { const n = new Set(prev); n.has(proj.key) ? n.delete(proj.key) : n.add(proj.key); return n }) }}
                         style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, cursor: 'pointer' }}>
                         <span style={{ fontSize: 9, color: D.txtSec, display: 'inline-block', transform: expandedProj.has(proj.key) ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
                         <span style={{ fontSize: 12 }}>🗄️</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: proj.key === activeProject?.key ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</span>
+                        <span onClick={e => { e.stopPropagation(); openProject(proj); setExpandedProj(prev => { const n = new Set(prev); n.add(proj.key); return n }) }} style={{ fontSize: 11, fontWeight: 700, color: proj.key === activeProject?.key ? accent : D.txtPri, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.name}</span>
                       </div>
                       <div className="sql-acts" style={{ display: 'flex', gap: 1, opacity: 0, flexShrink: 0 }}>
+                        <button onClick={e => { e.stopPropagation(); setRenameModal({ type: 'project', item: proj }); setRenameVal(proj.name) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.txtSec, fontSize: 11 }} title="Přejmenovat">✏</button>
                         <button onClick={e => { e.stopPropagation(); setDeleteModal({ type: 'project', item: proj }) }} style={{ padding: '1px 4px', background: 'none', border: 'none', cursor: 'pointer', color: D.danger, fontSize: 11 }}>🗑</button>
                       </div>
                     </div>
@@ -826,6 +845,14 @@ export default function SqlEditor({ profile }: { profile: any }) {
               </span>
               <div style={{ flex: 1 }} />
               {!sqlReady && <span style={{ fontSize: 10, color: D.txtSec, display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, border: `2px solid ${D.border}`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .6s linear infinite' }} />Načítám…</span>}
+              <button onClick={() => setNewScriptModal(true)} disabled={!activeProject}
+                style={{ padding: '5px 10px', background: 'rgba(255,255,255,.04)', color: D.txtSec, border: `1px solid ${D.border}`, borderRadius: 7, fontSize: 11, cursor: activeProject ? 'pointer' : 'not-allowed', fontFamily: 'inherit', opacity: activeProject ? 1 : .4 }}>
+                + Nový dotaz
+              </button>
+              <button id="sql-save-btn2" onClick={saveScript} disabled={!activeProject || saving}
+                style={{ padding: '5px 10px', background: isDirty ? accent+'20' : 'rgba(255,255,255,.04)', color: isDirty ? accent : D.txtSec, border: `1px solid ${isDirty ? accent+'40' : D.border}`, borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: !activeProject || saving ? .4 : 1 }}>
+                {saving ? '…' : '💾 Uložit'}
+              </button>
               <button id="sql-run-btn" onClick={runSql} disabled={running || !dbRef.current}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 14px', background: running || !dbRef.current ? D.bgMid : accent, color: running || !dbRef.current ? D.txtSec : '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: running || !dbRef.current ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
                 {running ? <><div style={{ width: 11, height: 11, border: `2px solid rgba(255,255,255,.3)`, borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .6s linear infinite' }} />…</> : '▶ Spustit'}
@@ -833,8 +860,25 @@ export default function SqlEditor({ profile }: { profile: any }) {
             </div>
             {/* Monaco editor */}
             <div ref={editorContainerRef} style={{ flex: 1, background: '#0d1117', overflow: 'hidden', minHeight: 0 }} />
+          {/* Resize handle: editor ↕ results */}
+            <div
+              style={{ height: 6, background: 'rgba(255,255,255,.04)', borderTop: `1px solid ${D.border}`, borderBottom: `1px solid ${D.border}`, cursor: 'ns-resize', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onMouseEnter={e => (e.currentTarget.style.background = accent+'30')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.04)')}
+              onMouseDown={e => {
+                e.preventDefault()
+                resultsResizeRef.current = { startY: e.clientY, startH: resultsHeight }
+                const onMove = (ev: MouseEvent) => {
+                  const ref = resultsResizeRef.current; if (!ref) return
+                  setResultsHeight(Math.max(80, Math.min(500, ref.startH - (ev.clientY - ref.startY))))
+                }
+                const onUp = () => { resultsResizeRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
+              }}>
+              <div style={{ width: 28, height: 2, borderRadius: 2, background: 'rgba(255,255,255,.2)' }} />
+            </div>
             {/* Results */}
-            <div style={{ height: 220, flexShrink: 0, borderTop: `1px solid ${D.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ height: resultsHeight, flexShrink: 0, borderTop: 'none', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {queryResults.length > 1 && (
                 <div style={{ display: 'flex', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
                   {queryResults.map((r, i) => (
@@ -891,8 +935,30 @@ export default function SqlEditor({ profile }: { profile: any }) {
             </div>
           </div>
 
+          {/* Resize handle: editor ↔ ER */}
+          <div
+            style={{ width: 6, flexShrink: 0, background: 'rgba(255,255,255,.04)', borderLeft: `1px solid ${D.border}`, borderRight: `1px solid ${D.border}`, cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onMouseEnter={e => (e.currentTarget.style.background = accent+'30')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,.04)')}
+            onMouseDown={e => {
+              e.preventDefault()
+              const container = e.currentTarget.parentElement
+              const totalW = container?.clientWidth ?? 800
+              erResizeRef.current = { startX: e.clientX, startW: erWidth }
+              const onMove = (ev: MouseEvent) => {
+                const ref = erResizeRef.current; if (!ref) return
+                const dx = ev.clientX - ref.startX
+                const newPct = ref.startW - (dx / totalW * 100)
+                setErWidth(Math.max(20, Math.min(65, newPct)))
+              }
+              const onUp = () => { erResizeRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+              window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
+            }}>
+            <div style={{ width: 2, height: 24, borderRadius: 2, background: 'rgba(255,255,255,.2)' }} />
+          </div>
+
           {/* ER Diagram (right half of center) */}
-          <div style={{ width: '42%', flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#080a0f' }}>
+          <div style={{ width: `${erWidth}%`, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#080a0f' }}>
             <div style={{ padding: '7px 12px', borderBottom: `1px solid ${D.border}`, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: D.txtPri }}>ER Diagram</span>
               {schema.length > 0 && <span style={{ fontSize: 10, color: D.txtSec }}>{schema.length} tabulek</span>}
@@ -914,10 +980,11 @@ export default function SqlEditor({ profile }: { profile: any }) {
                 const pos = erPositions[tableName] ?? { x: 0, y: 0 }
                 erDragRef.current = { table: tableName, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y }
                 const onMove = (ev: MouseEvent) => {
-                  if (!erDragRef.current) return
-                  const dx = ev.clientX - erDragRef.current.startX
-                  const dy = ev.clientY - erDragRef.current.startY
-                  setErPositions(prev => ({ ...prev, [erDragRef.current!.table]: { x: Math.max(0, erDragRef.current!.origX + dx), y: Math.max(0, erDragRef.current!.origY + dy) } }))
+                  const ref = erDragRef.current
+                  if (!ref) return
+                  const dx = ev.clientX - ref.startX
+                  const dy = ev.clientY - ref.startY
+                  setErPositions(prev => ({ ...prev, [ref.table]: { x: Math.max(0, ref.origX + dx), y: Math.max(0, ref.origY + dy) } }))
                 }
                 const onUp = () => { erDragRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
                 window.addEventListener('mousemove', onMove)
