@@ -173,14 +173,14 @@ function ThreeViewport({
     meshMap.current.forEach((m,id)=>{ if(!curIds.has(id)){ ts.remove(m); meshMap.current.delete(id) } })
 
     for(const obj of scene.objects){
-      // Skip the invisible group marker object (identified by having label field = JSON of originals)
-      if(obj.groupedIds?.length&&obj.label&&!obj.groupId){
+      // Skip the invisible group marker (width=0.001 is the marker)
+      if(obj.groupedIds?.length&&obj.label&&obj.width<0.01){
         const old=meshMap.current.get(obj.id)
-        if(old){ ts.remove(old); meshMap.current.delete(obj.id) }
+        if(old){ T.current.scene.remove(old); meshMap.current.delete(obj.id) }
         continue
       }
-      const isGroupMarker=obj.groupedIds?.length&&!obj.groupId
-      const sel=selectedIds.has(obj.id)||(obj.groupId!=null&&selectedIds.has(obj.groupId??''))
+      // An object is "selected" if directly selected, or if its group marker is selected
+      const sel=selectedIds.has(obj.id)||(!!obj.groupId&&selectedIds.has(obj.groupId))
       const old=meshMap.current.get(obj.id)
       if(old){ ts.remove(old); old.geometry?.dispose(); old.material?.dispose() }
 
@@ -229,90 +229,126 @@ function ThreeViewport({
   },[scene,selectedIds,accent,showWireframe,toolMode])
 
   // ── gizmos ───────────────────────────────────────────────────────────────────
+  // Key insight: attach gizmos as children of the mesh so they rotate/move with it
   function buildGizmos(){
     const THREE=(window as any).THREE
     const {scene:ts}=T.current; if(!THREE||!ts) return
+
+    // Remove old gizmo group from scene
     if(gizmoGroup.current){ ts.remove(gizmoGroup.current); gizmoGroup.current=null }
+    // Remove old gizmos from all meshes
+    meshMap.current.forEach(mesh=>{
+      const old=mesh.getObjectByName('gizmo-group')
+      if(old) mesh.remove(old)
+    })
+
+    // Only show gizmos for single selection, and not for group markers
     if(selectedIds.size!==1) return
     const id=[...selectedIds][0]
-    const obj=scene.objects.find(o=>o.id===id); if(!obj) return
+    const obj=scene.objects.find(o=>o.id===id)
+    if(!obj||obj.label) return  // skip group markers (label = JSON snapshot)
+    if(obj.width<0.01) return   // also skip by size marker
 
-    const g=new THREE.Group(); g.name='gizmo-group'
-    const cx=obj.x, cy=obj.y+obj.height/2, cz=obj.z
+    const mesh=meshMap.current.get(id)
+    if(!mesh) return
+
+    // All gizmo positions are in LOCAL space of the mesh (mesh is already at obj center)
     const hw=obj.width/2, hh=obj.height/2, hd=obj.depth/2
 
-    // 8 scale handles — white cubes at corners
-    const hGeo=new THREE.BoxGeometry(0.14,0.14,0.14)
-    const hMat=new THREE.MeshBasicMaterial({color:0xffffff,depthTest:false})
+    const g=new THREE.Group(); g.name='gizmo-group'
+
+    // ── 8 corner scale handles (white cubes) ──────────────────────────────
+    const hGeo=new THREE.BoxGeometry(0.15,0.15,0.15)
     const corners=[
-      [ hw, hh, hd,'sx+y+z+'],[- hw, hh, hd,'sx-y+z+'],
+      [ hw, hh, hd,'sx+y+z+'],[-hw, hh, hd,'sx-y+z+'],
       [ hw, hh,-hd,'sx+y+z-'],[-hw, hh,-hd,'sx-y+z-'],
       [ hw,-hh, hd,'sx+y-z+'],[-hw,-hh, hd,'sx-y-z+'],
       [ hw,-hh,-hd,'sx+y-z-'],[-hw,-hh,-hd,'sx-y-z-'],
     ]
     corners.forEach(([ox,oy,oz,name])=>{
-      const h=new THREE.Mesh(hGeo,hMat.clone())
-      h.position.set(cx+(ox as number),cy+(oy as number),cz+(oz as number))
+      const h=new THREE.Mesh(hGeo,new THREE.MeshBasicMaterial({color:0xffffff,depthTest:false}))
+      h.position.set(ox as number,oy as number,oz as number)
       h.userData={ gizmo:'scale', handleName:name, objId:id }
       h.renderOrder=999; g.add(h)
     })
 
-    // Face handles — dark squares at center of each face for single-axis scaling
-    const fGeo=new THREE.BoxGeometry(0.13,0.13,0.04)
-    const fMat=new THREE.MeshBasicMaterial({color:0x111111,depthTest:false})
-    const faces=[
-      { pos:[hw+0.02, 0,  0], rot:[0,  0,  Math.PI/2], name:'face+x', axis:'x' as const },
-      { pos:[-hw-0.02, 0, 0], rot:[0,  0, -Math.PI/2], name:'face-x', axis:'x' as const },
-      { pos:[0,  hh+0.02, 0], rot:[0,  0,  0],          name:'face+y', axis:'y' as const },
-      { pos:[0, -hh-0.02, 0], rot:[Math.PI, 0, 0],      name:'face-y', axis:'y' as const },
-      { pos:[0,  0,  hd+0.02], rot:[Math.PI/2, 0, 0],   name:'face+z', axis:'z' as const },
-      { pos:[0,  0, -hd-0.02], rot:[-Math.PI/2, 0, 0],  name:'face-z', axis:'z' as const },
+    // ── 6 face handles (dark flat squares on each face center) ────────────
+    // Each face handle is a flat disc lying flush against its face
+    // We make them as thin boxes (0.02 thick) aligned to each face
+    const faceHandles=[
+      // [localPos, localRot(euler xyz), axis, name]
+      [[hw+0.01,  0,      0    ],[0,         0,  Math.PI/2],'x','face+x'],
+      [[-hw-0.01, 0,      0    ],[0,         0, -Math.PI/2],'x','face-x'],
+      [[0,        hh+0.01,0    ],[0,         0,  0        ],'y','face+y'],
+      [[0,       -hh-0.01,0    ],[Math.PI,   0,  0        ],'y','face-y'],
+      [[0,        0,      hd+0.01],[Math.PI/2,0, 0        ],'z','face+z'],
+      [[0,        0,     -hd-0.01],[-Math.PI/2,0,0        ],'z','face-z'],
     ]
-    faces.forEach(({pos,rot,name,axis})=>{
-      const fh=new THREE.Mesh(fGeo,new THREE.MeshBasicMaterial({color:0x222222,depthTest:false}))
-      fh.position.set(cx+pos[0],cy+pos[1],cz+pos[2])
-      fh.rotation.set(rot[0],rot[1],rot[2])
+    faceHandles.forEach(([pos,rot,axis,name])=>{
+      const fGeo=new THREE.BoxGeometry(0.22,0.22,0.02)
+      const fh=new THREE.Mesh(fGeo,new THREE.MeshBasicMaterial({color:0x111111,depthTest:false,transparent:true,opacity:0.85}))
+      const p=pos as number[]; const r=rot as number[]
+      fh.position.set(p[0],p[1],p[2])
+      fh.rotation.set(r[0],r[1],r[2])
       fh.userData={ gizmo:'face-scale', faceAxis:axis, faceName:name, objId:id }
       fh.renderOrder=998; g.add(fh)
     })
 
-    // lift handle — yellow triangle above
-    const lGeo=new THREE.ConeGeometry(0.12,0.28,3)
-    const lMat=new THREE.MeshBasicMaterial({color:0xffdd00,depthTest:false})
-    const liftH=new THREE.Mesh(lGeo,lMat)
-    liftH.position.set(cx, cy+hh+0.45, cz)
+    // ── Lift handle (yellow upward cone above object) ──────────────────────
+    const liftH=new THREE.Mesh(
+      new THREE.ConeGeometry(0.13,0.30,3),
+      new THREE.MeshBasicMaterial({color:0xffdd00,depthTest:false})
+    )
+    liftH.position.set(0, hh+0.50, 0)
     liftH.userData={ gizmo:'lift', objId:id }
     liftH.renderOrder=999; g.add(liftH)
 
-    // rotation handles — flat curved arrow discs per axis (decentní šipky)
-    // Arrow = cone (arrowhead) + thin box (shaft), grouped
-    function makeRotArrow(axis:'x'|'y'|'z', color:number, pos:[number,number,number]){
+    // ── Rotation handles: curved arc arrows per axis ───────────────────────
+    // Use a partial torus (arc) with arrowheads at both ends for bidirectional look
+    function makeArcArrow(axis:'x'|'y'|'z', color:number, offset:[number,number,number]){
       const ag=new THREE.Group()
-      // Shaft: thin elongated box
-      const shaftGeo=new THREE.BoxGeometry(0.06,0.3,0.06)
-      // Head: small cone
-      const headGeo=new THREE.ConeGeometry(0.09,0.18,6)
-      const mat=new THREE.MeshBasicMaterial({color,depthTest:false})
-      const shaft=new THREE.Mesh(shaftGeo,mat)
-      const head=new THREE.Mesh(headGeo,mat)
-      head.position.y=0.24
-      ag.add(shaft); ag.add(head)
-      // orient per axis
-      if(axis==='x') ag.rotation.z=-Math.PI/2
-      if(axis==='z') ag.rotation.x=Math.PI/2
-      ag.position.set(cx+pos[0],cy+pos[1],cz+pos[2])
       ag.userData={ gizmo:'rotate', rotAxis:axis, objId:id }
+
+      // Arc: partial torus (tube along 3/4 of a circle)
+      const arcGeo=new THREE.TorusGeometry(0.28,0.035,6,24,Math.PI*1.5)
+      const mat=new THREE.MeshBasicMaterial({color,depthTest:false})
+      const arc=new THREE.Mesh(arcGeo,mat)
+      ag.add(arc)
+
+      // Arrowhead 1 at start of arc (pointing CW)
+      const ah1=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.16,6),mat.clone())
+      ah1.position.set(0.28,0,0)
+      ah1.rotation.z=Math.PI/2
+      ag.add(ah1)
+
+      // Arrowhead 2 at end of arc (pointing CCW) — end of 270° = at (-radius,0)
+      const ah2=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.16,6),mat.clone())
+      ah2.position.set(-0.28,0.01,0)
+      ah2.rotation.z=-Math.PI/2
+      ag.add(ah2)
+
+      // Orient the arc plane to the correct axis
+      if(axis==='x'){ ag.rotation.z=Math.PI/2 }
+      if(axis==='z'){ ag.rotation.x=Math.PI/2 }
+      // Y axis is default (arc in XZ plane... actually torus is in XY by default — good for Y)
+
+      ag.position.set(offset[0],offset[1],offset[2])
       ag.renderOrder=999
-      // tag children for raycasting
       ag.traverse((c:any)=>{ if(c.isMesh) c.userData={ gizmo:'rotate', rotAxis:axis, objId:id } })
       return ag
     }
-    g.add(makeRotArrow('y',0x22cc22,[0, hh+0.55, 0]))
-    g.add(makeRotArrow('x',0xee3333,[hw+0.55, 0, 0]))
-    g.add(makeRotArrow('z',0x3333ee,[0, 0, hd+0.55]))
 
-    ts.add(g)
+    // Place rotation arcs at edges of the object
+    g.add(makeArcArrow('y',0x22cc22,[0, hh+0.55, 0]))     // green Y arc above
+    g.add(makeArcArrow('x',0xee3333,[hw+0.60, 0, 0]))     // red X arc on right
+    g.add(makeArcArrow('z',0x3333ee,[0, 0, hd+0.60]))     // blue Z arc in front
+
+    // Add gizmo group as CHILD of mesh — this ensures it moves & rotates with object
+    mesh.add(g)
     gizmoGroup.current=g
+
+    // Store ref for raycasting
+    gizmoRef.current={ group:g, objectId:id }
   }
 
   // ── helpers ──────────────────────────────────────────────────────────────────
@@ -323,12 +359,15 @@ function ThreeViewport({
 
   function raycastGroup(ndc:{x:number;y:number}){
     const THREE=(window as any).THREE
-    const {raycaster,camera,scene:ts}=T.current; if(!raycaster||!ts) return null
+    const {raycaster,camera}=T.current; if(!raycaster) return null
     raycaster.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),camera)
-    const g=ts.getObjectByName('gizmo-group'); if(!g) return null
-    const children:any[]=[]
-    g.traverse((c:any)=>{ if(c.isMesh) children.push(c) })
-    const hits=raycaster.intersectObjects(children,false)
+    // Gizmos are children of meshes — collect all gizmo meshes
+    const gizmoMeshes:any[]=[]
+    meshMap.current.forEach(mesh=>{
+      mesh.traverse((c:any)=>{ if(c.isMesh&&c.userData.gizmo) gizmoMeshes.push(c) })
+    })
+    if(gizmoMeshes.length===0) return null
+    const hits=raycaster.intersectObjects(gizmoMeshes,false)
     return hits.length>0?hits[0].object:null
   }
 
@@ -405,34 +444,34 @@ function ThreeViewport({
     // 2. check objects
     const hit=raycastObjects(ndc)
     if(hit){
-      const id=hit.object.userData.objectId
-      if(id){
-        onSelect(id, e.shiftKey)
-        const obj=scene.objects.find(o=>o.id===id)
-        if(obj){
+      const hitId=hit.object.userData.objectId
+      if(hitId){
+        const obj=scene.objects.find(o=>o.id===hitId)
+        // If clicked object belongs to a group, select the group marker instead
+        const effectiveId = obj?.groupId ?? hitId
+        onSelect(effectiveId, e.shiftKey)
+        const effectiveObj=scene.objects.find(o=>o.id===effectiveId)??obj
+        if(effectiveObj){
           if(toolMode==='move'){
-            const wp=getWorldXZ(e.clientX,e.clientY,obj.y)
+            const wp=getWorldXZ(e.clientX,e.clientY,0)
             drag.current={
-              mode:'drag-obj', objId:id,
+              mode:'drag-obj', objId:effectiveId,
               startWorldX:wp.x, startWorldZ:wp.z,
-              origX:obj.x, origZ:obj.z, planeY:obj.y
+              origX:effectiveObj.x, origZ:effectiveObj.z, planeY:0
             }
           } else if(toolMode==='rotate'){
-            // Direct object rotation with LMB drag (Y axis by default)
             const ang=Math.atan2(e.clientY-window.innerHeight/2, e.clientX-window.innerWidth/2)*180/Math.PI
             drag.current={
-              mode:'rot-h', objId:id, rotAxis:'y',
-              origRx:obj.rx, origRy:obj.ry, origRz:obj.rz, rotStart:ang
+              mode:'rot-h', objId:effectiveId, rotAxis:'y',
+              origRx:effectiveObj.rx??0, origRy:effectiveObj.ry??0, origRz:effectiveObj.rz??0, rotStart:ang
             }
           } else if(toolMode==='scale'){
-            // Direct uniform scale with LMB drag
             drag.current={
-              mode:'scale-h', objId:id, hName:'sx+y+z+',
-              origW:obj.width, origH:obj.height, origD:obj.depth,
+              mode:'scale-h', objId:effectiveId, hName:'sx+y+z+',
+              origW:effectiveObj.width, origH:effectiveObj.height, origD:effectiveObj.depth,
               startX:e.clientX, startY:e.clientY
             }
           }
-          // 'select' mode: just select, no drag
         }
         return
       }
@@ -470,7 +509,19 @@ function ThreeViewport({
       let nx=(d.origX??0)+(wp.x-(d.startWorldX??0))
       let nz=(d.origZ??0)+(wp.z-(d.startWorldZ??0))
       if(gridSettings.snap){ nx=snap(nx,gridSettings.snapSize); nz=snap(nz,gridSettings.snapSize) }
-      onUpdateObject(d.objId,{x:nx,z:nz})
+      const dx=nx-(d.origX??0), dz=nz-(d.origZ??0)
+      // Move constituent group members if this is a group
+      const groupMembers=scene.objects.filter(o=>o.groupId===d.objId)
+      if(groupMembers.length>0){
+        groupMembers.forEach(co=>{
+          const key='orig_'+co.id
+          if(!(drag.current as any)[key]) (drag.current as any)[key]={x:co.x,z:co.z}
+          const orig=(drag.current as any)[key]
+          onUpdateObject(co.id,{x:orig.x+dx, z:orig.z+dz})
+        })
+      } else {
+        onUpdateObject(d.objId,{x:nx,z:nz})
+      }
       return
     }
 
@@ -715,49 +766,46 @@ export default function BuilderEditor({profile}:{profile:any}){
   function mergeSelected(){
     if(selectedIds.size<2) return
     const selObjs=scene.objects.filter(o=>selectedIds.has(o.id))
-    // Use color of first non-hole object; holes keep their behaviour
     const baseColor=selObjs.find(o=>!o.isHole)?.color??selObjs[0].color
-    // Group: keep ALL original objects as originalObjects[], give each merged color
-    // The "merged" object is a special type that renders all sub-objects together
-    // It stores complete snapshot of originals for split
-    const merged:BuildObject={
-      id:newId(), type:'box',
-      x:0, y:0, z:0, rx:0, ry:0, rz:0,
-      width:2, height:2, depth:2,   // unused for groups
-      color:baseColor, isHole:false,
-      groupedIds:selObjs.map(o=>o.id),
-      // Store full originals as JSON in label field (hacky but no schema change needed)
-      label: JSON.stringify(selObjs)
-    }
+    const gid=newId()
+    // Snapshot originals for split
+    const snapshot=JSON.stringify(selObjs)
     setScene(prev=>({
       ...prev,
-      // Replace selected objects with their coloured copies (all same colour) + the invisible group marker
       objects:[
         ...prev.objects.filter(o=>!selectedIds.has(o.id)),
-        // Keep constituent objects but mark them as part of this group & unify color
-        ...selObjs.map(o=>({...o, color: o.isHole?o.color:baseColor, groupId:merged.id})),
-        // Add invisible group marker (used for selection/split)
-        merged,
+        // Keep all constituent objects, mark them with groupId, unify color
+        ...selObjs.map(o=>({...o, color:o.isHole?o.color:baseColor, groupId:gid})),
+        // Invisible group marker with snapshot
+        {
+          id:gid, type:'box' as ShapeType,
+          x:0, y:0, z:0, rx:0, ry:0, rz:0,
+          width:0.001, height:0.001, depth:0.001,
+          color:'transparent', isHole:false,
+          groupedIds:selObjs.map(o=>o.id),
+          label:snapshot,
+        }
       ]
     }))
-    setSelectedIds(new Set([merged.id])); setIsDirty(true)
+    setSelectedIds(new Set([gid])); setIsDirty(true)
   }
 
   function splitSelected(){
     if(!selectedObj?.groupedIds?.length||!selectedObj.label) return
     try{
       const originals:BuildObject[]=JSON.parse(selectedObj.label)
+      const gid=selectedObj.id
       setScene(prev=>({
         ...prev,
         objects:[
-          // Remove all constituents (they have groupId) and the group marker
-          ...prev.objects.filter(o=>o.groupId!==selectedObj.id && o.id!==selectedObj.id),
-          // Restore originals exactly as they were
+          ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
           ...originals
         ]
       }))
       setSelectedIds(new Set(originals.map(o=>o.id)))
-    }catch{ /* parse error, just remove groupedIds */ addOrUpdateObject(selectedObj.id,{groupedIds:undefined,label:undefined}) }
+    }catch{
+      addOrUpdateObject(selectedObj.id,{groupedIds:undefined,label:undefined})
+    }
     setIsDirty(true)
   }
 
