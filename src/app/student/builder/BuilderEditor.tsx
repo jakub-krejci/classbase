@@ -226,7 +226,12 @@ function ThreeViewport({
         mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
       }
       mesh.castShadow=true; mesh.receiveShadow=true
-      mesh.userData.objectId=obj.id
+      // CSG results + invisible holes → forward clicks to group marker
+      if(isGroupedHole||isCsgResult){
+        mesh.userData.objectId=obj.groupId??obj.id
+      } else {
+        mesh.userData.objectId=obj.id
+      }
 
       // black edge overlay (toggled by showEdges, off when wireframe mode active)
       if(!showWireframe&&!obj.wireframe&&showEdges){
@@ -811,11 +816,13 @@ export default function BuilderEditor({profile}:{profile:any}){
 
   const threeLoaded=true  // Three.js loaded via npm import
 
-  // ── Scene state ────────────────────────────────────────────────────────────
+  // ── Scene state + Undo/Redo ───────────────────────────────────────────────
   const [scene,setScene]           = useState<Scene>(emptyScene())
   const [selectedIds,setSelectedIds] = useState<Set<string>>(new Set())
   const [isDirty,setIsDirty]       = useState(false)
   const [toolMode,setToolMode]     = useState<ToolMode>('all')
+  const historyRef = useRef<Scene[]>([emptyScene()])
+  const historyIdxRef = useRef<number>(0)
   const [resetViewKey,setResetViewKey] = useState(0)
   const [showWireframe,setShowWireframe] = useState(false)
   const [showEdges,setShowEdges]         = useState(true)
@@ -826,18 +833,33 @@ export default function BuilderEditor({profile}:{profile:any}){
   const selectedId = selectedIds.size===1?[...selectedIds][0]:null
   const selectedObj= selectedId?scene.objects.find(o=>o.id===selectedId)??null:null
 
+  // Push scene to history and update
+  function pushHistory(newScene:Scene){
+    const h=historyRef.current
+    const idx=historyIdxRef.current
+    // Discard any redo future
+    historyRef.current=[...h.slice(0,idx+1),newScene].slice(-50) // max 50 steps
+    historyIdxRef.current=historyRef.current.length-1
+  }
+
   function addOrUpdateObject(id:string,partial:Partial<BuildObject>){
     setScene(prev=>{
       const ex=prev.objects.find(o=>o.id===id)
-      if(ex) return{...prev,objects:prev.objects.map(o=>o.id===id?{...o,...partial}:o)}
-      return{...prev,objects:[...prev.objects,{rx:0,ry:0,rz:0,...partial,id} as BuildObject]}
+      const next=ex
+        ?{...prev,objects:prev.objects.map(o=>o.id===id?{...o,...partial}:o)}
+        :{...prev,objects:[...prev.objects,{rx:0,ry:0,rz:0,...partial,id} as BuildObject]}
+      pushHistory(next)
+      return next
     })
     setIsDirty(true)
   }
 
   function deleteSelected(){
     if(selectedIds.size===0) return
-    setScene(prev=>({...prev,objects:prev.objects.filter(o=>!selectedIds.has(o.id))}))
+    setScene(prev=>{
+      const next={...prev,objects:prev.objects.filter(o=>!selectedIds.has(o.id))}
+      pushHistory(next); return next
+    })
     setSelectedIds(new Set()); setIsDirty(true)
   }
 
@@ -985,19 +1007,53 @@ export default function BuilderEditor({profile}:{profile:any}){
     if(!selectedObj?.groupedIds?.length) return
     const gid=selectedObj.id
     const marker=scene.objects.find(o=>o.id===gid)
-    // Restore exact originals from SNAP: snapshot in group marker label
-    const snapLabel=marker?.label?.startsWith('SNAP:')?marker.label.slice(5):null
-    let originals:BuildObject[]=[]
-    try{ if(snapLabel) originals=JSON.parse(snapLabel) }catch{}
-    setScene(prev=>({
-      ...prev,
-      objects:[
-        ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
-        ...originals,
-      ]
-    }))
-    setSelectedIds(new Set(originals.map(o=>o.id)))
+    const isCsgGroup=scene.objects.some(o=>o.groupId===gid&&o.label&&!o.label.startsWith('SNAP:'))
+
+    if(isCsgGroup){
+      // CSG group: geometry is baked, restore from SNAP: snapshot
+      const snapLabel=marker?.label?.startsWith('SNAP:')?marker.label.slice(5):null
+      let originals:BuildObject[]=[]
+      try{ if(snapLabel) originals=JSON.parse(snapLabel) }catch{}
+      setScene(prev=>({
+        ...prev,
+        objects:[
+          ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
+          ...originals,
+        ]
+      }))
+      setSelectedIds(new Set(originals.map(o=>o.id)))
+    } else {
+      // Visual group: restore CURRENT state (preserves size/rotation changes)
+      setScene(prev=>{
+        const members=prev.objects
+          .filter(o=>o.groupId===gid)
+          .map(o=>({...o, groupId:undefined, label:undefined}))
+        return {
+          ...prev,
+          objects:[
+            ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
+            ...members,
+          ]
+        }
+      })
+      setSelectedIds(new Set(selectedObj.groupedIds))
+    }
     setIsDirty(true)
+  }
+
+  function undo(){
+    const idx=historyIdxRef.current
+    if(idx<=0) return
+    historyIdxRef.current=idx-1
+    setScene(historyRef.current[historyIdxRef.current])
+    setSelectedIds(new Set())
+  }
+  function redo(){
+    const idx=historyIdxRef.current
+    if(idx>=historyRef.current.length-1) return
+    historyIdxRef.current=idx+1
+    setScene(historyRef.current[historyIdxRef.current])
+    setSelectedIds(new Set())
   }
 
   function handleSelect(id:string|null,add=false){
@@ -1105,6 +1161,8 @@ export default function BuilderEditor({profile}:{profile:any}){
       if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}
       if((e.key==='Delete'||e.key==='Backspace')&&document.activeElement===document.body) deleteSelected()
       if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();duplicateSelected()}
+      if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo()}
+      if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo()}
     }
     window.addEventListener('keydown',onKey)
     return()=>window.removeEventListener('keydown',onKey)
@@ -1294,6 +1352,14 @@ export default function BuilderEditor({profile}:{profile:any}){
               🧲 Snap{gridSettings.snap?` ${gridSettings.snapSize}`:''}
             </button>
             <div style={{flex:1}}/>
+            <button onClick={undo} title="Zpět (Ctrl+Z)"
+              style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:historyIdxRef.current>0?D.txtPri:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit',opacity:historyIdxRef.current>0?1:.4}}>
+              ↩ Zpět
+            </button>
+            <button onClick={redo} title="Dopředu (Ctrl+Y)"
+              style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:historyIdxRef.current<historyRef.current.length-1?D.txtPri:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit',opacity:historyIdxRef.current<historyRef.current.length-1?1:.4}}>
+              ↪ Dopředu
+            </button>
             <button onClick={()=>setResetViewKey(p=>p+1)}
               style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}
               title="Reset pohledu na výchozí">⌂ Reset pohledu</button>
