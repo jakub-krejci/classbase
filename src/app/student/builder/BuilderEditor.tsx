@@ -19,7 +19,7 @@ function newId() { return Math.random().toString(36).slice(2,10) }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type ShapeType = 'box'|'sphere'|'cylinder'|'cone'|'pyramid'|'text'
-type ToolMode  = 'select'|'move'|'rotate'|'scale'
+type ToolMode  = 'all'|'select'|'move'|'rotate'|'scale'
 
 interface BuildObject {
   id: string; type: ShapeType
@@ -53,7 +53,7 @@ function ThreeViewport({
   onSelect, onMultiSelect, onUpdateObject, accent, resetViewKey,
 }:{
   scene:Scene; selectedIds:Set<string>; toolMode:ToolMode
-  gridSettings:GridSettings; showWireframe:boolean
+  gridSettings:GridSettings; showWireframe:boolean; showEdges:boolean
   onSelect:(id:string|null,add?:boolean)=>void
   onMultiSelect:(ids:string[])=>void
   onUpdateObject:(id:string,p:Partial<BuildObject>)=>void
@@ -195,9 +195,13 @@ function ThreeViewport({
         default:         geo=new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
       }
 
-      const mat = obj.isHole
-        ? new THREE.MeshStandardMaterial({ color:0x4488ff, transparent:true, opacity:0.25, wireframe: showWireframe||obj.wireframe })
-        : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
+      // Holes in a merged group become invisible (they conceptually carve the solid)
+      const isGroupedHole=obj.isHole&&!!obj.groupId
+      const mat = isGroupedHole
+        ? new THREE.MeshStandardMaterial({ color:0x000000, transparent:true, opacity:0.0, wireframe:false })
+        : obj.isHole
+          ? new THREE.MeshStandardMaterial({ color:0x4488ff, transparent:true, opacity:0.25, wireframe: showWireframe||obj.wireframe })
+          : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
 
       const mesh=new THREE.Mesh(geo,mat)
       mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
@@ -205,8 +209,8 @@ function ThreeViewport({
       mesh.castShadow=true; mesh.receiveShadow=true
       mesh.userData.objectId=obj.id
 
-      // black edge overlay (always visible unless wireframe mode)
-      if(!showWireframe&&!obj.wireframe){
+      // black edge overlay (toggled by showEdges, off when wireframe mode active)
+      if(!showWireframe&&!obj.wireframe&&showEdges){
         const eg=new THREE.EdgesGeometry(geo)
         const em=new THREE.LineBasicMaterial({ color: sel ? new THREE.Color(accent) : 0x000000, transparent:true, opacity: sel?1:0.4 })
         mesh.add(new THREE.LineSegments(eg,em))
@@ -226,7 +230,7 @@ function ThreeViewport({
     }
 
     buildGizmos()
-  },[scene,selectedIds,accent,showWireframe,toolMode])
+  },[scene,selectedIds,accent,showWireframe,showEdges,toolMode])
 
   // ── gizmos ───────────────────────────────────────────────────────────────────
   // Key insight: attach gizmos as children of the mesh so they rotate/move with it
@@ -242,20 +246,58 @@ function ThreeViewport({
       if(old) mesh.remove(old)
     })
 
-    // Only show gizmos for single selection, and not for group markers
+    // Only show gizmos for single selection
     if(selectedIds.size!==1) return
     const id=[...selectedIds][0]
     const obj=scene.objects.find(o=>o.id===id)
-    if(!obj||obj.label) return  // skip group markers (label = JSON snapshot)
-    if(obj.width<0.01) return   // also skip by size marker
+    if(!obj) return
 
-    const mesh=meshMap.current.get(id)
-    if(!mesh) return
+    let targetMesh:any=null
+    let hw:number, hh:number, hd:number
 
-    // All gizmo positions are in LOCAL space of the mesh (mesh is already at obj center)
-    const hw=obj.width/2, hh=obj.height/2, hd=obj.depth/2
+    if(obj.label&&obj.width<0.01){
+      // It's a group marker — build gizmo spanning all constituent meshes
+      const members=scene.objects.filter(o=>o.groupId===id)
+      if(members.length===0) return
+      // Compute bounding box of all members
+      let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity
+      members.forEach(m=>{
+        minX=Math.min(minX,m.x-m.width/2); maxX=Math.max(maxX,m.x+m.width/2)
+        minY=Math.min(minY,m.y);           maxY=Math.max(maxY,m.y+m.height)
+        minZ=Math.min(minZ,m.z-m.depth/2); maxZ=Math.max(maxZ,m.z+m.depth/2)
+      })
+      hw=(maxX-minX)/2; hh=(maxY-minY)/2; hd=(maxZ-minZ)/2
+      const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2
+      // Use first constituent mesh as host, but adjust gizmo position globally
+      targetMesh=meshMap.current.get(members[0].id)
+      if(!targetMesh) return
+      // Create gizmo at world position, attach to scene directly (not mesh child)
+      // to avoid inheriting mesh transform for groups
+      const g=new THREE.Group(); g.name='gizmo-group'
+      // Build gizmo content (same as below but at world coords)
+      _buildGizmoContent(g,id,hw,hh,hd,cx,cy,cz,true,THREE)
+      T.current.scene.add(g)
+      gizmoGroup.current=g
+      return
+    }
+
+    if(obj.width<0.01) return
+    targetMesh=meshMap.current.get(id)
+    if(!targetMesh) return
+    hw=obj.width/2; hh=obj.height/2; hd=obj.depth/2
 
     const g=new THREE.Group(); g.name='gizmo-group'
+    _buildGizmoContent(g,id,hw,hh,hd,0,0,0,false,THREE)
+    // Add gizmo group as CHILD of mesh — this ensures it moves & rotates with object
+    targetMesh.add(g)
+    gizmoGroup.current=g
+  }
+
+  // ── helper: build gizmo content (shared between regular and group gizmos) ──
+  function _buildGizmoContent(
+    g:any, id:string, hw:number, hh:number, hd:number,
+    wx:number, wy:number, wz:number, worldSpace:boolean, THREE:any
+  ){
 
     // ── 8 corner scale handles (white cubes) ──────────────────────────────
     const hGeo=new THREE.BoxGeometry(0.15,0.15,0.15)
@@ -267,29 +309,26 @@ function ThreeViewport({
     ]
     corners.forEach(([ox,oy,oz,name])=>{
       const h=new THREE.Mesh(hGeo,new THREE.MeshBasicMaterial({color:0xffffff,depthTest:false}))
-      h.position.set(ox as number,oy as number,oz as number)
+      h.position.set((ox as number)+(worldSpace?wx:0),(oy as number)+(worldSpace?wy:0),(oz as number)+(worldSpace?wz:0))
       h.userData={ gizmo:'scale', handleName:name, objId:id }
       h.renderOrder=999; g.add(h)
     })
 
-    // ── 6 face handles (dark flat squares on each face center) ────────────
-    // Each face handle is a flat disc lying flush against its face
-    // We make them as thin boxes (0.02 thick) aligned to each face
+    // ── 6 face handles — same white cube shape as corner handles, on face centers ──
+    const fGeo=new THREE.BoxGeometry(0.15,0.15,0.15)
+    const fMat=new THREE.MeshBasicMaterial({color:0xdddddd,depthTest:false})
     const faceHandles=[
-      // [localPos, localRot(euler xyz), axis, name]
-      [[hw+0.01,  0,      0    ],[0,         0,  Math.PI/2],'x','face+x'],
-      [[-hw-0.01, 0,      0    ],[0,         0, -Math.PI/2],'x','face-x'],
-      [[0,        hh+0.01,0    ],[0,         0,  0        ],'y','face+y'],
-      [[0,       -hh-0.01,0    ],[Math.PI,   0,  0        ],'y','face-y'],
-      [[0,        0,      hd+0.01],[Math.PI/2,0, 0        ],'z','face+z'],
-      [[0,        0,     -hd-0.01],[-Math.PI/2,0,0        ],'z','face-z'],
+      [[hw,   0,   0  ],'x','face+x'],
+      [[-hw,  0,   0  ],'x','face-x'],
+      [[0,    hh,  0  ],'y','face+y'],
+      [[0,   -hh,  0  ],'y','face-y'],
+      [[0,    0,   hd ],'z','face+z'],
+      [[0,    0,  -hd ],'z','face-z'],
     ]
-    faceHandles.forEach(([pos,rot,axis,name])=>{
-      const fGeo=new THREE.BoxGeometry(0.22,0.22,0.02)
-      const fh=new THREE.Mesh(fGeo,new THREE.MeshBasicMaterial({color:0x111111,depthTest:false,transparent:true,opacity:0.85}))
-      const p=pos as number[]; const r=rot as number[]
-      fh.position.set(p[0],p[1],p[2])
-      fh.rotation.set(r[0],r[1],r[2])
+    faceHandles.forEach(([pos,axis,name])=>{
+      const fh=new THREE.Mesh(fGeo,new THREE.MeshBasicMaterial({color:0xaaddff,depthTest:false}))
+      const p=pos as number[]
+      fh.position.set(p[0]+(worldSpace?wx:0),p[1]+(worldSpace?wy:0),p[2]+(worldSpace?wz:0))
       fh.userData={ gizmo:'face-scale', faceAxis:axis, faceName:name, objId:id }
       fh.renderOrder=998; g.add(fh)
     })
@@ -299,7 +338,7 @@ function ThreeViewport({
       new THREE.ConeGeometry(0.13,0.30,3),
       new THREE.MeshBasicMaterial({color:0xffdd00,depthTest:false})
     )
-    liftH.position.set(0, hh+0.50, 0)
+    liftH.position.set(worldSpace?wx:0, hh+0.50+(worldSpace?wy:0), worldSpace?wz:0)
     liftH.userData={ gizmo:'lift', objId:id }
     liftH.renderOrder=999; g.add(liftH)
 
@@ -339,13 +378,11 @@ function ThreeViewport({
     }
 
     // Place rotation arcs at edges of the object
-    g.add(makeArcArrow('y',0x22cc22,[0, hh+0.55, 0]))     // green Y arc above
-    g.add(makeArcArrow('x',0xee3333,[hw+0.60, 0, 0]))     // red X arc on right
-    g.add(makeArcArrow('z',0x3333ee,[0, 0, hd+0.60]))     // blue Z arc in front
+    const wo:[number,number,number]=worldSpace?[wx,wy,wz]:[0,0,0]
+    g.add(makeArcArrow('y',0x22cc22,[wo[0], hh+0.55+wo[1], wo[2]]))
+    g.add(makeArcArrow('x',0xee3333,[hw+0.60+wo[0], wo[1], wo[2]]))
+    g.add(makeArcArrow('z',0x3333ee,[wo[0], wo[1], hd+0.60+wo[2]]))
 
-    // Add gizmo group as CHILD of mesh — this ensures it moves & rotates with object
-    mesh.add(g)
-    gizmoGroup.current=g
   }
 
   // ── helpers ──────────────────────────────────────────────────────────────────
@@ -356,13 +393,18 @@ function ThreeViewport({
 
   function raycastGroup(ndc:{x:number;y:number}){
     const THREE=(window as any).THREE
-    const {raycaster,camera}=T.current; if(!raycaster) return null
+    const {raycaster,camera,scene:ts}=T.current; if(!raycaster) return null
     raycaster.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),camera)
-    // Gizmos are children of meshes — collect all gizmo meshes
     const gizmoMeshes:any[]=[]
+    // Check mesh children (for regular objects)
     meshMap.current.forEach(mesh=>{
       mesh.traverse((c:any)=>{ if(c.isMesh&&c.userData.gizmo) gizmoMeshes.push(c) })
     })
+    // Also check scene-level gizmo groups (for groups in world space)
+    if(ts){
+      const sg=ts.getObjectByName('gizmo-group')
+      if(sg) sg.traverse((c:any)=>{ if(c.isMesh&&c.userData.gizmo) gizmoMeshes.push(c) })
+    }
     if(gizmoMeshes.length===0) return null
     const hits=raycaster.intersectObjects(gizmoMeshes,false)
     return hits.length>0?hits[0].object:null
@@ -449,7 +491,7 @@ function ThreeViewport({
         onSelect(effectiveId, e.shiftKey)
         const effectiveObj=scene.objects.find(o=>o.id===effectiveId)??obj
         if(effectiveObj){
-          if(toolMode==='move'){
+          if(toolMode==='move'||toolMode==='all'){
             const wp=getWorldXZ(e.clientX,e.clientY,0)
             drag.current={
               mode:'drag-obj', objId:effectiveId,
@@ -724,9 +766,10 @@ export default function BuilderEditor({profile}:{profile:any}){
   const [scene,setScene]           = useState<Scene>(emptyScene())
   const [selectedIds,setSelectedIds] = useState<Set<string>>(new Set())
   const [isDirty,setIsDirty]       = useState(false)
-  const [toolMode,setToolMode]     = useState<ToolMode>('select')
+  const [toolMode,setToolMode]     = useState<ToolMode>('all')
   const [resetViewKey,setResetViewKey] = useState(0)
   const [showWireframe,setShowWireframe] = useState(false)
+  const [showEdges,setShowEdges]         = useState(true)
   const [gridSettings,setGridSettings] = useState<GridSettings>({
     visible:true,size:20,divisions:20,snap:false,snapSize:0.5
   })
@@ -940,7 +983,7 @@ export default function BuilderEditor({profile}:{profile:any}){
   }
 
   const tools:[ToolMode,string,string][]=[
-    ['select','↖','Výběr'],['move','✥','Přesun'],['rotate','↻','Rotace'],['scale','⤢','Měřítko']
+    ['all','✦','Vše'],['select','↖','Výběr'],['move','✥','Přesun'],['rotate','↻','Rotace'],['scale','⤢','Měřítko']
   ]
 
   return (
@@ -1082,7 +1125,13 @@ export default function BuilderEditor({profile}:{profile:any}){
               title="Smazat (Del)">🗑 Smazat</button>
             <div style={{width:1,height:20,background:D.border}}/>
             <button onClick={()=>setShowWireframe(p=>!p)}
-              style={{padding:'4px 9px',background:showWireframe?accent+'20':'rgba(255,255,255,.04)',color:showWireframe?accent:D.txtSec,border:`1px solid ${showWireframe?accent+'50':D.border}`,borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>
+              style={{padding:'4px 9px',background:showWireframe?accent+'20':'rgba(255,255,255,.04)',color:showWireframe?accent:D.txtSec,border:`1px solid ${showWireframe?accent+'50':D.border}`,borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}
+              title={showWireframe?'Wireframe ZAP — klikni pro hladký povrch':'Wireframe VYP — klikni pro drátěný model'}>
+              ⬡ {showWireframe?'Wireframe':'Hladký'}
+            </button>
+            <button onClick={()=>setShowEdges(p=>!p)}
+              style={{padding:'4px 9px',background:showEdges?accent+'20':'rgba(255,255,255,.04)',color:showEdges?accent:D.txtSec,border:`1px solid ${showEdges?accent+'50':D.border}`,borderRadius:6,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}
+              title="Zvýraznění hran objektů">
               ⬡ Hrany
             </button>
             <button onClick={()=>setGridSettings(p=>({...p,visible:!p.visible}))}
@@ -1117,7 +1166,7 @@ export default function BuilderEditor({profile}:{profile:any}){
             ):(
               <ThreeViewport
                 scene={scene} selectedIds={selectedIds} toolMode={toolMode}
-                gridSettings={gridSettings} showWireframe={showWireframe}
+                gridSettings={gridSettings} showWireframe={showWireframe} showEdges={showEdges}
                 onSelect={handleSelect} onMultiSelect={handleMultiSelect}
                 onUpdateObject={addOrUpdateObject} accent={accent} resetViewKey={resetViewKey}
               />
