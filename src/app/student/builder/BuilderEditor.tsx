@@ -871,7 +871,30 @@ export default function BuilderEditor({profile}:{profile:any}){
     const holes  = selObjs.filter(o=>o.isHole)
     const solids = selObjs.filter(o=>!o.isHole)
 
-    // Dynamically import three-bvh-csg (npm package)
+    // ── Case A: no holes → visual group only (no CSG needed) ─────────────────
+    if(holes.length===0){
+      setScene(prev=>({
+        ...prev,
+        objects:[
+          ...prev.objects.filter(o=>!selectedIds.has(o.id)),
+          // Keep constituent objects with unified color and groupId
+          ...selObjs.map(o=>({...o, color:baseColor, groupId:gid})),
+          // Invisible group marker
+          {
+            id:gid, type:'box' as ShapeType,
+            x:0, y:0, z:0, rx:0, ry:0, rz:0,
+            width:0.001, height:0.001, depth:0.001,
+            color:'transparent', isHole:false,
+            groupedIds:selObjs.map(o=>o.id),
+            label:'SNAP:'+snapshot,
+          }
+        ]
+      }))
+      setSelectedIds(new Set([gid])); setIsDirty(true)
+      return
+    }
+
+    // ── Case B: has holes → run CSG subtraction ───────────────────────────────
     let Evaluator:any, SUBTRACTION:any, Brush:any
     try {
       const mod = await import('three-bvh-csg')
@@ -880,11 +903,10 @@ export default function BuilderEditor({profile}:{profile:any}){
       Brush       = mod.Brush
     } catch(e) {
       console.error('three-bvh-csg load failed', e)
-      alert('CSG knihovna se nepodařila načíst. Zkontroluj konzoli.')
+      alert('CSG knihovna se nepodařila načíst.')
       return
     }
 
-    // Build a Three.js geometry for a BuildObject
     function buildGeo(obj:BuildObject):any {
       switch(obj.type){
         case 'sphere':   return new THREE.SphereGeometry(obj.width/2, obj.radialSegments??32, 16)
@@ -895,7 +917,6 @@ export default function BuilderEditor({profile}:{profile:any}){
       }
     }
 
-    // Create a Brush with world-space transform applied
     function makeBrush(obj:BuildObject):any {
       const geo = buildGeo(obj)
       const mat = new THREE.MeshStandardMaterial()
@@ -920,23 +941,23 @@ export default function BuilderEditor({profile}:{profile:any}){
       let brush:any = makeBrush(solid)
       for(const hole of holes){
         try {
-          const holeBrush = makeBrush(hole)
-          brush = evaluator.evaluate(brush, holeBrush, SUBTRACTION)
+          brush = evaluator.evaluate(brush, makeBrush(hole), SUBTRACTION)
         } catch(e) {
           console.warn('CSG subtraction failed', e)
         }
       }
+      // CSG result: label = serialized geometry (no SNAP: prefix), position baked in
       resultObjects.push({
         id:newId(), type:'box' as ShapeType,
         x:0, y:0, z:0, rx:0, ry:0, rz:0,
         width:solid.width, height:solid.height, depth:solid.depth,
         color:baseColor, isHole:false, groupId:gid,
-        label:serializeGeo(brush.geometry),   // CSG result geometry (no prefix = CSG geo)
+        label:serializeGeo(brush.geometry),
         radialSegments:solid.radialSegments,
       } as BuildObject)
     }
 
-    // Keep holes in group (rendered as invisible)
+    // Holes stay in group as invisible members (for split restoration)
     holes.forEach(hole=>{
       resultObjects.push({...hole, groupId:gid})
     })
