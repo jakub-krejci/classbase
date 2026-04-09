@@ -32,6 +32,7 @@ interface BuildObject {
   groupedIds?: string[]
   label?: string
   groupId?: string
+  clipPlanes?: string  // JSON array of clip plane normals+constants
 }
 interface Scene { objects: BuildObject[]; groups: {id:string;objectIds:string[]}[] }
 interface GridSettings { visible:boolean; size:number; divisions:number; snap:boolean; snapSize:number }
@@ -203,6 +204,15 @@ function ThreeViewport({
           ? new THREE.MeshStandardMaterial({ color:0x4488ff, transparent:true, opacity:0.25, wireframe: showWireframe||obj.wireframe })
           : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
 
+      // Apply clip planes if this solid has holes cutting into it
+      if(obj.clipPlanes&&!obj.isHole){
+        try{
+          const planes=JSON.parse(obj.clipPlanes)
+          mat.clippingPlanes=planes.map((p:any)=>new THREE.Plane(new THREE.Vector3(p.nx,p.ny,p.nz),p.constant))
+          mat.clipShadows=true
+          T.current.renderer.localClippingEnabled=true
+        }catch{}
+      }
       const mesh=new THREE.Mesh(geo,mat)
       mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
       mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
@@ -326,7 +336,7 @@ function ThreeViewport({
       [[0,    0,  -hd ],'z','face-z'],
     ]
     faceHandles.forEach(([pos,axis,name])=>{
-      const fh=new THREE.Mesh(fGeo,new THREE.MeshBasicMaterial({color:0xaaddff,depthTest:false}))
+      const fh=new THREE.Mesh(fGeo,new THREE.MeshBasicMaterial({color:0x111111,depthTest:false}))
       const p=pos as number[]
       fh.position.set(p[0]+(worldSpace?wx:0),p[1]+(worldSpace?wy:0),p[2]+(worldSpace?wz:0))
       fh.userData={ gizmo:'face-scale', faceAxis:axis, faceName:name, objId:id }
@@ -344,9 +354,9 @@ function ThreeViewport({
 
     // ── Rotation handles: curved arc arrows per axis ───────────────────────
     // Use a partial torus (arc) with arrowheads at both ends for bidirectional look
-    function makeArcArrow(axis:'x'|'y'|'z', color:number, offset:[number,number,number]){
+    function makeArcArrow(axis:'rx'|'ry'|'rz', color:number, offset:[number,number,number]){
       const ag=new THREE.Group()
-      ag.userData={ gizmo:'rotate', rotAxis:axis, objId:id }
+      ag.userData={ gizmo:'rotate', rotAxis:axis.slice(1), objId:id }
 
       // Arc: partial torus (tube along 3/4 of a circle)
       const arcGeo=new THREE.TorusGeometry(0.28,0.035,6,24,Math.PI*1.5)
@@ -366,22 +376,28 @@ function ThreeViewport({
       ah2.rotation.z=-Math.PI/2
       ag.add(ah2)
 
-      // Orient the arc plane to the correct axis
-      if(axis==='x'){ ag.rotation.z=Math.PI/2 }
-      if(axis==='z'){ ag.rotation.x=Math.PI/2 }
-      // Y axis is default (arc in XZ plane... actually torus is in XY by default — good for Y)
+      // Orient the arc to rotate around the correct world axis:
+      // RX: arc in YZ plane (torus rotated 90° around Z)
+      // RY: arc in XZ plane (torus rotated 90° around X)  
+      // RZ: arc in XY plane (default torus orientation)
+      if(axis==='rx'){ ag.rotation.z=Math.PI/2 }
+      if(axis==='ry'){ ag.rotation.x=Math.PI/2 }
+      // rz: default XY plane — no rotation needed
 
       ag.position.set(offset[0],offset[1],offset[2])
       ag.renderOrder=999
-      ag.traverse((c:any)=>{ if(c.isMesh) c.userData={ gizmo:'rotate', rotAxis:axis, objId:id } })
+      ag.traverse((c:any)=>{ if(c.isMesh) c.userData={ gizmo:'rotate', rotAxis:axis.slice(1), objId:id } })
       return ag
     }
 
-    // Place rotation arcs at edges of the object
+    // Place rotation arcs — colors match the RX/RY/RZ labels in the settings panel
+    // RX=green, RY=blue, RZ=red (same as rx=red, ry=green, rz=blue in settings)
+    // Wait — settings panel has: rx=#cc4444(red), ry=#44cc44(green), rz=#4444cc(blue)
+    // So: green arc = RY, blue arc = RZ, red arc = RX
     const wo:[number,number,number]=worldSpace?[wx,wy,wz]:[0,0,0]
-    g.add(makeArcArrow('y',0x22cc22,[wo[0], hh+0.55+wo[1], wo[2]]))
-    g.add(makeArcArrow('x',0xee3333,[hw+0.60+wo[0], wo[1], wo[2]]))
-    g.add(makeArcArrow('z',0x3333ee,[wo[0], wo[1], hd+0.60+wo[2]]))
+    g.add(makeArcArrow('ry',0x44cc44,[wo[0], hh+0.65+wo[1], wo[2]]))    // green = RY, above
+    g.add(makeArcArrow('rx',0xcc4444,[hw+0.65+wo[0], wo[1], wo[2]]))    // red = RX, right side
+    g.add(makeArcArrow('rz',0x4444cc,[wo[0], wo[1], hd+0.65+wo[2]]))   // blue = RZ, front
 
   }
 
@@ -568,7 +584,27 @@ function ThreeViewport({
       const dx=e.clientX-(d.startX??e.clientX)
       const dy=e.clientY-(d.startY??e.clientY)
       const hn=d.hName
-      if(hn.startsWith('face:')){
+      // Check if we're scaling a group marker → scale all constituents
+      const groupMembers=scene.objects.filter(o=>o.groupId===d.objId)
+      const isGroup=groupMembers.length>0
+      if(isGroup){
+        // Uniform proportional scale for entire group
+        const delta=(dx-dy)*0.025
+        const scaleFactor=1+delta
+        groupMembers.forEach(co=>{
+          const key='origDim_'+co.id
+          if(!(drag.current as any)[key]) (drag.current as any)[key]={w:co.width,h:co.height,d:co.depth,x:co.x,y:co.y,z:co.z}
+          const orig=(drag.current as any)[key]
+          onUpdateObject(co.id,{
+            width:  Math.max(0.05,orig.w*scaleFactor),
+            height: Math.max(0.05,orig.h*scaleFactor),
+            depth:  Math.max(0.05,orig.d*scaleFactor),
+            x: orig.x*scaleFactor,
+            y: orig.y*scaleFactor,
+            z: orig.z*scaleFactor,
+          })
+        })
+      } else if(hn.startsWith('face:')){
         // single-axis scaling from face handle
         const axis=hn.slice(5) // 'x','y','z'
         const delta=(dx-dy)*0.03
@@ -808,15 +844,53 @@ export default function BuilderEditor({profile}:{profile:any}){
     const selObjs=scene.objects.filter(o=>selectedIds.has(o.id))
     const baseColor=selObjs.find(o=>!o.isHole)?.color??selObjs[0].color
     const gid=newId()
-    // Snapshot originals for split
     const snapshot=JSON.stringify(selObjs)
+    // Compute hole intersections for each solid
+    const holes=selObjs.filter(o=>o.isHole)
+    const solids=selObjs.filter(o=>!o.isHole)
+    // For each solid, compute clip boxes from holes that intersect it
+    // clipData: { solidId, planes:[{nx,ny,nz,d}] }
+    const clipData: Record<string,{nx:number;ny:number;nz:number;constant:number}[]>={}
+    solids.forEach(solid=>{
+      const planes:{nx:number;ny:number;nz:number;constant:number}[]=[]
+      holes.forEach(hole=>{
+        // Check AABB intersection
+        const si={minX:solid.x-solid.width/2,maxX:solid.x+solid.width/2,minY:solid.y,maxY:solid.y+solid.height,minZ:solid.z-solid.depth/2,maxZ:solid.z+solid.depth/2}
+        const hi={minX:hole.x-hole.width/2,maxX:hole.x+hole.width/2,minY:hole.y,maxY:hole.y+hole.height,minZ:hole.z-hole.depth/2,maxZ:hole.z+hole.depth/2}
+        const intersects=si.minX<hi.maxX&&si.maxX>hi.minX&&si.minY<hi.maxY&&si.maxY>hi.minY&&si.minZ<hi.maxZ&&si.maxZ>hi.minZ
+        if(!intersects) return
+        // Add clip planes on hole faces that cut into the solid
+        // We use the 6 faces of the hole box as potential clip planes,
+        // picking the ones that are inside the solid
+        const facePlanes=[
+          {nx:1,ny:0,nz:0,constant:-hi.maxX},  // +X face of hole: clips solid from left
+          {nx:-1,ny:0,nz:0,constant:hi.minX},   // -X face of hole
+          {nx:0,ny:1,nz:0,constant:-hi.maxY},   // +Y
+          {nx:0,ny:-1,nz:0,constant:hi.minY},   // -Y
+          {nx:0,ny:0,nz:1,constant:-hi.maxZ},   // +Z
+          {nx:0,ny:0,nz:-1,constant:hi.minZ},   // -Z
+        ]
+        // Only add planes whose clipping face is actually inside the solid
+        facePlanes.forEach(p=>{
+          const pt={x:-p.nx*p.constant,y:-p.ny*p.constant,z:-p.nz*p.constant}
+          if(pt.x>=si.minX&&pt.x<=si.maxX&&pt.y>=si.minY&&pt.y<=si.maxY&&pt.z>=si.minZ&&pt.z<=si.maxZ){
+            planes.push(p)
+          }
+        })
+      })
+      if(planes.length>0) clipData[solid.id]=planes
+    })
     setScene(prev=>({
       ...prev,
       objects:[
         ...prev.objects.filter(o=>!selectedIds.has(o.id)),
-        // Keep all constituent objects, mark them with groupId, unify color
-        ...selObjs.map(o=>({...o, color:o.isHole?o.color:baseColor, groupId:gid})),
-        // Invisible group marker with snapshot
+        ...selObjs.map(o=>({
+          ...o,
+          color:o.isHole?o.color:baseColor,
+          groupId:gid,
+          // Store clip planes on solids as JSON in a field
+          ...(clipData[o.id]?{clipPlanes:JSON.stringify(clipData[o.id])}:{}),
+        })),
         {
           id:gid, type:'box' as ShapeType,
           x:0, y:0, z:0, rx:0, ry:0, rz:0,
