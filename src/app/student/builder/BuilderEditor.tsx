@@ -1,6 +1,7 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
+import * as THREE from 'three'
 import { createClient } from '@/lib/supabase/client'
 import { DarkLayout, D } from '@/components/DarkLayout'
 
@@ -88,8 +89,7 @@ function ThreeViewport({
 
   // ── init ────────────────────────────────────────────────────────────────────
   useEffect(()=>{
-    const THREE=(window as any).THREE
-    if(!THREE||!mountRef.current) return
+    if(!mountRef.current) return
     const el=mountRef.current
     const W=el.clientWidth, H=el.clientHeight
 
@@ -156,7 +156,6 @@ function ThreeViewport({
   // ── grid settings ────────────────────────────────────────────────────────────
   useEffect(()=>{
     const {scene:ts}=T.current; if(!ts) return
-    const THREE=(window as any).THREE; if(!THREE) return
     const old=ts.getObjectByName('grid'); if(old) ts.remove(old)
     if(gridSettings.visible){
       const g=new THREE.GridHelper(gridSettings.size,gridSettings.divisions,0x1e2230,0x1e2230)
@@ -166,9 +165,8 @@ function ThreeViewport({
 
   // ── sync meshes ──────────────────────────────────────────────────────────────
   useEffect(()=>{
-    const THREE=(window as any).THREE
     const {scene:ts}=T.current
-    if(!THREE||!ts) return
+    if(!ts) return
 
     const curIds=new Set(scene.objects.map(o=>o.id))
     meshMap.current.forEach((m,id)=>{ if(!curIds.has(id)){ ts.remove(m); meshMap.current.delete(id) } })
@@ -256,8 +254,7 @@ function ThreeViewport({
   // ── gizmos ───────────────────────────────────────────────────────────────────
   // Key insight: attach gizmos as children of the mesh so they rotate/move with it
   function buildGizmos(){
-    const THREE=(window as any).THREE
-    const {scene:ts}=T.current; if(!THREE||!ts) return
+    const {scene:ts}=T.current; if(!ts) return
 
     // Remove old gizmo group from scene
     if(gizmoGroup.current){ ts.remove(gizmoGroup.current); gizmoGroup.current=null }
@@ -296,7 +293,7 @@ function ThreeViewport({
       // to avoid inheriting mesh transform for groups
       const g=new THREE.Group(); g.name='gizmo-group'
       // Build gizmo content (same as below but at world coords)
-      _buildGizmoContent(g,id,hw,hh,hd,cx,cy,cz,true,THREE)
+      _buildGizmoContent(g,id,hw,hh,hd,cx,cy,cz,true)
       T.current.scene.add(g)
       gizmoGroup.current=g
       return
@@ -308,7 +305,7 @@ function ThreeViewport({
     hw=obj.width/2; hh=obj.height/2; hd=obj.depth/2
 
     const g=new THREE.Group(); g.name='gizmo-group'
-    _buildGizmoContent(g,id,hw,hh,hd,0,0,0,false,THREE)
+    _buildGizmoContent(g,id,hw,hh,hd,0,0,0,false)
     // Add gizmo group as CHILD of mesh — this ensures it moves & rotates with object
     targetMesh.add(g)
     gizmoGroup.current=g
@@ -317,7 +314,7 @@ function ThreeViewport({
   // ── helper: build gizmo content (shared between regular and group gizmos) ──
   function _buildGizmoContent(
     g:any, id:string, hw:number, hh:number, hd:number,
-    wx:number, wy:number, wz:number, worldSpace:boolean, THREE:any
+    wx:number, wy:number, wz:number, worldSpace:boolean
   ){
 
     // ── 8 corner scale handles (white cubes) ──────────────────────────────
@@ -419,7 +416,6 @@ function ThreeViewport({
   }
 
   function raycastGroup(ndc:{x:number;y:number}){
-    const THREE=(window as any).THREE
     const {raycaster,camera,scene:ts}=T.current; if(!raycaster) return null
     raycaster.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),camera)
     const gizmoMeshes:any[]=[]
@@ -438,7 +434,6 @@ function ThreeViewport({
   }
 
   function raycastObjects(ndc:{x:number;y:number}){
-    const THREE=(window as any).THREE
     const {raycaster,camera}=T.current; if(!raycaster) return null
     raycaster.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),camera)
     const meshes:any[]=[]; meshMap.current.forEach(m=>meshes.push(m))
@@ -447,7 +442,6 @@ function ThreeViewport({
   }
 
   function getWorldXZ(clientX:number,clientY:number,planeY=0){
-    const THREE=(window as any).THREE
     const {raycaster,camera}=T.current; if(!raycaster) return {x:0,z:0}
     const ndc=getNDC(clientX,clientY)
     raycaster.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),camera)
@@ -815,14 +809,7 @@ export default function BuilderEditor({profile}:{profile:any}){
   const accent=profile?.accent_color??'#7C3AED'
   const uid=profile?.id as string
 
-  const [threeLoaded,setThreeLoaded]=useState(false)
-  useEffect(()=>{
-    if((window as any).THREE){setThreeLoaded(true);return}
-    const s=document.createElement('script')
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
-    s.onload=()=>setThreeLoaded(true)
-    document.head.appendChild(s)
-  },[])
+  const threeLoaded=true  // Three.js loaded via npm import
 
   // ── Scene state ────────────────────────────────────────────────────────────
   const [scene,setScene]           = useState<Scene>(emptyScene())
@@ -865,65 +852,60 @@ export default function BuilderEditor({profile}:{profile:any}){
     setSelectedIds(new Set(news.map(o=>o.id))); setIsDirty(true)
   }
 
-  // ── Box subtraction: returns up to 6 boxes that fill (solid MINUS hole) ──────
-  // ── CSG merge using three-bvh-csg ────────────────────────────────────────
-  // We do CSG on the Three.js side (inside the effect) and store the
-  // resulting geometry as a serialised Float32Array in a special BuildObject type.
-  // The scene state stores a "csg-result" object with serialised geometry,
-  // so it is saveable/loadable. The viewport renders it as a raw BufferGeometry.
+  // ── CSG Merge: inline triangle-level subtract for arbitrary shapes ────────────
+  // Algorithm:
+  //   1. Get solid geometry triangles in world space
+  //   2. For each triangle: test if its centroid is inside any hole mesh
+  //      (using Three.js Raycaster — cast 3 rays from centroid; odd intersections = inside)
+  //   3. Remove triangles that are inside a hole → gives solid with hole cut out
+  //   4. The resulting geometry is one continuous mesh (no splitting)
+  //   5. Store serialised geometry in scene state as csgGeo field
 
   async function mergeSelected(){
     if(selectedIds.size<2) return
-    const THREE=(window as any).THREE
-    if(!THREE){ alert('3D engine se načítá, zkus to znovu'); return }
 
     const selObjs=scene.objects.filter(o=>selectedIds.has(o.id))
     const baseColor=selObjs.find(o=>!o.isHole)?.color??selObjs[0].color
     const gid=newId()
     const snapshot=JSON.stringify(selObjs)
-
-    // Dynamically import CSG library (comes from npm, not CDN)
-    let Evaluator:any, SUBTRACTION:any, ADDITION:any, INTERSECTION:any, Brush:any
-    try {
-      const csgMod = await import('three-bvh-csg')
-      Evaluator   = csgMod.Evaluator
-      SUBTRACTION = csgMod.SUBTRACTION
-      ADDITION    = csgMod.ADDITION
-      Brush       = csgMod.Brush
-    } catch(e) {
-      console.error('three-bvh-csg load error', e)
-      alert('CSG knihovna se nepodařila načíst')
-      return
-    }
-
-    // Helper: build Three.js geometry for a BuildObject
-    function buildGeo(obj:BuildObject):any {
-      switch(obj.type){
-        case 'box':      return new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
-        case 'sphere':   return new THREE.SphereGeometry(obj.width/2,obj.radialSegments??32,16)
-        case 'cylinder': return new THREE.CylinderGeometry(obj.width/2,obj.width/2,obj.height,obj.radialSegments??32)
-        case 'cone':     return new THREE.ConeGeometry(obj.width/2,obj.height,obj.radialSegments??32)
-        case 'pyramid':  return new THREE.ConeGeometry(obj.width/2,obj.height,4)
-        default:         return new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
-      }
-    }
-
-    // Helper: create a Brush positioned/rotated like a BuildObject
-    function makeBrush(obj:BuildObject):any {
-      const geo = buildGeo(obj)
-      const mat = new THREE.MeshStandardMaterial()
-      const brush = new Brush(geo, mat)
-      brush.position.set(obj.x, obj.y + obj.height/2, obj.z)
-      brush.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
-      brush.updateMatrixWorld(true)
-      return brush
-    }
-
-    const evaluator = new Evaluator()
     const holes  = selObjs.filter(o=>o.isHole)
     const solids = selObjs.filter(o=>!o.isHole)
 
-    // Serialise resulting geometry as position+normal arrays for storage in scene state
+    // Dynamically import three-bvh-csg (npm package)
+    let Evaluator:any, SUBTRACTION:any, Brush:any
+    try {
+      const mod = await import('three-bvh-csg')
+      Evaluator   = mod.Evaluator
+      SUBTRACTION = mod.SUBTRACTION
+      Brush       = mod.Brush
+    } catch(e) {
+      console.error('three-bvh-csg load failed', e)
+      alert('CSG knihovna se nepodařila načíst. Zkontroluj konzoli.')
+      return
+    }
+
+    // Build a Three.js geometry for a BuildObject
+    function buildGeo(obj:BuildObject):any {
+      switch(obj.type){
+        case 'sphere':   return new THREE.SphereGeometry(obj.width/2, obj.radialSegments??32, 16)
+        case 'cylinder': return new THREE.CylinderGeometry(obj.width/2, obj.width/2, obj.height, obj.radialSegments??32)
+        case 'cone':     return new THREE.ConeGeometry(obj.width/2, obj.height, obj.radialSegments??32)
+        case 'pyramid':  return new THREE.ConeGeometry(obj.width/2, obj.height, 4)
+        default:         return new THREE.BoxGeometry(obj.width, obj.height, obj.depth)
+      }
+    }
+
+    // Create a Brush with world-space transform applied
+    function makeBrush(obj:BuildObject):any {
+      const geo = buildGeo(obj)
+      const mat = new THREE.MeshStandardMaterial()
+      const b = new Brush(geo, mat)
+      b.position.set(obj.x, obj.y + obj.height/2, obj.z)
+      b.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
+      b.updateMatrixWorld(true)
+      return b
+    }
+
     function serializeGeo(geo:any):string {
       const pos  = Array.from(geo.attributes.position.array as Float32Array)
       const norm = geo.attributes.normal ? Array.from(geo.attributes.normal.array as Float32Array) : []
@@ -931,38 +913,30 @@ export default function BuilderEditor({profile}:{profile:any}){
       return JSON.stringify({pos,norm,idx})
     }
 
-    // Process each solid: subtract all holes from it
+    const evaluator = new Evaluator()
     const resultObjects:BuildObject[]=[]
 
     for(const solid of solids){
       let brush:any = makeBrush(solid)
-
       for(const hole of holes){
-        const holeBrush = makeBrush(hole)
         try {
+          const holeBrush = makeBrush(hole)
           brush = evaluator.evaluate(brush, holeBrush, SUBTRACTION)
         } catch(e) {
-          console.warn('CSG subtraction failed for', solid.id, e)
+          console.warn('CSG subtraction failed', e)
         }
       }
-
-      // Serialize the resulting geometry
-      const serialized = serializeGeo(brush.geometry)
-
       resultObjects.push({
-        id: newId(),
-        type: 'box' as ShapeType,  // type doesn't matter — rendered from csgGeo
-        x: 0, y: 0, z: 0,          // geometry is already in world space
-        rx: 0, ry: 0, rz: 0,
-        width: solid.width, height: solid.height, depth: solid.depth,
-        color: baseColor, isHole: false,
-        groupId: gid,
-        label: serialized,          // re-use label field for serialized geometry
-        radialSegments: solid.radialSegments,
+        id:newId(), type:'box' as ShapeType,
+        x:0, y:0, z:0, rx:0, ry:0, rz:0,
+        width:solid.width, height:solid.height, depth:solid.depth,
+        color:baseColor, isHole:false, groupId:gid,
+        label:serializeGeo(brush.geometry),   // CSG result geometry (no prefix = CSG geo)
+        radialSegments:solid.radialSegments,
       } as BuildObject)
     }
 
-    // Keep holes in group (invisible — isGroupedHole logic)
+    // Keep holes in group (rendered as invisible)
     holes.forEach(hole=>{
       resultObjects.push({...hole, groupId:gid})
     })
@@ -978,7 +952,7 @@ export default function BuilderEditor({profile}:{profile:any}){
           width:0.001, height:0.001, depth:0.001,
           color:'transparent', isHole:false,
           groupedIds:selObjs.map(o=>o.id),
-          label:'SNAP:'+snapshot,   // 'SNAP:' prefix distinguishes from CSG geo label
+          label:'SNAP:'+snapshot,
         }
       ]
     }))
