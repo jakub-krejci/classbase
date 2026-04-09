@@ -204,15 +204,6 @@ function ThreeViewport({
           ? new THREE.MeshStandardMaterial({ color:0x4488ff, transparent:true, opacity:0.25, wireframe: showWireframe||obj.wireframe })
           : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
 
-      // Apply clip planes if this solid has holes cutting into it
-      if(obj.clipPlanes&&!obj.isHole){
-        try{
-          const planes=JSON.parse(obj.clipPlanes)
-          mat.clippingPlanes=planes.map((p:any)=>new THREE.Plane(new THREE.Vector3(p.nx,p.ny,p.nz),p.constant))
-          mat.clipShadows=true
-          T.current.renderer.localClippingEnabled=true
-        }catch{}
-      }
       const mesh=new THREE.Mesh(geo,mat)
       mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
       mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
@@ -639,11 +630,26 @@ function ThreeViewport({
       const ang=Math.atan2(e.clientY-window.innerHeight/2, e.clientX-window.innerWidth/2)*180/Math.PI
       const delta=ang-(d.rotStart??0)
       const ax=d.rotAxis
-      onUpdateObject(d.objId,{
-        rx: ax==='x' ? ((d.origRx??0)+delta)%360 : (d.origRx??0),
-        ry: ax==='y' ? ((d.origRy??0)+delta)%360 : (d.origRy??0),
-        rz: ax==='z' ? ((d.origRz??0)+delta)%360 : (d.origRz??0),
-      })
+      // Check if rotating a group — rotate all members
+      const groupMembers=scene.objects.filter(o=>o.groupId===d.objId)
+      if(groupMembers.length>0){
+        groupMembers.forEach(co=>{
+          const key='origRot_'+co.id
+          if(!(drag.current as any)[key]) (drag.current as any)[key]={rx:co.rx,ry:co.ry,rz:co.rz}
+          const orig=(drag.current as any)[key]
+          onUpdateObject(co.id,{
+            rx: ax==='x' ? (orig.rx+delta)%360 : orig.rx,
+            ry: ax==='y' ? (orig.ry+delta)%360 : orig.ry,
+            rz: ax==='z' ? (orig.rz+delta)%360 : orig.rz,
+          })
+        })
+      } else {
+        onUpdateObject(d.objId,{
+          rx: ax==='x' ? ((d.origRx??0)+delta)%360 : (d.origRx??0),
+          ry: ax==='y' ? ((d.origRy??0)+delta)%360 : (d.origRy??0),
+          rz: ax==='z' ? ((d.origRz??0)+delta)%360 : (d.origRz??0),
+        })
+      }
       return
     }
 
@@ -839,58 +845,107 @@ export default function BuilderEditor({profile}:{profile:any}){
     setSelectedIds(new Set(news.map(o=>o.id))); setIsDirty(true)
   }
 
+  // ── Box subtraction: returns up to 6 boxes that fill (solid MINUS hole) ──────
+  function subtractBox(
+    s:{minX:number;maxX:number;minY:number;maxY:number;minZ:number;maxZ:number},
+    h:{minX:number;maxX:number;minY:number;maxY:number;minZ:number;maxZ:number}
+  ):{cx:number;cy:number;cz:number;w:number;h2:number;d:number}[] {
+    // Intersection of solid and hole
+    const ix={minX:Math.max(s.minX,h.minX),maxX:Math.min(s.maxX,h.maxX),minY:Math.max(s.minY,h.minY),maxY:Math.min(s.maxY,h.maxY),minZ:Math.max(s.minZ,h.minZ),maxZ:Math.min(s.maxZ,h.maxZ)}
+    if(ix.minX>=ix.maxX||ix.minY>=ix.maxY||ix.minZ>=ix.maxZ) return [] // no intersection
+    // Slice solid into up to 6 pieces around the intersection (like cutting a block)
+    const pieces:{cx:number;cy:number;cz:number;w:number;h2:number;d:number}[]=[]
+    function addPiece(x0:number,x1:number,y0:number,y1:number,z0:number,z1:number){
+      if(x1<=x0||y1<=y0||z1<=z0) return
+      pieces.push({cx:(x0+x1)/2,cy:(y0+y1)/2,cz:(z0+z1)/2,w:x1-x0,h2:y1-y0,d:z1-z0})
+    }
+    // Left slab  (x < ix.minX)
+    addPiece(s.minX,ix.minX, s.minY,s.maxY, s.minZ,s.maxZ)
+    // Right slab (x > ix.maxX)
+    addPiece(ix.maxX,s.maxX, s.minY,s.maxY, s.minZ,s.maxZ)
+    // Bottom slab in intersection X-range (y < ix.minY)
+    addPiece(ix.minX,ix.maxX, s.minY,ix.minY, s.minZ,s.maxZ)
+    // Top slab in intersection X-range (y > ix.maxY)
+    addPiece(ix.minX,ix.maxX, ix.maxY,s.maxY, s.minZ,s.maxZ)
+    // Front slab in intersection XY-range (z < ix.minZ)
+    addPiece(ix.minX,ix.maxX, ix.minY,ix.maxY, s.minZ,ix.minZ)
+    // Back slab in intersection XY-range (z > ix.maxZ)
+    addPiece(ix.minX,ix.maxX, ix.minY,ix.maxY, ix.maxZ,s.maxZ)
+    return pieces
+  }
+
   function mergeSelected(){
     if(selectedIds.size<2) return
     const selObjs=scene.objects.filter(o=>selectedIds.has(o.id))
     const baseColor=selObjs.find(o=>!o.isHole)?.color??selObjs[0].color
     const gid=newId()
     const snapshot=JSON.stringify(selObjs)
-    // Compute hole intersections for each solid
     const holes=selObjs.filter(o=>o.isHole)
     const solids=selObjs.filter(o=>!o.isHole)
-    // For each solid, compute clip boxes from holes that intersect it
-    // clipData: { solidId, planes:[{nx,ny,nz,d}] }
-    const clipData: Record<string,{nx:number;ny:number;nz:number;constant:number}[]>={}
+
+    // For each solid, compute subtracted pieces from holes
+    // Each piece becomes a separate sub-object in the group
+    const resultObjects:BuildObject[]=[]
+
     solids.forEach(solid=>{
-      const planes:{nx:number;ny:number;nz:number;constant:number}[]=[]
+      const si={
+        minX:solid.x-solid.width/2, maxX:solid.x+solid.width/2,
+        minY:solid.y,               maxY:solid.y+solid.height,
+        minZ:solid.z-solid.depth/2, maxZ:solid.z+solid.depth/2,
+      }
+      let piecesAABB=[si]  // start with the whole solid, then carve out each hole
+
       holes.forEach(hole=>{
-        // Check AABB intersection
-        const si={minX:solid.x-solid.width/2,maxX:solid.x+solid.width/2,minY:solid.y,maxY:solid.y+solid.height,minZ:solid.z-solid.depth/2,maxZ:solid.z+solid.depth/2}
-        const hi={minX:hole.x-hole.width/2,maxX:hole.x+hole.width/2,minY:hole.y,maxY:hole.y+hole.height,minZ:hole.z-hole.depth/2,maxZ:hole.z+hole.depth/2}
-        const intersects=si.minX<hi.maxX&&si.maxX>hi.minX&&si.minY<hi.maxY&&si.maxY>hi.minY&&si.minZ<hi.maxZ&&si.maxZ>hi.minZ
-        if(!intersects) return
-        // Add clip planes on hole faces that cut into the solid
-        // We use the 6 faces of the hole box as potential clip planes,
-        // picking the ones that are inside the solid
-        const facePlanes=[
-          {nx:1,ny:0,nz:0,constant:-hi.maxX},  // +X face of hole: clips solid from left
-          {nx:-1,ny:0,nz:0,constant:hi.minX},   // -X face of hole
-          {nx:0,ny:1,nz:0,constant:-hi.maxY},   // +Y
-          {nx:0,ny:-1,nz:0,constant:hi.minY},   // -Y
-          {nx:0,ny:0,nz:1,constant:-hi.maxZ},   // +Z
-          {nx:0,ny:0,nz:-1,constant:hi.minZ},   // -Z
-        ]
-        // Only add planes whose clipping face is actually inside the solid
-        facePlanes.forEach(p=>{
-          const pt={x:-p.nx*p.constant,y:-p.ny*p.constant,z:-p.nz*p.constant}
-          if(pt.x>=si.minX&&pt.x<=si.maxX&&pt.y>=si.minY&&pt.y<=si.maxY&&pt.z>=si.minZ&&pt.z<=si.maxZ){
-            planes.push(p)
+        const hi={
+          minX:hole.x-hole.width/2, maxX:hole.x+hole.width/2,
+          minY:hole.y,              maxY:hole.y+hole.height,
+          minZ:hole.z-hole.depth/2, maxZ:hole.z+hole.depth/2,
+        }
+        // Apply subtraction to each current piece
+        const newPieces:{minX:number;maxX:number;minY:number;maxY:number;minZ:number;maxZ:number}[]=[]
+        piecesAABB.forEach(piece=>{
+          const subPieces=subtractBox(piece,hi)
+          if(subPieces.length===0){
+            // no intersection — keep piece as-is
+            newPieces.push(piece)
+          } else {
+            // replace piece with subtracted pieces
+            subPieces.forEach(p=>newPieces.push({
+              minX:p.cx-p.w/2,maxX:p.cx+p.w/2,
+              minY:p.cy-p.h2/2,maxY:p.cy+p.h2/2,
+              minZ:p.cz-p.d/2,maxZ:p.cz+p.d/2
+            }))
           }
         })
+        piecesAABB=newPieces
       })
-      if(planes.length>0) clipData[solid.id]=planes
+
+      // Create a BuildObject for each piece
+      piecesAABB.forEach(p=>{
+        resultObjects.push({
+          id:newId(), type:solid.type,
+          x:(p.minX+p.maxX)/2, y:p.minY, z:(p.minZ+p.maxZ)/2,
+          rx:solid.rx, ry:solid.ry, rz:solid.rz,
+          width:p.maxX-p.minX, height:p.maxY-p.minY, depth:p.maxZ-p.minZ,
+          color:baseColor, isHole:false,
+          groupId:gid,
+          radialSegments:solid.radialSegments,
+        })
+      })
     })
+
+    // Non-box solids without hole intersection stay as-is
+    // Also add all holes as invisible members
+    holes.forEach(hole=>{
+      resultObjects.push({...hole, groupId:gid, color:hole.color})
+    })
+
     setScene(prev=>({
       ...prev,
       objects:[
         ...prev.objects.filter(o=>!selectedIds.has(o.id)),
-        ...selObjs.map(o=>({
-          ...o,
-          color:o.isHole?o.color:baseColor,
-          groupId:gid,
-          // Store clip planes on solids as JSON in a field
-          ...(clipData[o.id]?{clipPlanes:JSON.stringify(clipData[o.id])}:{}),
-        })),
+        ...resultObjects,
+        // Group marker
         {
           id:gid, type:'box' as ShapeType,
           x:0, y:0, z:0, rx:0, ry:0, rz:0,
@@ -905,21 +960,27 @@ export default function BuilderEditor({profile}:{profile:any}){
   }
 
   function splitSelected(){
-    if(!selectedObj?.groupedIds?.length||!selectedObj.label) return
-    try{
-      const originals:BuildObject[]=JSON.parse(selectedObj.label)
-      const gid=selectedObj.id
-      setScene(prev=>({
+    if(!selectedObj?.groupedIds?.length) return
+    const gid=selectedObj.id
+    // Use CURRENT state of members (preserves size/rotation changes made after merge)
+    // NOT the snapshot — snapshot is only for reference
+    setScene(prev=>{
+      const currentMembers=prev.objects
+        .filter(o=>o.groupId===gid)
+        .map(o=>({
+          ...o,
+          groupId:undefined,   // remove group membership
+          clipPlanes:undefined, // remove clip planes from holes
+        }))
+      return {
         ...prev,
         objects:[
           ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
-          ...originals
+          ...currentMembers,
         ]
-      }))
-      setSelectedIds(new Set(originals.map(o=>o.id)))
-    }catch{
-      addOrUpdateObject(selectedObj.id,{groupedIds:undefined,label:undefined})
-    }
+      }
+    })
+    setSelectedIds(new Set(selectedObj.groupedIds))
     setIsDirty(true)
   }
 
