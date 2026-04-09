@@ -346,9 +346,6 @@ function ThreeViewport({
     // Add gizmo group as CHILD of mesh — this ensures it moves & rotates with object
     mesh.add(g)
     gizmoGroup.current=g
-
-    // Store ref for raycasting
-    gizmoRef.current={ group:g, objectId:id }
   }
 
   // ── helpers ──────────────────────────────────────────────────────────────────
