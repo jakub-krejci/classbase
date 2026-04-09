@@ -30,6 +30,7 @@ interface BuildObject {
   wireframe?: boolean
   radialSegments?: number
   groupedIds?: string[]
+  label?: string
 }
 interface Scene { objects: BuildObject[]; groups: {id:string;objectIds:string[]}[] }
 interface GridSettings { visible:boolean; size:number; divisions:number; snap:boolean; snapSize:number }
