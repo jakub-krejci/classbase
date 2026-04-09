@@ -174,8 +174,8 @@ function ThreeViewport({
     meshMap.current.forEach((m,id)=>{ if(!curIds.has(id)){ ts.remove(m); meshMap.current.delete(id) } })
 
     for(const obj of scene.objects){
-      // Skip the invisible group marker (width=0.001 is the marker)
-      if(obj.groupedIds?.length&&obj.label&&obj.width<0.01){
+      // Skip the invisible group marker (has groupedIds + SNAP: label + tiny width)
+      if(obj.groupedIds?.length&&obj.label?.startsWith('SNAP:')&&obj.width<0.01){
         const old=meshMap.current.get(obj.id)
         if(old){ T.current.scene.remove(old); meshMap.current.delete(obj.id) }
         continue
@@ -185,17 +185,34 @@ function ThreeViewport({
       const old=meshMap.current.get(obj.id)
       if(old){ ts.remove(old); old.geometry?.dispose(); old.material?.dispose() }
 
-      let geo: any
-      switch(obj.type){
-        case 'box':      geo=new THREE.BoxGeometry(obj.width,obj.height,obj.depth); break
-        case 'sphere':   geo=new THREE.SphereGeometry(obj.width/2,obj.radialSegments??32,16); break
-        case 'cylinder': geo=new THREE.CylinderGeometry(obj.width/2,obj.width/2,obj.height,obj.radialSegments??32); break
-        case 'cone':     geo=new THREE.ConeGeometry(obj.width/2,obj.height,obj.radialSegments??32); break
-        case 'pyramid':  geo=new THREE.ConeGeometry(obj.width/2,obj.height,4); break
-        case 'text':     geo=new THREE.BoxGeometry(obj.width,obj.height*0.4,obj.depth); break
-        default:         geo=new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
+      // CSG result: has groupId + label not starting with SNAP: + no groupedIds
+      let geo:any
+      if(obj.label&&!obj.label.startsWith('SNAP:')&&obj.groupId&&!obj.groupedIds?.length){
+        // Deserialise CSG geometry
+        try{
+          const {pos,norm,idx}=JSON.parse(obj.label)
+          geo=new THREE.BufferGeometry()
+          geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3))
+          if(norm.length>0) geo.setAttribute('normal',new THREE.Float32BufferAttribute(norm,3))
+          if(idx.length>0)  geo.setIndex(new THREE.Uint32BufferAttribute(idx,1))
+          if(norm.length===0) geo.computeVertexNormals()
+        }catch{
+          geo=new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
+        }
+      } else {
+        switch(obj.type){
+          case 'box':      geo=new THREE.BoxGeometry(obj.width,obj.height,obj.depth); break
+          case 'sphere':   geo=new THREE.SphereGeometry(obj.width/2,obj.radialSegments??32,16); break
+          case 'cylinder': geo=new THREE.CylinderGeometry(obj.width/2,obj.width/2,obj.height,obj.radialSegments??32); break
+          case 'cone':     geo=new THREE.ConeGeometry(obj.width/2,obj.height,obj.radialSegments??32); break
+          case 'pyramid':  geo=new THREE.ConeGeometry(obj.width/2,obj.height,4); break
+          case 'text':     geo=new THREE.BoxGeometry(obj.width,obj.height*0.4,obj.depth); break
+          default:         geo=new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
+        }
       }
 
+      // CSG result objects are already in world space (position baked into geometry)
+      const isCsgResult=obj.label&&!obj.label.startsWith('SNAP:')&&obj.groupId&&!obj.groupedIds?.length
       // Holes in a merged group become invisible (they conceptually carve the solid)
       const isGroupedHole=obj.isHole&&!!obj.groupId
       const mat = isGroupedHole
@@ -205,8 +222,11 @@ function ThreeViewport({
           : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
 
       const mesh=new THREE.Mesh(geo,mat)
-      mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
-      mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
+      // CSG result geometry is already in world space — don't apply position/rotation again
+      if(!isCsgResult){
+        mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
+        mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
+      }
       mesh.castShadow=true; mesh.receiveShadow=true
       mesh.userData.objectId=obj.id
 
@@ -846,98 +866,105 @@ export default function BuilderEditor({profile}:{profile:any}){
   }
 
   // ── Box subtraction: returns up to 6 boxes that fill (solid MINUS hole) ──────
-  function subtractBox(
-    s:{minX:number;maxX:number;minY:number;maxY:number;minZ:number;maxZ:number},
-    h:{minX:number;maxX:number;minY:number;maxY:number;minZ:number;maxZ:number}
-  ):{cx:number;cy:number;cz:number;w:number;h2:number;d:number}[] {
-    // Intersection of solid and hole
-    const ix={minX:Math.max(s.minX,h.minX),maxX:Math.min(s.maxX,h.maxX),minY:Math.max(s.minY,h.minY),maxY:Math.min(s.maxY,h.maxY),minZ:Math.max(s.minZ,h.minZ),maxZ:Math.min(s.maxZ,h.maxZ)}
-    if(ix.minX>=ix.maxX||ix.minY>=ix.maxY||ix.minZ>=ix.maxZ) return [] // no intersection
-    // Slice solid into up to 6 pieces around the intersection (like cutting a block)
-    const pieces:{cx:number;cy:number;cz:number;w:number;h2:number;d:number}[]=[]
-    function addPiece(x0:number,x1:number,y0:number,y1:number,z0:number,z1:number){
-      if(x1<=x0||y1<=y0||z1<=z0) return
-      pieces.push({cx:(x0+x1)/2,cy:(y0+y1)/2,cz:(z0+z1)/2,w:x1-x0,h2:y1-y0,d:z1-z0})
-    }
-    // Left slab  (x < ix.minX)
-    addPiece(s.minX,ix.minX, s.minY,s.maxY, s.minZ,s.maxZ)
-    // Right slab (x > ix.maxX)
-    addPiece(ix.maxX,s.maxX, s.minY,s.maxY, s.minZ,s.maxZ)
-    // Bottom slab in intersection X-range (y < ix.minY)
-    addPiece(ix.minX,ix.maxX, s.minY,ix.minY, s.minZ,s.maxZ)
-    // Top slab in intersection X-range (y > ix.maxY)
-    addPiece(ix.minX,ix.maxX, ix.maxY,s.maxY, s.minZ,s.maxZ)
-    // Front slab in intersection XY-range (z < ix.minZ)
-    addPiece(ix.minX,ix.maxX, ix.minY,ix.maxY, s.minZ,ix.minZ)
-    // Back slab in intersection XY-range (z > ix.maxZ)
-    addPiece(ix.minX,ix.maxX, ix.minY,ix.maxY, ix.maxZ,s.maxZ)
-    return pieces
-  }
+  // ── CSG merge using three-bvh-csg ────────────────────────────────────────
+  // We do CSG on the Three.js side (inside the effect) and store the
+  // resulting geometry as a serialised Float32Array in a special BuildObject type.
+  // The scene state stores a "csg-result" object with serialised geometry,
+  // so it is saveable/loadable. The viewport renders it as a raw BufferGeometry.
 
-  function mergeSelected(){
+  async function mergeSelected(){
     if(selectedIds.size<2) return
+    const THREE=(window as any).THREE
+    if(!THREE){ alert('3D engine se načítá, zkus to znovu'); return }
+
     const selObjs=scene.objects.filter(o=>selectedIds.has(o.id))
     const baseColor=selObjs.find(o=>!o.isHole)?.color??selObjs[0].color
     const gid=newId()
     const snapshot=JSON.stringify(selObjs)
-    const holes=selObjs.filter(o=>o.isHole)
-    const solids=selObjs.filter(o=>!o.isHole)
 
-    // For each solid, compute subtracted pieces from holes
-    // Each piece becomes a separate sub-object in the group
+    // Dynamically import CSG library (comes from npm, not CDN)
+    let Evaluator:any, SUBTRACTION:any, ADDITION:any, INTERSECTION:any, Brush:any
+    try {
+      const csgMod = await import('three-bvh-csg')
+      Evaluator   = csgMod.Evaluator
+      SUBTRACTION = csgMod.SUBTRACTION
+      ADDITION    = csgMod.ADDITION
+      Brush       = csgMod.Brush
+    } catch(e) {
+      console.error('three-bvh-csg load error', e)
+      alert('CSG knihovna se nepodařila načíst')
+      return
+    }
+
+    // Helper: build Three.js geometry for a BuildObject
+    function buildGeo(obj:BuildObject):any {
+      switch(obj.type){
+        case 'box':      return new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
+        case 'sphere':   return new THREE.SphereGeometry(obj.width/2,obj.radialSegments??32,16)
+        case 'cylinder': return new THREE.CylinderGeometry(obj.width/2,obj.width/2,obj.height,obj.radialSegments??32)
+        case 'cone':     return new THREE.ConeGeometry(obj.width/2,obj.height,obj.radialSegments??32)
+        case 'pyramid':  return new THREE.ConeGeometry(obj.width/2,obj.height,4)
+        default:         return new THREE.BoxGeometry(obj.width,obj.height,obj.depth)
+      }
+    }
+
+    // Helper: create a Brush positioned/rotated like a BuildObject
+    function makeBrush(obj:BuildObject):any {
+      const geo = buildGeo(obj)
+      const mat = new THREE.MeshStandardMaterial()
+      const brush = new Brush(geo, mat)
+      brush.position.set(obj.x, obj.y + obj.height/2, obj.z)
+      brush.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
+      brush.updateMatrixWorld(true)
+      return brush
+    }
+
+    const evaluator = new Evaluator()
+    const holes  = selObjs.filter(o=>o.isHole)
+    const solids = selObjs.filter(o=>!o.isHole)
+
+    // Serialise resulting geometry as position+normal arrays for storage in scene state
+    function serializeGeo(geo:any):string {
+      const pos  = Array.from(geo.attributes.position.array as Float32Array)
+      const norm = geo.attributes.normal ? Array.from(geo.attributes.normal.array as Float32Array) : []
+      const idx  = geo.index ? Array.from(geo.index.array as Uint32Array) : []
+      return JSON.stringify({pos,norm,idx})
+    }
+
+    // Process each solid: subtract all holes from it
     const resultObjects:BuildObject[]=[]
 
-    solids.forEach(solid=>{
-      const si={
-        minX:solid.x-solid.width/2, maxX:solid.x+solid.width/2,
-        minY:solid.y,               maxY:solid.y+solid.height,
-        minZ:solid.z-solid.depth/2, maxZ:solid.z+solid.depth/2,
-      }
-      let piecesAABB=[si]  // start with the whole solid, then carve out each hole
+    for(const solid of solids){
+      let brush:any = makeBrush(solid)
 
-      holes.forEach(hole=>{
-        const hi={
-          minX:hole.x-hole.width/2, maxX:hole.x+hole.width/2,
-          minY:hole.y,              maxY:hole.y+hole.height,
-          minZ:hole.z-hole.depth/2, maxZ:hole.z+hole.depth/2,
+      for(const hole of holes){
+        const holeBrush = makeBrush(hole)
+        try {
+          brush = evaluator.evaluate(brush, holeBrush, SUBTRACTION)
+        } catch(e) {
+          console.warn('CSG subtraction failed for', solid.id, e)
         }
-        // Apply subtraction to each current piece
-        const newPieces:{minX:number;maxX:number;minY:number;maxY:number;minZ:number;maxZ:number}[]=[]
-        piecesAABB.forEach(piece=>{
-          const subPieces=subtractBox(piece,hi)
-          if(subPieces.length===0){
-            // no intersection — keep piece as-is
-            newPieces.push(piece)
-          } else {
-            // replace piece with subtracted pieces
-            subPieces.forEach(p=>newPieces.push({
-              minX:p.cx-p.w/2,maxX:p.cx+p.w/2,
-              minY:p.cy-p.h2/2,maxY:p.cy+p.h2/2,
-              minZ:p.cz-p.d/2,maxZ:p.cz+p.d/2
-            }))
-          }
-        })
-        piecesAABB=newPieces
-      })
+      }
 
-      // Create a BuildObject for each piece
-      piecesAABB.forEach(p=>{
-        resultObjects.push({
-          id:newId(), type:solid.type,
-          x:(p.minX+p.maxX)/2, y:p.minY, z:(p.minZ+p.maxZ)/2,
-          rx:solid.rx, ry:solid.ry, rz:solid.rz,
-          width:p.maxX-p.minX, height:p.maxY-p.minY, depth:p.maxZ-p.minZ,
-          color:baseColor, isHole:false,
-          groupId:gid,
-          radialSegments:solid.radialSegments,
-        })
-      })
-    })
+      // Serialize the resulting geometry
+      const serialized = serializeGeo(brush.geometry)
 
-    // Non-box solids without hole intersection stay as-is
-    // Also add all holes as invisible members
+      resultObjects.push({
+        id: newId(),
+        type: 'box' as ShapeType,  // type doesn't matter — rendered from csgGeo
+        x: 0, y: 0, z: 0,          // geometry is already in world space
+        rx: 0, ry: 0, rz: 0,
+        width: solid.width, height: solid.height, depth: solid.depth,
+        color: baseColor, isHole: false,
+        groupId: gid,
+        label: serialized,          // re-use label field for serialized geometry
+        radialSegments: solid.radialSegments,
+      } as BuildObject)
+    }
+
+    // Keep holes in group (invisible — isGroupedHole logic)
     holes.forEach(hole=>{
-      resultObjects.push({...hole, groupId:gid, color:hole.color})
+      resultObjects.push({...hole, groupId:gid})
     })
 
     setScene(prev=>({
@@ -945,42 +972,36 @@ export default function BuilderEditor({profile}:{profile:any}){
       objects:[
         ...prev.objects.filter(o=>!selectedIds.has(o.id)),
         ...resultObjects,
-        // Group marker
         {
           id:gid, type:'box' as ShapeType,
           x:0, y:0, z:0, rx:0, ry:0, rz:0,
           width:0.001, height:0.001, depth:0.001,
           color:'transparent', isHole:false,
           groupedIds:selObjs.map(o=>o.id),
-          label:snapshot,
+          label:'SNAP:'+snapshot,   // 'SNAP:' prefix distinguishes from CSG geo label
         }
       ]
     }))
     setSelectedIds(new Set([gid])); setIsDirty(true)
   }
 
+
   function splitSelected(){
     if(!selectedObj?.groupedIds?.length) return
     const gid=selectedObj.id
-    // Use CURRENT state of members (preserves size/rotation changes made after merge)
-    // NOT the snapshot — snapshot is only for reference
-    setScene(prev=>{
-      const currentMembers=prev.objects
-        .filter(o=>o.groupId===gid)
-        .map(o=>({
-          ...o,
-          groupId:undefined,   // remove group membership
-          clipPlanes:undefined, // remove clip planes from holes
-        }))
-      return {
-        ...prev,
-        objects:[
-          ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
-          ...currentMembers,
-        ]
-      }
-    })
-    setSelectedIds(new Set(selectedObj.groupedIds))
+    const marker=scene.objects.find(o=>o.id===gid)
+    // Restore exact originals from SNAP: snapshot in group marker label
+    const snapLabel=marker?.label?.startsWith('SNAP:')?marker.label.slice(5):null
+    let originals:BuildObject[]=[]
+    try{ if(snapLabel) originals=JSON.parse(snapLabel) }catch{}
+    setScene(prev=>({
+      ...prev,
+      objects:[
+        ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
+        ...originals,
+      ]
+    }))
+    setSelectedIds(new Set(originals.map(o=>o.id)))
     setIsDirty(true)
   }
 
@@ -1246,7 +1267,7 @@ export default function BuilderEditor({profile}:{profile:any}){
               ))}
             </div>
             <div style={{width:1,height:20,background:D.border}}/>
-            <button onClick={mergeSelected} disabled={selectedIds.size<2}
+            <button onClick={()=>mergeSelected()} disabled={selectedIds.size<2}
               style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:selectedIds.size>=2?D.txtPri:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:selectedIds.size>=2?'pointer':'not-allowed',fontFamily:'inherit',opacity:selectedIds.size<2?.4:1}}
               title="Sloučit vybrané (min. 2)">🔗 Sloučit</button>
             <button onClick={splitSelected} disabled={!selectedObj?.groupedIds?.length}
