@@ -33,7 +33,7 @@ interface BuildObject {
   groupedIds?: string[]
   label?: string
   groupId?: string
-  clipPlanes?: string  // JSON array of clip plane normals+constants
+  csgSnapshot?: string  // SNAP: + JSON of originals, for CSG result objects
 }
 interface Scene { objects: BuildObject[]; groups: {id:string;objectIds:string[]}[] }
 interface GridSettings { visible:boolean; size:number; divisions:number; snap:boolean; snapSize:number }
@@ -183,12 +183,12 @@ function ThreeViewport({
       const old=meshMap.current.get(obj.id)
       if(old){ ts.remove(old); old.geometry?.dispose(); old.material?.dispose() }
 
-      // CSG result: has groupId + label not starting with SNAP: + no groupedIds
+      // CSG result: label starts with 'CSG:'
+      const isCsgResult2=obj.label?.startsWith('CSG:')
       let geo:any
-      if(obj.label&&!obj.label.startsWith('SNAP:')&&obj.groupId&&!obj.groupedIds?.length){
-        // Deserialise CSG geometry
+      if(isCsgResult2){
         try{
-          const {pos,norm,idx}=JSON.parse(obj.label)
+          const {pos,norm,idx}=JSON.parse(obj.label!.slice(4))
           geo=new THREE.BufferGeometry()
           geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3))
           if(norm.length>0) geo.setAttribute('normal',new THREE.Float32BufferAttribute(norm,3))
@@ -218,8 +218,7 @@ function ThreeViewport({
         continue
       }
 
-      // CSG result: groupId set, label is serialized geometry (no SNAP: prefix), no groupedIds
-      const isCsgResult=!!(obj.label&&!obj.label.startsWith('SNAP:')&&obj.groupId&&!obj.groupedIds?.length)
+      const isCsgResult=isCsgResult2
 
       const mat = obj.isHole
         ? new THREE.MeshStandardMaterial({ color:0x4488ff, transparent:true, opacity:0.25, wireframe: showWireframe||obj.wireframe })
@@ -528,16 +527,11 @@ function ThreeViewport({
             : effectiveObj
           if(toolMode==='move'||toolMode==='all'){
             const wp=getWorldXZ(e.clientX,e.clientY,0)
-            const isGroupMarker2=effectiveObj.width<0.01&&!!effectiveObj.groupedIds?.length
             drag.current={
               mode:'drag-obj', objId:effectiveId,
-              // For individual objects: use world position for absolute placement
-              // For groups: startX/startY screen coords for delta calculation
               startX:e.clientX, startY:e.clientY,
               startWorldX:wp.x, startWorldZ:wp.z,
-              origX:isGroupMarker2?0:effectiveObj.x,
-              origZ:isGroupMarker2?0:effectiveObj.z,
-              planeY:0
+              origX:effectiveObj.x, origZ:effectiveObj.z, planeY:0
             }
           } else if(toolMode==='rotate'){
             const ang=Math.atan2(e.clientY-window.innerHeight/2, e.clientX-window.innerWidth/2)*180/Math.PI
@@ -894,179 +888,117 @@ export default function BuilderEditor({profile}:{profile:any}){
     setSelectedIds(new Set(news.map(o=>o.id))); setIsDirty(true)
   }
 
-  // ── CSG Merge: inline triangle-level subtract for arbitrary shapes ────────────
-  // Algorithm:
-  //   1. Get solid geometry triangles in world space
-  //   2. For each triangle: test if its centroid is inside any hole mesh
-  //      (using Three.js Raycaster — cast 3 rays from centroid; odd intersections = inside)
-  //   3. Remove triangles that are inside a hole → gives solid with hole cut out
-  //   4. The resulting geometry is one continuous mesh (no splitting)
-  //   5. Store serialised geometry in scene state as csgGeo field
+  // ── CSG helpers ───────────────────────────────────────────────────────────
+  function buildGeoForObj(obj:BuildObject):any {
+    switch(obj.type){
+      case 'sphere':   return new THREE.SphereGeometry(obj.width/2, obj.radialSegments??32, 16)
+      case 'cylinder': return new THREE.CylinderGeometry(obj.width/2, obj.width/2, obj.height, obj.radialSegments??32)
+      case 'cone':     return new THREE.ConeGeometry(obj.width/2, obj.height, obj.radialSegments??32)
+      case 'pyramid':  return new THREE.ConeGeometry(obj.width/2, obj.height, 4)
+      default:         return new THREE.BoxGeometry(obj.width, obj.height, obj.depth)
+    }
+  }
 
   async function mergeSelected(){
     if(selectedIds.size<2) return
-
     const selObjs=scene.objects.filter(o=>selectedIds.has(o.id))
     const baseColor=selObjs.find(o=>!o.isHole)?.color??selObjs[0].color
-    const gid=newId()
-    const snapshot=JSON.stringify(selObjs)
-    const holes  = selObjs.filter(o=>o.isHole)
-    const solids = selObjs.filter(o=>!o.isHole)
+    const snapshot=JSON.stringify(selObjs)  // for split restoration
 
-    // ── Case A: no holes → visual group only (no CSG needed) ─────────────────
-    if(holes.length===0){
-      setScene(prev=>({
-        ...prev,
-        objects:[
-          ...prev.objects.filter(o=>!selectedIds.has(o.id)),
-          // Keep constituent objects with unified color and groupId
-          ...selObjs.map(o=>({...o, color:baseColor, groupId:gid})),
-          // Invisible group marker
-          {
-            id:gid, type:'box' as ShapeType,
-            x:0, y:0, z:0, rx:0, ry:0, rz:0,
-            width:0.001, height:0.001, depth:0.001,
-            color:'transparent', isHole:false,
-            groupedIds:selObjs.map(o=>o.id),
-            label:'SNAP:'+snapshot,
-          }
-        ]
-      }))
-      setSelectedIds(new Set([gid])); setIsDirty(true)
-      return
-    }
-
-    // ── Case B: has holes → run CSG subtraction ───────────────────────────────
-    let Evaluator:any, SUBTRACTION:any, Brush:any
+    // Load CSG library
+    let Evaluator:any, SUBTRACTION:any, ADDITION:any, Brush:any
     try {
       const mod = await import('three-bvh-csg')
-      Evaluator   = mod.Evaluator
-      SUBTRACTION = mod.SUBTRACTION
-      Brush       = mod.Brush
+      Evaluator = mod.Evaluator; SUBTRACTION = mod.SUBTRACTION
+      ADDITION  = mod.ADDITION;  Brush = mod.Brush
     } catch(e) {
-      console.error('three-bvh-csg load failed', e)
-      alert('CSG knihovna se nepodařila načíst.')
-      return
-    }
-
-    function buildGeo(obj:BuildObject):any {
-      switch(obj.type){
-        case 'sphere':   return new THREE.SphereGeometry(obj.width/2, obj.radialSegments??32, 16)
-        case 'cylinder': return new THREE.CylinderGeometry(obj.width/2, obj.width/2, obj.height, obj.radialSegments??32)
-        case 'cone':     return new THREE.ConeGeometry(obj.width/2, obj.height, obj.radialSegments??32)
-        case 'pyramid':  return new THREE.ConeGeometry(obj.width/2, obj.height, 4)
-        default:         return new THREE.BoxGeometry(obj.width, obj.height, obj.depth)
-      }
+      alert('CSG knihovna se nepodařila načíst.'); return
     }
 
     function makeBrush(obj:BuildObject):any {
-      const geo = buildGeo(obj)
-      const mat = new THREE.MeshStandardMaterial()
-      const b = new Brush(geo, mat)
+      const b = new Brush(buildGeoForObj(obj), new THREE.MeshStandardMaterial())
       b.position.set(obj.x, obj.y + obj.height/2, obj.z)
       b.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
       b.updateMatrixWorld(true)
       return b
     }
 
-    function serializeGeo(geo:any):string {
-      const pos  = Array.from(geo.attributes.position.array as Float32Array)
-      const norm = geo.attributes.normal ? Array.from(geo.attributes.normal.array as Float32Array) : []
-      const idx  = geo.index ? Array.from(geo.index.array as Uint32Array) : []
-      return JSON.stringify({pos,norm,idx})
-    }
-
     const evaluator = new Evaluator()
-    const resultObjects:BuildObject[]=[]
+    const holes  = selObjs.filter(o=>o.isHole)
+    const solids = selObjs.filter(o=>!o.isHole)
 
-    for(const solid of solids){
-      const solidBrush:any = makeBrush(solid)
-      let brush:any = solidBrush
-      for(const hole of holes){
-        try {
-          brush = evaluator.evaluate(brush, makeBrush(hole), SUBTRACTION)
-        } catch(e) {
-          console.warn('CSG subtraction failed', e)
-        }
-      }
-
-      // After evaluate, brush.geometry is in the brush's LOCAL space.
-      // We must bake the world matrix into the geometry so it sits at the right place.
-      const resultGeo = brush.geometry.clone()
-      brush.updateMatrixWorld(true)
-      resultGeo.applyMatrix4(brush.matrixWorld)
-
-      // Now geometry is in true world space — store with position (0,0,0) and no rotation
-      resultObjects.push({
-        id:newId(), type:'box' as ShapeType,
-        x:0, y:0, z:0, rx:0, ry:0, rz:0,
-        width:solid.width, height:solid.height, depth:solid.depth,
-        color:baseColor, isHole:false, groupId:gid,
-        label:serializeGeo(resultGeo),
-        radialSegments:solid.radialSegments,
-      } as BuildObject)
+    // Step 1: UNION all solids into one brush
+    let resultBrush:any = makeBrush(solids[0])
+    for(let i=1;i<solids.length;i++){
+      try { resultBrush = evaluator.evaluate(resultBrush, makeBrush(solids[i]), ADDITION) }
+      catch(e){ console.warn('CSG union failed',e) }
     }
 
-    // Holes stay in group as invisible members (for split restoration)
-    holes.forEach(hole=>{
-      resultObjects.push({...hole, groupId:gid})
-    })
+    // Step 2: SUBTRACT all holes
+    for(const hole of holes){
+      try { resultBrush = evaluator.evaluate(resultBrush, makeBrush(hole), SUBTRACTION) }
+      catch(e){ console.warn('CSG subtract failed',e) }
+    }
 
-    setScene(prev=>({
-      ...prev,
-      objects:[
+    // Bake world transform into geometry vertices
+    resultBrush.updateMatrixWorld(true)
+    const finalGeo = resultBrush.geometry.clone()
+    finalGeo.applyMatrix4(resultBrush.matrixWorld)
+    if(!finalGeo.attributes.normal) finalGeo.computeVertexNormals()
+
+    // Serialize geometry
+    const pos  = Array.from(finalGeo.attributes.position.array as Float32Array)
+    const norm = finalGeo.attributes.normal ? Array.from(finalGeo.attributes.normal.array as Float32Array) : []
+    const idx  = finalGeo.index ? Array.from(finalGeo.index.array as Uint32Array) : []
+    const geoData = JSON.stringify({pos,norm,idx})
+
+    // Compute bounding box center for position reference
+    finalGeo.computeBoundingBox()
+    const bb = finalGeo.boundingBox!
+    const cx=(bb.min.x+bb.max.x)/2, cy=bb.min.y, cz=(bb.min.z+bb.max.z)/2
+    const bw=bb.max.x-bb.min.x, bh=bb.max.y-bb.min.y, bd=bb.max.z-bb.min.z
+
+    // Single result object — no group, no marker, no complexity
+    // csgGeo field holds the serialized geometry, position is at bounding box center
+    const resultId = newId()
+    const resultObj: BuildObject = {
+      id:resultId, type:'box' as ShapeType,
+      x:cx, y:cy, z:cz,
+      rx:0, ry:0, rz:0,
+      width:bw, height:bh, depth:bd,
+      color:baseColor, isHole:false,
+      label:'CSG:'+geoData,      // CSG: prefix = single result mesh
+      csgSnapshot:'SNAP:'+snapshot,  // for split
+      radialSegments:32,
+    }
+
+    setScene(prev=>{
+      const next={...prev, objects:[
         ...prev.objects.filter(o=>!selectedIds.has(o.id)),
-        ...resultObjects,
-        {
-          id:gid, type:'box' as ShapeType,
-          x:0, y:0, z:0, rx:0, ry:0, rz:0,
-          width:0.001, height:0.001, depth:0.001,
-          color:'transparent', isHole:false,
-          groupedIds:selObjs.map(o=>o.id),
-          label:'SNAP:'+snapshot,
-        }
-      ]
-    }))
-    setSelectedIds(new Set([gid])); setIsDirty(true)
+        resultObj,
+      ]}
+      pushHistory(next); return next
+    })
+    setSelectedIds(new Set([resultId])); setIsDirty(true)
   }
 
-
   function splitSelected(){
-    if(!selectedObj?.groupedIds?.length) return
-    const gid=selectedObj.id
-    const marker=scene.objects.find(o=>o.id===gid)
-    const isCsgGroup=scene.objects.some(o=>o.groupId===gid&&o.label&&!o.label.startsWith('SNAP:'))
-
-    if(isCsgGroup){
-      // CSG group: geometry is baked, restore from SNAP: snapshot
-      const snapLabel=marker?.label?.startsWith('SNAP:')?marker.label.slice(5):null
-      let originals:BuildObject[]=[]
-      try{ if(snapLabel) originals=JSON.parse(snapLabel) }catch{}
-      setScene(prev=>({
-        ...prev,
-        objects:[
-          ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
-          ...originals,
-        ]
-      }))
-      setSelectedIds(new Set(originals.map(o=>o.id)))
-    } else {
-      // Visual group: restore CURRENT state (preserves size/rotation changes)
+    if(!selectedObj) return
+    // Only CSG result objects can be split
+    const snap=selectedObj.csgSnapshot
+    if(!snap?.startsWith('SNAP:')) return
+    try{
+      const originals:BuildObject[]=JSON.parse(snap.slice(5))
       setScene(prev=>{
-        const members=prev.objects
-          .filter(o=>o.groupId===gid)
-          .map(o=>({...o, groupId:undefined, label:undefined}))
-        return {
-          ...prev,
-          objects:[
-            ...prev.objects.filter(o=>o.groupId!==gid&&o.id!==gid),
-            ...members,
-          ]
-        }
+        const next={...prev, objects:[
+          ...prev.objects.filter(o=>o.id!==selectedObj.id),
+          ...originals,
+        ]}
+        pushHistory(next); return next
       })
-      setSelectedIds(new Set(selectedObj.groupedIds))
-    }
-    setIsDirty(true)
+      setSelectedIds(new Set(originals.map(o=>o.id)))
+      setIsDirty(true)
+    }catch{}
   }
 
   function undo(){
@@ -1351,9 +1283,9 @@ export default function BuilderEditor({profile}:{profile:any}){
             <button onClick={()=>mergeSelected()} disabled={selectedIds.size<2}
               style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:selectedIds.size>=2?D.txtPri:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:selectedIds.size>=2?'pointer':'not-allowed',fontFamily:'inherit',opacity:selectedIds.size<2?.4:1}}
               title="Sloučit vybrané (min. 2)">🔗 Sloučit</button>
-            <button onClick={splitSelected} disabled={!selectedObj?.groupedIds?.length}
-              style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:selectedObj?.groupedIds?.length?'pointer':'not-allowed',fontFamily:'inherit',opacity:!selectedObj?.groupedIds?.length?.4:1}}
-              title="Rozdělit sloučený objekt">✂ Rozdělit</button>
+            <button onClick={splitSelected} disabled={!selectedObj?.csgSnapshot}
+              style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:selectedObj?.csgSnapshot?'pointer':'not-allowed',fontFamily:'inherit',opacity:!selectedObj?.csgSnapshot?.4:1}}
+              title="Rozdělit CSG objekt">✂ Rozdělit</button>
             <button onClick={duplicateSelected} disabled={selectedIds.size===0}
               style={{padding:'4px 9px',background:'rgba(255,255,255,.04)',color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:selectedIds.size>0?'pointer':'not-allowed',fontFamily:'inherit',opacity:selectedIds.size===0?.4:1}}
               title="Duplikovat (Ctrl+D)">⧉ Duplikovat</button>
