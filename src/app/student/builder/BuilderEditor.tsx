@@ -49,7 +49,7 @@ function snap(v:number,s:number){ return Math.round(v/s)*s }
 // ThreeViewport — all 11 features
 // ══════════════════════════════════════════════════════════════════════════════
 function ThreeViewport({
-  scene, selectedIds, toolMode, gridSettings, showWireframe,
+  scene, selectedIds, toolMode, gridSettings, showWireframe, showEdges,
   onSelect, onMultiSelect, onUpdateObject, accent, resetViewKey,
 }:{
   scene:Scene; selectedIds:Set<string>; toolMode:ToolMode
