@@ -33,7 +33,8 @@ interface BuildObject {
   groupedIds?: string[]
   label?: string
   groupId?: string
-  csgSnapshot?: string  // SNAP: + JSON of originals, for CSG result objects
+  csgSnapshot?: string
+  scaleX?: number; scaleY?: number; scaleZ?: number
 }
 interface Scene { objects: BuildObject[]; groups: {id:string;objectIds:string[]}[] }
 interface GridSettings { visible:boolean; size:number; divisions:number; snap:boolean; snapSize:number }
@@ -225,9 +226,10 @@ function ThreeViewport({
         : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
 
       const mesh=new THREE.Mesh(geo,mat)
-      // CSG result: geometry is in world space, but x/z stores movement offset
       if(isCsgResult){
-        mesh.position.set(obj.x, obj.y, obj.z)  // offset from initial world-space position
+        mesh.position.set(obj.x, obj.y, obj.z)
+        if(obj.scaleX!=null) mesh.scale.set(obj.scaleX, obj.scaleY??1, obj.scaleZ??1)
+        if(obj.rx||obj.ry||obj.rz) mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
       } else {
         mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
         mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
@@ -312,11 +314,22 @@ function ThreeViewport({
     if(!targetMesh) return
     hw=obj.width/2; hh=obj.height/2; hd=obj.depth/2
 
-    const g=new THREE.Group(); g.name='gizmo-group'
-    _buildGizmoContent(g,id,hw,hh,hd,0,0,0,false)
-    // Add gizmo group as CHILD of mesh — this ensures it moves & rotates with object
-    targetMesh.add(g)
-    gizmoGroup.current=g
+    const isCsgObj=obj.label?.startsWith('CSG:')
+    if(isCsgObj){
+      // CSG: geometry is world-space baked, mesh.position=(obj.x, obj.y, obj.z)
+      // obj.y = bb.min.y (bottom of bbox), center vertically = obj.y + hh
+      // Apply scale factor to dimensions for correct gizmo size
+      const sx=obj.scaleX??1, sy=obj.scaleY??1, sz=obj.scaleZ??1
+      const g=new THREE.Group(); g.name='gizmo-group'
+      _buildGizmoContent(g, id, hw*sx, hh*sy, hd*sz, obj.x, obj.y+hh*sy, obj.z, true)
+      T.current.scene.add(g)
+      gizmoGroup.current=g
+    } else {
+      const g=new THREE.Group(); g.name='gizmo-group'
+      _buildGizmoContent(g,id,hw,hh,hd,0,0,0,false)
+      targetMesh.add(g)
+      gizmoGroup.current=g
+    }
   }
 
   // ── helper: build gizmo content (shared between regular and group gizmos) ──
@@ -638,16 +651,23 @@ function ThreeViewport({
           depth:  axis==='z'?Math.max(0.1,(d.origD??1)+delta):d.origD??1,
         })
       } else {
-        // corner handle — scale all included axes proportionally
+        // corner handle — scale proportionally
         const delta=(dx-dy)*0.025
-        const dw=hn.includes('x')?(d.origW??1)+delta*(d.origW??1):(d.origW??1)
-        const dh=hn.includes('y')?(d.origH??1)+delta*(d.origH??1):(d.origH??1)
-        const dd=hn.includes('z')?(d.origD??1)+delta*(d.origD??1):(d.origD??1)
-        onUpdateObject(d.objId,{
-          width:Math.max(0.1,dw),
-          height:Math.max(0.1,dh),
-          depth:Math.max(0.1,dd),
-        })
+        const csgDragObj=scene.objects.find(o=>o.id===d.objId)
+        if(csgDragObj?.label?.startsWith('CSG:')){
+          // CSG: update scaleX/Y/Z instead of width/height/depth
+          const curSx=csgDragObj.scaleX??1, curSy=csgDragObj.scaleY??1, curSz=csgDragObj.scaleZ??1
+          const nx=hn.includes('x')?Math.max(0.05,curSx+delta*curSx):curSx
+          const ny=hn.includes('y')?Math.max(0.05,curSy+delta*curSy):curSy
+          const nz=hn.includes('z')?Math.max(0.05,curSz+delta*curSz):curSz
+          onUpdateObject(d.objId,{ scaleX:nx, scaleY:ny, scaleZ:nz,
+            width:csgDragObj.width*(nx/curSx), height:csgDragObj.height*(ny/curSy), depth:csgDragObj.depth*(nz/curSz) })
+        } else {
+          const dw=hn.includes('x')?(d.origW??1)+delta*(d.origW??1):(d.origW??1)
+          const dh=hn.includes('y')?(d.origH??1)+delta*(d.origH??1):(d.origH??1)
+          const dd=hn.includes('z')?(d.origD??1)+delta*(d.origD??1):(d.origD??1)
+          onUpdateObject(d.objId,{ width:Math.max(0.1,dw), height:Math.max(0.1,dh), depth:Math.max(0.1,dd) })
+        }
       }
       return
     }
@@ -890,6 +910,17 @@ export default function BuilderEditor({profile}:{profile:any}){
 
   // ── CSG helpers ───────────────────────────────────────────────────────────
   function buildGeoForObj(obj:BuildObject):any {
+    if(obj.label?.startsWith('CSG:')){
+      try{
+        const {pos,norm,idx}=JSON.parse(obj.label.slice(4))
+        const geo=new THREE.BufferGeometry()
+        geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3))
+        if(norm.length>0) geo.setAttribute('normal',new THREE.Float32BufferAttribute(norm,3))
+        if(idx.length>0)  geo.setIndex(new THREE.Uint32BufferAttribute(idx,1))
+        if(norm.length===0) geo.computeVertexNormals()
+        return geo
+      }catch{}
+    }
     switch(obj.type){
       case 'sphere':   return new THREE.SphereGeometry(obj.width/2, obj.radialSegments??32, 16)
       case 'cylinder': return new THREE.CylinderGeometry(obj.width/2, obj.width/2, obj.height, obj.radialSegments??32)
@@ -916,9 +947,17 @@ export default function BuilderEditor({profile}:{profile:any}){
     }
 
     function makeBrush(obj:BuildObject):any {
-      const b = new Brush(buildGeoForObj(obj), new THREE.MeshStandardMaterial())
-      b.position.set(obj.x, obj.y + obj.height/2, obj.z)
-      b.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
+      const geo=buildGeoForObj(obj)
+      const b = new Brush(geo, new THREE.MeshStandardMaterial())
+      if(obj.label?.startsWith('CSG:')){
+        // CSG geometry is world-space; apply offset/scale/rotation only
+        b.position.set(obj.x, obj.y, obj.z)
+        if(obj.scaleX!=null) b.scale.set(obj.scaleX, obj.scaleY??1, obj.scaleZ??1)
+        b.rotation.set((obj.rx||0)*Math.PI/180, (obj.ry||0)*Math.PI/180, (obj.rz||0)*Math.PI/180)
+      } else {
+        b.position.set(obj.x, obj.y + obj.height/2, obj.z)
+        b.rotation.set((obj.rx||0)*Math.PI/180, (obj.ry||0)*Math.PI/180, (obj.rz||0)*Math.PI/180)
+      }
       b.updateMatrixWorld(true)
       return b
     }
@@ -1039,8 +1078,11 @@ export default function BuilderEditor({profile}:{profile:any}){
   const [newProjName,setNewProjName]   = useState('')
   const [newFileModal,setNewFileModal] = useState(false)
   const [newFileName,setNewFileName]   = useState('')
+  const [newFileProj,setNewFileProj]   = useState('')
   const [renamingId,setRenamingId]     = useState<string|null>(null)
   const [renameVal,setRenameVal]       = useState('')
+  const [renamingProj,setRenamingProj] = useState<string|null>(null)
+  const [renameProjVal,setRenameProjVal] = useState('')
   const [rightTab,setRightTab]  = useState<'shapes'|'settings'>('shapes')
 
   async function push(path:string,content:string){
@@ -1101,13 +1143,13 @@ export default function BuilderEditor({profile}:{profile:any}){
 
   async function doCreateFile(){
     if(!newFileName.trim()) return
-    const proj=activeProject; if(!proj) return
+    const proj=newFileProj||activeProject; if(!proj) return
     let name=newFileName.trim(); if(!name.endsWith('.json')) name+='.json'
     const path=fp(uid,proj,name)
     await push(path,JSON.stringify(emptyScene()))
     const projs=await refreshProjects()
     const f=projs.find(x=>x.name===proj)?.files.find(x=>x.path===path); if(f) await openFile(f)
-    setNewFileModal(false); setNewFileName('')
+    setNewFileModal(false); setNewFileName(''); setNewFileProj('')
   }
 
   async function deleteFile(f:{path:string;name:string;project:string}){
@@ -1172,6 +1214,12 @@ export default function BuilderEditor({profile}:{profile:any}){
       )}
       {newFileModal&&(
         <Modal title="📄 Nový soubor" onClose={()=>setNewFileModal(false)}>
+          <div style={{marginBottom:6,fontSize:11,color:D.txtSec}}>Projekt</div>
+          <select value={newFileProj||(projects[0]?.name??'')} onChange={e=>setNewFileProj(e.target.value)}
+            style={{width:'100%',padding:'8px 10px',background:D.bgMid,border:`1px solid ${D.border}`,borderRadius:7,fontSize:12,color:D.txtPri,fontFamily:'inherit',outline:'none',marginBottom:12}}>
+            {projects.map(p=><option key={p.name} value={p.name}>{p.name}</option>)}
+          </select>
+          <div style={{marginBottom:6,fontSize:11,color:D.txtSec}}>Název souboru</div>
           <input value={newFileName} onChange={e=>setNewFileName(e.target.value)}
             onKeyDown={e=>e.key==='Enter'&&newFileName.trim()&&doCreateFile()}
             autoFocus placeholder="scene.json" style={inpStyle}/>
@@ -1224,25 +1272,57 @@ export default function BuilderEditor({profile}:{profile:any}){
                       style={{display:'flex',alignItems:'center',gap:5,padding:'4px 12px',cursor:'pointer',background:proj.name===activeProject?accent+'10':'transparent'}}>
                       <span style={{fontSize:9,color:D.txtSec,display:'inline-block',transition:'transform .15s',transform:expanded.has(proj.name)?'rotate(90deg)':'none'}}>▶</span>
                       <span style={{fontSize:12}}>📁</span>
-                      <span style={{fontSize:11,fontWeight:600,color:proj.name===activeProject?accent:D.txtPri,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj.name}</span>
+                      {renamingProj===proj.name?(
+                        <input value={renameProjVal} autoFocus
+                          onChange={e=>setRenameProjVal(e.target.value)}
+                          onKeyDown={async e=>{
+                            if(e.key==='Enter'){
+                              if(renameProjVal.trim()&&renameProjVal!==proj.name){
+                                const newN=sanitize(renameProjVal.trim())
+                                for(const f of proj.files){
+                                  const np=`zaci/${uid}/${newN}/${f.name}`
+                                  await push(np,await fetchContent(f.path))
+                                  await supabase.storage.from(BUCKET).remove([f.path])
+                                  if(activeFile?.path===f.path) setActiveFile({...f,path:np,project:newN})
+                                }
+                                if(activeProject===proj.name) setActiveProject(newN)
+                                await refreshProjects()
+                              }
+                              setRenamingProj(null)
+                            }
+                            if(e.key==='Escape') setRenamingProj(null)
+                          }}
+                          onBlur={()=>setRenamingProj(null)}
+                          style={{flex:1,padding:'2px 5px',background:D.bgMid,border:`1px solid ${accent}`,borderRadius:4,fontSize:11,color:D.txtPri,fontFamily:'inherit',outline:'none'}}
+                          onClick={e=>e.stopPropagation()}/>
+                      ):(
+                        <span style={{fontSize:11,fontWeight:600,color:proj.name===activeProject?accent:D.txtPri,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{proj.name}</span>
+                      )}
+                      <div className="b-acts" style={{display:'flex',gap:1,opacity:0}}>
+                        <button onClick={e=>{e.stopPropagation();setRenamingProj(proj.name);setRenameProjVal(proj.name)}} style={{padding:'1px 4px',background:'none',border:'none',cursor:'pointer',color:D.txtSec,fontSize:10}}>✏</button>
+                      </div>
                     </div>
                     {expanded.has(proj.name)&&proj.files.map(f=>(
                       <div key={f.path} className="b-row"
                         style={{display:'flex',alignItems:'center',gap:5,padding:'3px 12px 3px 26px',cursor:'pointer',background:f.path===activeFile?.path?accent+'18':'transparent',borderLeft:f.path===activeFile?.path?`2px solid ${accent}`:'2px solid transparent'}}>
                         {renamingId===f.path?(
                           <input value={renameVal} autoFocus onChange={e=>setRenameVal(e.target.value)}
-                            onBlur={async()=>{
-                              if(renameVal.trim()&&renameVal!==f.name){
-                                let nn=renameVal.trim(); if(!nn.endsWith('.json')) nn+='.json'
-                                const np=fp(uid,f.project,nn)
-                                await push(np,await fetchContent(f.path))
-                                await supabase.storage.from(BUCKET).remove([f.path])
-                                if(activeFile?.path===f.path) setActiveFile({...f,path:np,name:nn})
-                                await refreshProjects()
+                            onKeyDown={async e=>{
+                              if(e.key==='Enter'){
+                                const trimmed=renameVal.trim()
+                                if(trimmed&&trimmed!==f.name.replace(/\.json$/,'')){
+                                  let nn=trimmed; if(!nn.endsWith('.json')) nn+='.json'
+                                  const np=fp(uid,f.project,nn)
+                                  await push(np,await fetchContent(f.path))
+                                  await supabase.storage.from(BUCKET).remove([f.path])
+                                  if(activeFile?.path===f.path) setActiveFile({...f,path:np,name:nn})
+                                  await refreshProjects()
+                                }
+                                setRenamingId(null)
                               }
-                              setRenamingId(null)
+                              if(e.key==='Escape') setRenamingId(null)
                             }}
-                            onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();if(e.key==='Escape')setRenamingId(null)}}
+                            onBlur={()=>setRenamingId(null)}
                             style={{flex:1,padding:'2px 5px',background:D.bgMid,border:`1px solid ${accent}`,borderRadius:4,fontSize:10,color:D.txtPri,fontFamily:'inherit',outline:'none'}}
                             onClick={e=>e.stopPropagation()}/>
                         ):(
