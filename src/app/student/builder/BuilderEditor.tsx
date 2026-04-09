@@ -532,8 +532,8 @@ function ThreeViewport({
             drag.current={
               mode:'drag-obj', objId:effectiveId,
               // For individual objects: use world position for absolute placement
-              // For groups: startX/startZ screen coords for delta calculation
-              startX:e.clientX, startZ:e.clientY,
+              // For groups: startX/startY screen coords for delta calculation
+              startX:e.clientX, startY:e.clientY,
               startWorldX:wp.x, startWorldZ:wp.z,
               origX:isGroupMarker2?0:effectiveObj.x,
               origZ:isGroupMarker2?0:effectiveObj.z,
@@ -592,7 +592,7 @@ function ThreeViewport({
       const dx=e.clientX-(d.startX??e.clientX), dz_raw=e.clientY-(d.startY??e.clientY)
       // Recalculate world delta properly
       const wpNow=getWorldXZ(e.clientX,e.clientY,0)
-      const wpOrig=getWorldXZ(d.startX??e.clientX,d.startZ??e.clientY,0)
+      const wpOrig=getWorldXZ(d.startX??e.clientX,d.startY??e.clientY,0)
       const wdx=wpNow.x-wpOrig.x, wdz=wpNow.z-wpOrig.z
       // Move constituent group members if this is a group
       const groupMembers=scene.objects.filter(o=>o.groupId===d.objId)
