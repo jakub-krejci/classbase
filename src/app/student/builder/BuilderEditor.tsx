@@ -226,14 +226,16 @@ function ThreeViewport({
         : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
 
       const mesh=new THREE.Mesh(geo,mat)
-      // CSG result geometry is in world space — don't apply position/rotation
-      if(!isCsgResult){
+      // CSG result: geometry is in world space, but x/z stores movement offset
+      if(isCsgResult){
+        mesh.position.set(obj.x, obj.y, obj.z)  // offset from initial world-space position
+      } else {
         mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
         mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
       }
       mesh.castShadow=true; mesh.receiveShadow=true
-      // CSG results → clicks go to group marker so the group can be moved/scaled
-      mesh.userData.objectId = isCsgResult ? (obj.groupId??obj.id) : obj.id
+      // All objects use their own id — the click handler resolves group via obj.groupId
+      mesh.userData.objectId = obj.id
 
       // black edge overlay (toggled by showEdges, off when wireframe mode active)
       if(!showWireframe&&!obj.wireframe&&showEdges){
@@ -519,23 +521,34 @@ function ThreeViewport({
         onSelect(effectiveId, e.shiftKey)
         const effectiveObj=scene.objects.find(o=>o.id===effectiveId)??obj
         if(effectiveObj){
+          // For group markers (width<0.01), find a representative member for position reference
+          const isGroupMarker=effectiveObj.width<0.01&&effectiveObj.groupedIds?.length
+          const posRef = isGroupMarker
+            ? (scene.objects.find(o=>o.groupId===effectiveId&&!o.isHole)??effectiveObj)
+            : effectiveObj
           if(toolMode==='move'||toolMode==='all'){
             const wp=getWorldXZ(e.clientX,e.clientY,0)
+            const isGroupMarker2=effectiveObj.width<0.01&&!!effectiveObj.groupedIds?.length
             drag.current={
               mode:'drag-obj', objId:effectiveId,
+              // For individual objects: use world position for absolute placement
+              // For groups: startX/startZ screen coords for delta calculation
+              startX:e.clientX, startZ:e.clientY,
               startWorldX:wp.x, startWorldZ:wp.z,
-              origX:effectiveObj.x, origZ:effectiveObj.z, planeY:0
+              origX:isGroupMarker2?0:effectiveObj.x,
+              origZ:isGroupMarker2?0:effectiveObj.z,
+              planeY:0
             }
           } else if(toolMode==='rotate'){
             const ang=Math.atan2(e.clientY-window.innerHeight/2, e.clientX-window.innerWidth/2)*180/Math.PI
             drag.current={
               mode:'rot-h', objId:effectiveId, rotAxis:'y',
-              origRx:effectiveObj.rx??0, origRy:effectiveObj.ry??0, origRz:effectiveObj.rz??0, rotStart:ang
+              origRx:posRef.rx??0, origRy:posRef.ry??0, origRz:posRef.rz??0, rotStart:ang
             }
           } else if(toolMode==='scale'){
             drag.current={
               mode:'scale-h', objId:effectiveId, hName:'sx+y+z+',
-              origW:effectiveObj.width, origH:effectiveObj.height, origD:effectiveObj.depth,
+              origW:posRef.width, origH:posRef.height, origD:posRef.depth,
               startX:e.clientX, startY:e.clientY
             }
           }
@@ -576,7 +589,11 @@ function ThreeViewport({
       let nx=(d.origX??0)+(wp.x-(d.startWorldX??0))
       let nz=(d.origZ??0)+(wp.z-(d.startWorldZ??0))
       if(gridSettings.snap){ nx=snap(nx,gridSettings.snapSize); nz=snap(nz,gridSettings.snapSize) }
-      const dx=nx-(d.origX??0), dz=nz-(d.origZ??0)
+      const dx=e.clientX-(d.startX??e.clientX), dz_raw=e.clientY-(d.startY??e.clientY)
+      // Recalculate world delta properly
+      const wpNow=getWorldXZ(e.clientX,e.clientY,0)
+      const wpOrig=getWorldXZ(d.startX??e.clientX,d.startZ??e.clientY,0)
+      const wdx=wpNow.x-wpOrig.x, wdz=wpNow.z-wpOrig.z
       // Move constituent group members if this is a group
       const groupMembers=scene.objects.filter(o=>o.groupId===d.objId)
       if(groupMembers.length>0){
@@ -584,7 +601,8 @@ function ThreeViewport({
           const key='orig_'+co.id
           if(!(drag.current as any)[key]) (drag.current as any)[key]={x:co.x,z:co.z}
           const orig=(drag.current as any)[key]
-          onUpdateObject(co.id,{x:orig.x+dx, z:orig.z+dz})
+          // For CSG results (baked geometry), x/z acts as a translation offset applied to mesh.position
+          onUpdateObject(co.id,{x:orig.x+wdx, z:orig.z+wdz})
         })
       } else {
         onUpdateObject(d.objId,{x:nx,z:nz})
