@@ -209,29 +209,31 @@ function ThreeViewport({
         }
       }
 
-      // CSG result objects are already in world space (position baked into geometry)
-      const isCsgResult=obj.label&&!obj.label.startsWith('SNAP:')&&obj.groupId&&!obj.groupedIds?.length
-      // Holes in a merged group become invisible (they conceptually carve the solid)
+      // Holes in a merged group: completely skip rendering (invisible + non-raycastable)
       const isGroupedHole=obj.isHole&&!!obj.groupId
-      const mat = isGroupedHole
-        ? new THREE.MeshStandardMaterial({ color:0x000000, transparent:true, opacity:0.0, wireframe:false })
-        : obj.isHole
-          ? new THREE.MeshStandardMaterial({ color:0x4488ff, transparent:true, opacity:0.25, wireframe: showWireframe||obj.wireframe })
-          : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
+      if(isGroupedHole){
+        // Remove any existing mesh and skip — holes in groups are invisible
+        const old2=meshMap.current.get(obj.id)
+        if(old2){ ts.remove(old2); meshMap.current.delete(obj.id) }
+        continue
+      }
+
+      // CSG result: groupId set, label is serialized geometry (no SNAP: prefix), no groupedIds
+      const isCsgResult=!!(obj.label&&!obj.label.startsWith('SNAP:')&&obj.groupId&&!obj.groupedIds?.length)
+
+      const mat = obj.isHole
+        ? new THREE.MeshStandardMaterial({ color:0x4488ff, transparent:true, opacity:0.25, wireframe: showWireframe||obj.wireframe })
+        : new THREE.MeshStandardMaterial({ color:new THREE.Color(obj.color), wireframe: showWireframe||obj.wireframe })
 
       const mesh=new THREE.Mesh(geo,mat)
-      // CSG result geometry is already in world space — don't apply position/rotation again
+      // CSG result geometry is in world space — don't apply position/rotation
       if(!isCsgResult){
         mesh.position.set(obj.x, obj.y+obj.height/2, obj.z)
         mesh.rotation.set(obj.rx*Math.PI/180, obj.ry*Math.PI/180, obj.rz*Math.PI/180)
       }
       mesh.castShadow=true; mesh.receiveShadow=true
-      // CSG results + invisible holes → forward clicks to group marker
-      if(isGroupedHole||isCsgResult){
-        mesh.userData.objectId=obj.groupId??obj.id
-      } else {
-        mesh.userData.objectId=obj.id
-      }
+      // CSG results → clicks go to group marker so the group can be moved/scaled
+      mesh.userData.objectId = isCsgResult ? (obj.groupId??obj.id) : obj.id
 
       // black edge overlay (toggled by showEdges, off when wireframe mode active)
       if(!showWireframe&&!obj.wireframe&&showEdges){
@@ -960,7 +962,8 @@ export default function BuilderEditor({profile}:{profile:any}){
     const resultObjects:BuildObject[]=[]
 
     for(const solid of solids){
-      let brush:any = makeBrush(solid)
+      const solidBrush:any = makeBrush(solid)
+      let brush:any = solidBrush
       for(const hole of holes){
         try {
           brush = evaluator.evaluate(brush, makeBrush(hole), SUBTRACTION)
@@ -968,13 +971,20 @@ export default function BuilderEditor({profile}:{profile:any}){
           console.warn('CSG subtraction failed', e)
         }
       }
-      // CSG result: label = serialized geometry (no SNAP: prefix), position baked in
+
+      // After evaluate, brush.geometry is in the brush's LOCAL space.
+      // We must bake the world matrix into the geometry so it sits at the right place.
+      const resultGeo = brush.geometry.clone()
+      brush.updateMatrixWorld(true)
+      resultGeo.applyMatrix4(brush.matrixWorld)
+
+      // Now geometry is in true world space — store with position (0,0,0) and no rotation
       resultObjects.push({
         id:newId(), type:'box' as ShapeType,
         x:0, y:0, z:0, rx:0, ry:0, rz:0,
         width:solid.width, height:solid.height, depth:solid.depth,
         color:baseColor, isHole:false, groupId:gid,
-        label:serializeGeo(brush.geometry),
+        label:serializeGeo(resultGeo),
         radialSegments:solid.radialSegments,
       } as BuildObject)
     }
