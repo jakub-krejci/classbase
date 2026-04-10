@@ -2,8 +2,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import AssignmentPanel from '@/components/AssignmentPanel'
-import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 import { DarkLayout, D } from '@/components/DarkLayout'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -280,13 +278,12 @@ function VexField({ simState, isRunning, accent }: { simState: SimState | null; 
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function VexEditor({ profile, assignmentId }: { profile: any; assignmentId?: string | null }) {
+export default function VexEditor({ profile }: { profile: any }) {
   const supabase = createClient()
   const accent   = profile?.accent_color ?? '#7C3AED'
   const uid      = profile?.id as string
 
   // ── Editor state ────────────────────────────────────────────────────────────
-  const [assignmentFile, setAssignmentFile] = useState<{path:string;content:string}|null>(null)
   const [code, setCode]             = useState(DEFAULT_CODE)
   const codeRef                     = useRef(DEFAULT_CODE)
   const containerRef                = useRef<HTMLDivElement>(null)
@@ -333,30 +330,6 @@ export default function VexEditor({ profile, assignmentId }: { profile: any; ass
   const [touchLedColor, setTouchLedColor]   = useState<string>('#888888')
 
   // ── Monaco ──────────────────────────────────────────────────────────────────
-
-  // ── Assignment mode: load assignment file ─────────────────────────────────
-
-  // Load assignment file into editor when ready
-  useEffect(() => {
-    if (!assignmentFile) return
-    // Each editor has its own way to set content - we use a custom event
-    window.dispatchEvent(new CustomEvent('cb-assignment-file', { detail: assignmentFile }))
-  }, [assignmentFile])
-
-  useEffect(() => {
-    if (!assignmentId) return
-    ;(async () => {
-      const result = await getAssignmentForStudent(assignmentId)
-      if (result.error || !result.assignment) return
-      const workPath = `assignments/${assignmentId}/${uid}/work.py`
-      const { content } = await getAssignmentFileContent('vex-files', workPath)
-      const starter = content ?? (result.assignment.starter_code?.trim() || 'from vex import *\n\nbrain = Brain()\n')
-      if (content === null) await saveAssignmentFile('vex-files', workPath, starter)
-      // Signal to editor to open this path
-      setAssignmentFile({ path: workPath, content: starter })
-    })()
-  }, [assignmentId])
-
   useEffect(() => {
     if (typeof window === 'undefined') return
     const s = document.createElement('script')
@@ -403,10 +376,6 @@ export default function VexEditor({ profile, assignmentId }: { profile: any; ass
         })
         ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => document.getElementById('vex-save-btn')?.click())
         setMonacoReady(true)
-        window.addEventListener('cb-assignment-file', (ev: any) => {
-          ed.setValue(ev.detail.content)
-          ed.setScrollPosition({ scrollTop: 0 })
-        })
       })
     }
     document.head.appendChild(s)
@@ -750,12 +719,10 @@ export default function VexEditor({ profile, assignmentId }: { profile: any; ass
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
       `}</style>
 
-
-      {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid??profile?.id} accent={accent}/>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-        {/* ══ LEFT (hidden in assignment mode): Sidebar ══ */}
-        <div style={{ width: 210, flexShrink: 0, display: assignmentId ? 'none' : 'flex', borderRight: `1px solid ${D.border}`, background: D.bgCard, flexDirection: 'column', overflow: 'hidden' }}>
+        {/* ══ LEFT: Sidebar ══ */}
+        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Header */}
           <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>

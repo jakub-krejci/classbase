@@ -4,8 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { runPython } from '@/lib/pyodide-runner'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
-import AssignmentPanel from '@/components/AssignmentPanel'
-import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const BUCKET       = 'python-files'
@@ -33,7 +31,7 @@ interface PyFile     { path: string; name: string; project: string; size?: numbe
 interface Project    { name: string; files: PyFile[] }
 interface RecentEntry{ path: string; name: string; project: string; openedAt: string }
 
-export default function PythonEditor({ profile, assignmentId }: { profile: any; assignmentId?: string | null }) {
+export default function PythonEditor({ profile }: { profile: any }) {
   const supabase = createClient()
   const accent   = profile?.accent_color ?? '#7C3AED'
   const uid      = profile?.id as string
@@ -214,32 +212,11 @@ export default function PythonEditor({ profile, assignmentId }: { profile: any; 
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
+    try {
+      const r = JSON.parse(localStorage.getItem(LS_RECENT) ?? '[]')
+      setRecent(r)
+    } catch {}
     ;(async () => {
-      if (assignmentId) {
-        // Assignment mode: load assignment file directly from server action
-        // using statically imported server actions
-        const result = await getAssignmentForStudent(assignmentId)
-        if (result.error || !result.assignment) { flash('❌ ' + (result.error ?? 'Úkol nenalezen')); return }
-        const workPath = `assignments/${assignmentId}/${uid}/work.py`
-        const { content } = await getAssignmentFileContent(BUCKET, workPath)
-        const starterContent = content ?? (result.assignment.starter_code?.trim() || DEFAULT_CODE)
-        if (content === null) await saveAssignmentFile(BUCKET, workPath, starterContent)
-        const asgFile: PyFile = { path: workPath, name: 'work.py', project: 'Úkol', updatedAt: new Date().toISOString() }
-        setActiveFile(asgFile)
-        setIsDirty(false)
-        // Wait for Monaco to be ready then set content
-        const waitAndSet = () => {
-          if (editorRef.current) { editorRef.current.setValue(starterContent); clearOutput() }
-          else setTimeout(waitAndSet, 100)
-        }
-        waitAndSet()
-        return
-      }
-      // Normal mode
-      try {
-        const r = JSON.parse(localStorage.getItem(LS_RECENT) ?? '[]')
-        setRecent(r)
-      } catch {}
       const projs = await refreshProjects()
       const lastPath = localStorage.getItem(LS_LAST)
       if (lastPath) {
@@ -669,21 +646,11 @@ print(_j.dumps(_out))`,
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {/* ── Assignment panel (shown when opened from Tasks) ── */}
-      {assignmentId && (
-        <AssignmentPanel
-          assignmentId={assignmentId}
-          studentId={uid}
-          accent={accent}
-          onSaveBeforeSubmit={async () => { await saveCurrentFile() }}
-        />
-      )}
-
       {/* ── 3-col layout ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-        {/* ══ LEFT: Sidebar (hidden in assignment mode) ══ */}
-        {!assignmentId && <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: assignmentId ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* ══ LEFT: Sidebar ══ */}
+        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Header */}
           <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
@@ -773,7 +740,6 @@ print(_j.dumps(_out))`,
             }
           </div>
         </div>
-        }
 
         {/* ══ CENTER: Editor + Output (resizable) ══ */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
