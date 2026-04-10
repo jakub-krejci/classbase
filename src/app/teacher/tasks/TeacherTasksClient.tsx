@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { saveAssignment, changeAssignmentStatus, deleteAssignmentAction, gradeSubmission, toggleResubmitAction } from './actions'
 
 const EDITOR_LABELS: Record<string, string> = {
   python:    '🐍 Python',
@@ -78,45 +79,33 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
     setAssignments(data ?? [])
   }, [teacherId])
 
-  // ── Save assignment ───────────────────────────────────────────────────────
+  // ── Save assignment via server action ────────────────────────────────────
   async function save(publishNow = false) {
     if (!form.title.trim()) { flash('Vyplň název úkolu'); return }
     if (selStudents.size === 0 && selGroups.size === 0) { flash('Vyber alespoň jednoho žáka nebo skupinu'); return }
     setSaving(true)
     try {
-      const payload = {
-        teacher_id:     teacherId,
-        title:          form.title.trim(),
-        description:    form.description.trim(),
-        editor_type:    form.editor_type,
-        deadline:       form.deadline ? new Date(form.deadline).toISOString() : null,
+      const result = await saveAssignment({
+        editId: editId,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        editor_type: form.editor_type,
+        deadline: form.deadline ? new Date(form.deadline).toISOString() : null,
         allow_resubmit: form.allow_resubmit,
-        status:         publishNow ? 'published' : form.status,
-        published_at:   publishNow ? new Date().toISOString() : null,
+        publishNow,
+        studentIds: [...selStudents],
+        groupIds: [...selGroups],
+      })
+      if (result.error) {
+        flash(`Chyba: ${result.error}`)
+        setSaving(false); return
       }
-
-      let asgId = editId
-      if (editId) {
-        await supabase.from('task_assignments').update(payload).eq('id', editId)
-        await supabase.from('task_targets').delete().eq('assignment_id', editId)
-      } else {
-        const { data, error } = await supabase.from('task_assignments').insert(payload).select('id').single()
-        if (error || !data) { flash('Chyba při ukládání'); setSaving(false); return }
-        asgId = data.id
-      }
-
-      // Insert targets
-      const targets: any[] = []
-      selStudents.forEach(sid => targets.push({ assignment_id: asgId, student_id: sid }))
-      selGroups.forEach(gid => targets.push({ assignment_id: asgId, group_id: gid }))
-      if (targets.length > 0) await supabase.from('task_targets').insert(targets)
-
       flash(publishNow ? '✓ Úkol publikován' : '✓ Uloženo')
       await refresh()
       setView('list')
       resetForm()
-    } catch (e) {
-      flash('Neočekávaná chyba')
+    } catch (e: any) {
+      flash(`Neočekávaná chyba: ${e?.message ?? e}`)
     } finally {
       setSaving(false)
     }
@@ -124,14 +113,13 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
 
   async function deleteAssignment(id: string) {
     if (!confirm('Opravdu smazat tento úkol? Tato akce je nevratná.')) return
-    await supabase.from('task_assignments').delete().eq('id', id)
+    await deleteAssignmentAction(id)
     await refresh()
   }
 
   async function changeStatus(id: string, status: string) {
-    const patch: any = { status }
-    if (status === 'published') patch.published_at = new Date().toISOString()
-    await supabase.from('task_assignments').update(patch).eq('id', id)
+    const result = await changeAssignmentStatus(id, status)
+    if (result.error) { flash(`Chyba: ${result.error}`); return }
     await refresh()
     flash(`✓ Stav změněn na: ${STATUS_LABELS[status]}`)
   }
@@ -416,35 +404,23 @@ function SubmissionsDetail({ assignment, onRefresh, supabase }: { assignment: an
 
   async function returnSubmission(sub: any) {
     setSaving(true)
-    await supabase.from('task_submissions').update({
-      status: 'returned',
-      teacher_comment: comment,
-      grade: grade || null,
-      returned_at: new Date().toISOString(),
-    }).eq('id', sub.id)
-    flash('✓ Vráceno žákovi')
+    const result = await gradeSubmission(sub.id, { status: 'returned', teacher_comment: comment, grade })
+    if (result.error) flash(`Chyba: ${result.error}`)
+    else { flash('✓ Vráceno žákovi'); setSelected(null); await refreshSubs() }
     setSaving(false)
-    setSelected(null)
-    await refreshSubs()
   }
 
-  async function gradeSubmission(sub: any) {
+  async function gradeSubmissionHandler(sub: any) {
     setSaving(true)
-    await supabase.from('task_submissions').update({
-      status: 'graded',
-      teacher_comment: comment,
-      grade: grade || null,
-      graded_at: new Date().toISOString(),
-    }).eq('id', sub.id)
-    flash('✓ Ohodnoceno')
+    const result = await gradeSubmission(sub.id, { status: 'graded', teacher_comment: comment, grade })
+    if (result.error) flash(`Chyba: ${result.error}`)
+    else { flash('✓ Ohodnoceno'); setSelected(null); await refreshSubs() }
     setSaving(false)
-    setSelected(null)
-    await refreshSubs()
   }
 
-  async function toggleResubmit(sub: any) {
+  async function handleToggleResubmit(sub: any) {
     const newVal = !(sub.allow_resubmit_override ?? assignment.allow_resubmit)
-    await supabase.from('task_submissions').update({ allow_resubmit_override: newVal }).eq('id', sub.id)
+    await toggleResubmitAction(sub.id, newVal)
     await refreshSubs()
   }
 
@@ -515,7 +491,7 @@ function SubmissionsDetail({ assignment, onRefresh, supabase }: { assignment: an
                       ✍ Hodnotit
                     </button>
                   )}
-                  <button onClick={() => toggleResubmit(sub)} title="Přepnout povolení znovu odevzdat"
+                  <button onClick={() => handleToggleResubmit(sub)} title="Přepnout povolení znovu odevzdat"
                     style={{ padding: '6px 10px', background: (sub.allow_resubmit_override ?? assignment.allow_resubmit) ? 'rgba(168,85,247,.12)' : 'rgba(255,255,255,.04)', color: (sub.allow_resubmit_override ?? assignment.allow_resubmit) ? '#a855f7' : '#6b7280', border: '1px solid rgba(255,255,255,.08)', borderRadius: 7, fontSize: 11, cursor: 'pointer' }}>
                     🔄
                   </button>
@@ -556,7 +532,7 @@ function SubmissionsDetail({ assignment, onRefresh, supabase }: { assignment: an
                 style={{ flex: 1, padding: '10px', background: 'rgba(168,85,247,.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,.3)', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 {saving ? '…' : '↩ Vrátit žákovi'}
               </button>
-              <button onClick={() => gradeSubmission(selected)} disabled={saving}
+              <button onClick={() => gradeSubmissionHandler(selected)} disabled={saving}
                 style={{ flex: 1, padding: '10px', background: 'rgba(34,197,94,.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,.3)', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 {saving ? '…' : '✓ Uzavřít hodnocení'}
               </button>
