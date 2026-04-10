@@ -612,7 +612,58 @@ export default function PyGameEditor({ profile }: { profile: any }) {
       setFps: (v: number) => { fpsRef.value = v; setFps(Math.round(v)) },
       isStopped: () => stopRef.current,
       log: (s: string) => addLog(s),
+      // Keyboard state — keyed by pygame key code int
+      keys: {} as Record<number, boolean>,
+      // Mouse state
+      mouseX: 0, mouseY: 0,
+      mouseButtons: [false, false, false],
+      getKeys: function() { return this.keys },
+      getMousePos: function() { return [this.mouseX, this.mouseY] },
+      getMouseButtons: function() { return this.mouseButtons },
     }
+
+    // Pygame key code map (JS keyCode/key -> pygame int)
+    const KEY_MAP: Record<string, number> = {
+      'ArrowLeft':276,'ArrowRight':275,'ArrowUp':273,'ArrowDown':274,
+      ' ':32,'Enter':13,'Escape':27,'Backspace':8,'Tab':9,
+      'a':97,'b':98,'c':99,'d':100,'e':101,'f':102,'g':103,'h':104,'i':105,
+      'j':106,'k':107,'l':108,'m':109,'n':110,'o':111,'p':112,'q':113,'r':114,
+      's':115,'t':116,'u':117,'v':118,'w':119,'x':120,'y':121,'z':122,
+      'A':97,'B':98,'C':99,'D':100,'E':101,'F':102,'G':103,'H':104,'I':105,
+      'J':106,'K':107,'L':108,'M':109,'N':110,'O':111,'P':112,'Q':113,'R':114,
+      'S':115,'T':116,'U':117,'V':118,'W':119,'X':120,'Y':121,'Z':122,
+      '0':48,'1':49,'2':50,'3':51,'4':52,'5':53,'6':54,'7':55,'8':56,'9':57,
+      'Shift':304,'Control':306,'Alt':308,'F1':282,'F2':283,'F3':284,'F4':285,'F5':286,
+    }
+
+    // Attach keyboard/mouse listeners to window (canvas needs focus)
+    const onKeyDown = (e: KeyboardEvent) => {
+      const code = KEY_MAP[e.key]
+      if (code !== undefined) { pgSim.keys[code] = true; e.preventDefault() }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      const code = KEY_MAP[e.key]
+      if (code !== undefined) pgSim.keys[code] = false
+    }
+    const onMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect()
+      pgSim.mouseX = Math.round(e.clientX - rect.left)
+      pgSim.mouseY = Math.round(e.clientY - rect.top)
+    }
+    const onMouseDown = (e: MouseEvent) => {
+      pgSim.mouseButtons[e.button] = true
+    }
+    const onMouseUp = (e: MouseEvent) => {
+      pgSim.mouseButtons[e.button] = false
+    }
+    canvas.setAttribute('tabindex', '0')
+    canvas.style.outline = 'none'
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    canvas.addEventListener('mousemove', onMouseMove)
+    canvas.addEventListener('mousedown', onMouseDown)
+    canvas.addEventListener('mouseup', onMouseUp)
+    canvas.focus()
 
     // Expose simulator to Python via js module
     ;(window as any).__pgSim = pgSim
@@ -795,15 +846,21 @@ class _PygameModule:
         K_0=48;K_1=49;K_2=50;K_3=51;K_4=52;K_5=53;K_6=54;K_7=55;K_8=56;K_9=57
         K_LSHIFT=304;K_RSHIFT=303;K_LCTRL=306;K_RCTRL=305;K_LALT=308;K_RALT=307
         K_F1=282;K_F2=283;K_F3=284;K_F4=285;K_F5=286
-        def __init__(self): self._pressed = {}
+        def __init__(self): pass
         def get_pressed(self):
-            return self._pressed
+            # Read live key state from JS pgSim
+            js_keys = _pg.getKeys()
+            return js_keys
         def get_mods(self): return 0
 
     class _MouseModule:
-        def __init__(self): self._pos=(0,0); self._buttons=(False,False,False)
-        def get_pos(self): return self._pos
-        def get_pressed(self): return self._buttons
+        def __init__(self): pass
+        def get_pos(self):
+            pos = _pg.getMousePos()
+            return (int(pos[0]), int(pos[1]))
+        def get_pressed(self):
+            btns = _pg.getMouseButtons()
+            return (bool(btns[0]), bool(btns[1]), bool(btns[2]))
         def get_rel(self): return (0,0)
 
     class _TimeModule:
@@ -856,6 +913,29 @@ _pg_instance.Surface = _PygameModule._Surface
 _pg_instance.Rect    = _PygameModule.Rect
 _pg_instance.Color   = _PygameModule.Color
 _pg_instance.Clock   = _PygameModule._Clock   # also pygame.Clock() directly
+
+# Key constants directly on pygame module (pygame.K_LEFT etc.)
+_km = _PygameModule._KeyModule
+_pg_instance.K_LEFT=_km.K_LEFT; _pg_instance.K_RIGHT=_km.K_RIGHT
+_pg_instance.K_UP=_km.K_UP; _pg_instance.K_DOWN=_km.K_DOWN
+_pg_instance.K_SPACE=_km.K_SPACE; _pg_instance.K_RETURN=_km.K_RETURN
+_pg_instance.K_ESCAPE=_km.K_ESCAPE
+_pg_instance.K_a=_km.K_a; _pg_instance.K_b=_km.K_b; _pg_instance.K_c=_km.K_c
+_pg_instance.K_d=_km.K_d; _pg_instance.K_e=_km.K_e; _pg_instance.K_f=_km.K_f
+_pg_instance.K_g=_km.K_g; _pg_instance.K_h=_km.K_h; _pg_instance.K_i=_km.K_i
+_pg_instance.K_j=_km.K_j; _pg_instance.K_k=_km.K_k; _pg_instance.K_l=_km.K_l
+_pg_instance.K_m=_km.K_m; _pg_instance.K_n=_km.K_n; _pg_instance.K_o=_km.K_o
+_pg_instance.K_p=_km.K_p; _pg_instance.K_q=_km.K_q; _pg_instance.K_r=_km.K_r
+_pg_instance.K_s=_km.K_s; _pg_instance.K_t=_km.K_t; _pg_instance.K_u=_km.K_u
+_pg_instance.K_v=_km.K_v; _pg_instance.K_w=_km.K_w; _pg_instance.K_x=_km.K_x
+_pg_instance.K_y=_km.K_y; _pg_instance.K_z=_km.K_z
+_pg_instance.K_0=_km.K_0; _pg_instance.K_1=_km.K_1; _pg_instance.K_2=_km.K_2
+_pg_instance.K_3=_km.K_3; _pg_instance.K_4=_km.K_4; _pg_instance.K_5=_km.K_5
+_pg_instance.K_6=_km.K_6; _pg_instance.K_7=_km.K_7; _pg_instance.K_8=_km.K_8
+_pg_instance.K_9=_km.K_9
+_pg_instance.K_LSHIFT=_km.K_LSHIFT; _pg_instance.K_RSHIFT=_km.K_RSHIFT
+_pg_instance.K_LCTRL=_km.K_LCTRL; _pg_instance.K_RCTRL=_km.K_RCTRL
+_pg_instance.K_F1=_km.K_F1; _pg_instance.K_F2=_km.K_F2; _pg_instance.K_F3=_km.K_F3
 
 # Patch blit to handle text surfaces
 _orig_blit = _PygameModule._Screen.blit
@@ -937,6 +1017,13 @@ await _main()
         const lastLine = msg.split('\n').filter((l: string) => l.trim()).pop() ?? msg
         addLog('❌ ' + lastLine)
       }
+    } finally {
+      // Clean up event listeners
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      canvas.removeEventListener('mousemove', onMouseMove)
+      canvas.removeEventListener('mousedown', onMouseDown)
+      canvas.removeEventListener('mouseup', onMouseUp)
     }
   }
 
