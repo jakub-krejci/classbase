@@ -506,7 +506,6 @@ export default function PyGameEditor({ profile }: { profile: any }) {
     try {
       let py = pyodideRef.current
       if (!py) {
-        // Load Pyodide
         if (!(window as any).loadPyodide) {
           await new Promise<void>((res, rej) => {
             const s = document.createElement('script')
@@ -517,8 +516,8 @@ export default function PyGameEditor({ profile }: { profile: any }) {
         }
         py = await (window as any).loadPyodide({
           indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.0/full/',
-          stdout: (s: string) => setLogs(p => [...p.slice(-199), s]),
-          stderr: (s: string) => setLogs(p => [...p.slice(-199), '⚠ ' + s]),
+          stdout: (s: string) => addLog(s),
+          stderr: (s: string) => addLog('⚠ ' + s),
         })
         pyodideRef.current = py
       }
@@ -529,55 +528,409 @@ export default function PyGameEditor({ profile }: { profile: any }) {
         await runPygame(py, code)
       }
     } catch (e: any) {
-      setLogs(p => [...p, '❌ ' + (e?.message ?? String(e))])
+      const msg = e?.message ?? String(e)
+      // Filter out stop-related errors
+      if (!stopFlagRef.current) {
+        addLog('❌ ' + msg)
+      }
     } finally {
       setRunning(false)
       setPyStatus('')
     }
   }
 
+  function addLog(s: string) {
+    setLogs(p => [...p.slice(-299), s])
+  }
+
   async function runPygame(py: any, code: string) {
     if (!canvasRef.current) return
-    setPyStatus('Načítám pygame…')
-
-    // Install pygame-ce via micropip
-    await py.loadPackagesFromImports('import micropip')
-    const mp = py.pyimport('micropip')
-    try { await mp.install('pygame-ce') } catch {}
-
-    setPyStatus('Spouštím…')
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')!
+    setPyStatus('Inicializuji pygame…')
 
-    // Patch pygame to use our canvas
+    // Clear canvas
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // Build the pygame simulator that runs on our canvas
+    // Key insight: we inject a fake 'pygame' module into Python
+    // that forwards all draw calls to our JS canvas context
+
+    const W = canvas.width, H = canvas.height
+    const fpsRef = { value: 0 }
+    const stopRef = stopFlagRef
+
+    // JS-side pygame surface simulator
+    const pgSim: any = {
+      width: W, height: H,
+      // Surface fill
+      fill: (r: number, g: number, b: number) => {
+        ctx.fillStyle = `rgb(${r},${g},${b})`
+        ctx.fillRect(0, 0, W, H)
+      },
+      // Draw rect: x,y,w,h, r,g,b
+      drawRect: (r2: number, g2: number, b2: number, x: number, y: number, w: number, h: number, bw: number) => {
+        ctx.strokeStyle = `rgb(${r2},${g2},${b2})`
+        ctx.fillStyle = `rgb(${r2},${g2},${b2})`
+        if (bw === 0) { ctx.fillRect(x, y, w, h) }
+        else { ctx.lineWidth = bw; ctx.strokeRect(x, y, w, h) }
+      },
+      // Draw circle: r,g,b, cx,cy,radius, border_width
+      drawCircle: (r2: number, g2: number, b2: number, cx: number, cy: number, radius: number, bw: number) => {
+        ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+        if (bw === 0) { ctx.fillStyle = `rgb(${r2},${g2},${b2})`; ctx.fill() }
+        else { ctx.strokeStyle = `rgb(${r2},${g2},${b2})`; ctx.lineWidth = bw; ctx.stroke() }
+      },
+      // Draw line: r,g,b, x1,y1,x2,y2, width
+      drawLine: (r2: number, g2: number, b2: number, x1: number, y1: number, x2: number, y2: number, w: number) => {
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2)
+        ctx.strokeStyle = `rgb(${r2},${g2},${b2})`; ctx.lineWidth = w || 1; ctx.stroke()
+      },
+      // Draw polygon: r,g,b, [[x,y],...], width
+      drawPolygon: (r2: number, g2: number, b2: number, points: number[][], bw: number) => {
+        if (!points.length) return
+        ctx.beginPath(); ctx.moveTo(points[0][0], points[0][1])
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1])
+        ctx.closePath()
+        if (bw === 0) { ctx.fillStyle = `rgb(${r2},${g2},${b2})`; ctx.fill() }
+        else { ctx.strokeStyle = `rgb(${r2},${g2},${b2})`; ctx.lineWidth = bw; ctx.stroke() }
+      },
+      // Draw ellipse: r,g,b, x,y,w,h, bw
+      drawEllipse: (r2: number, g2: number, b2: number, x: number, y: number, w: number, h: number, bw: number) => {
+        ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2)
+        if (bw === 0) { ctx.fillStyle = `rgb(${r2},${g2},${b2})`; ctx.fill() }
+        else { ctx.strokeStyle = `rgb(${r2},${g2},${b2})`; ctx.lineWidth = bw; ctx.stroke() }
+      },
+      // Render text: text, r,g,b, x, y, size, bold
+      renderText: (text: string, r2: number, g2: number, b2: number, x: number, y: number, size: number, bold: boolean) => {
+        ctx.font = `${bold?'bold ':''} ${size}px monospace`
+        ctx.fillStyle = `rgb(${r2},${g2},${b2})`
+        ctx.fillText(text, x, y + size)
+      },
+      flip: () => {}, // canvas auto-flips
+      setCaption: (title: string) => {},
+      setFps: (v: number) => { fpsRef.value = v; setFps(Math.round(v)) },
+      isStopped: () => stopRef.current,
+      log: (s: string) => addLog(s),
+    }
+
+    // Expose simulator to Python via js module
+    ;(window as any).__pgSim = pgSim
+
+    // Install the fake pygame module in Python
     await py.runPythonAsync(`
-import pygame
+import sys
 import js
-import pyodide
+import time as _time
+import math
 
-canvas_el = js.document.getElementById("pygame-canvas")
-pygame.display._pygame_canvas = canvas_el
+_pg = js.__pgSim
 
-# Monkey-patch display
-class _Screen:
-    def __init__(self, w, h):
-        self.w = w; self.h = h
-    def fill(self, color):
-        r, g, b = color
-        ctx = js.document.getElementById("pygame-canvas").getContext("2d")
-        ctx.fillStyle = f"rgb({r},{g},{b})"
-        ctx.fillRect(0, 0, self.w, self.h)
-    def blit(self, surf, pos): pass
-    def get_size(self): return (self.w, self.h)
-`, { globals: py.toPy({}) })
+# ── Fake pygame module ────────────────────────────────────────────────────────
+class _PygameModule:
 
-    // Actually run with pygame.js-style WASM binding
-    // For now, run synchronously and capture draw calls
-    // This is simplified - full pygame WASM needs pygame-ce with SDL2 WASM
+    # Color support
+    class Color:
+        def __init__(self, *args):
+            if len(args) == 1 and isinstance(args[0], str):
+                NAMED = {
+                    'red':(220,50,50),'green':(50,200,100),'blue':(50,100,220),
+                    'white':(255,255,255),'black':(0,0,0),'yellow':(255,220,0),
+                    'orange':(255,140,0),'purple':(160,0,220),'cyan':(0,220,220),
+                    'pink':(255,100,180),'gray':(128,128,128),'grey':(128,128,128),
+                    'magenta':(220,0,220),'lime':(0,255,0),'navy':(0,0,128),
+                    'teal':(0,128,128),'maroon':(128,0,0),'brown':(139,90,43),
+                }
+                self.r,self.g,self.b = NAMED.get(args[0].lower(), (128,128,128))
+            elif len(args) == 3:
+                self.r,self.g,self.b = args
+            elif len(args) == 1 and hasattr(args[0],'__iter__'):
+                self.r,self.g,self.b = list(args[0])[:3]
+        def __iter__(self): return iter((self.r,self.g,self.b))
+        def __getitem__(self, i): return (self.r,self.g,self.b)[i]
+
+    class Rect:
+        def __init__(self, x=0, y=0, w=0, h=0):
+            if hasattr(x, '__iter__'):
+                vals = list(x)
+                self.x,self.y,self.width,self.height = vals[0],vals[1],vals[2],vals[3]
+            else:
+                self.x,self.y,self.width,self.height = x,y,w,h
+        @property
+        def left(self): return self.x
+        @property
+        def top(self): return self.y
+        @property
+        def right(self): return self.x + self.width
+        @property
+        def bottom(self): return self.y + self.height
+        @property
+        def centerx(self): return self.x + self.width // 2
+        @property
+        def centery(self): return self.y + self.height // 2
+        @property
+        def center(self): return (self.centerx, self.centery)
+        @center.setter
+        def center(self, v): self.x = v[0] - self.width//2; self.y = v[1] - self.height//2
+        def colliderect(self, other):
+            return (self.x < other.x + other.width and self.x + self.width > other.x and
+                    self.y < other.y + other.height and self.y + self.height > other.y)
+        def clamp(self, other):
+            r = _PygameModule.Rect(self.x, self.y, self.width, self.height)
+            r.x = max(other.x, min(r.x, other.x + other.width - r.width))
+            r.y = max(other.y, min(r.y, other.y + other.height - r.height))
+            return r
+        def move(self, dx, dy):
+            return _PygameModule.Rect(self.x+dx, self.y+dy, self.width, self.height)
+        def inflate(self, dw, dh):
+            return _PygameModule.Rect(self.x-dw//2, self.y-dh//2, self.width+dw, self.height+dh)
+        def __repr__(self): return f"Rect({self.x},{self.y},{self.width},{self.height})"
+
+    class _Surface:
+        def __init__(self, size, flags=0):
+            self.width, self.height = size
+        def fill(self, color): pass
+        def blit(self, surf, pos): pass
+        def get_width(self): return self.width
+        def get_height(self): return self.height
+        def get_size(self): return (self.width, self.height)
+        def get_rect(self, **kwargs):
+            r = _PygameModule.Rect(0, 0, self.width, self.height)
+            for k,v in kwargs.items():
+                setattr(r, k, v)
+            return r
+
+    class _Screen(_Surface):
+        def __init__(self, w, h):
+            super().__init__((w, h))
+        def fill(self, color):
+            c = _coerce_color(color)
+            _pg.fill(c[0], c[1], c[2])
+        def blit(self, surf, pos): pass
+        def get_size(self): return (self.width, self.height)
+
+    class _Display:
+        def set_mode(self, size, flags=0):
+            return _PygameModule._Screen(size[0], size[1])
+        def set_caption(self, title): _pg.setCaption(title)
+        def flip(self): _pg.flip()
+        def update(self, *args): _pg.flip()
+        def get_surface(self): return None
+
+    class _Clock:
+        def __init__(self): self._last = _time.time(); self._fps = 60
+        def tick(self, fps=60):
+            self._fps = fps
+            _pg.setFps(fps)
+        def get_fps(self): return self._fps
+        def get_time(self): return 1000 // max(1, self._fps)
+
+    class _Font:
+        def __init__(self, name, size, bold=False): self.size=size; self.bold=bold
+        def render(self, text, antialias, color, bg=None):
+            c = _coerce_color(color)
+            # Return a surface-like with render info
+            surf = _PygameModule._Surface((len(text)*self.size//2, self.size))
+            surf._text = text; surf._color = c; surf._size = self.size; surf._bold = self.bold
+            return surf
+        def size(self, text): return (len(str(text))*self.size//2, self.size)
+
+    class _FontModule:
+        def __init__(self): pass
+        def init(self): pass
+        def SysFont(self, name, size, bold=False): return _PygameModule._Font(name, size, bold)
+        def Font(self, path, size): return _PygameModule._Font(None, size)
+
+    class _DrawModule:
+        def rect(self, surface, color, rect, width=0):
+            c = _coerce_color(color)
+            if hasattr(rect, 'x'): x,y,w,h = rect.x,rect.y,rect.width,rect.height
+            else: x,y,w,h = rect[0],rect[1],rect[2],rect[3]
+            _pg.drawRect(c[0],c[1],c[2], x,y,w,h, width)
+        def circle(self, surface, color, center, radius, width=0):
+            c = _coerce_color(color)
+            _pg.drawCircle(c[0],c[1],c[2], center[0],center[1],radius, width)
+        def line(self, surface, color, start, end, width=1):
+            c = _coerce_color(color)
+            _pg.drawLine(c[0],c[1],c[2], start[0],start[1],end[0],end[1], width)
+        def lines(self, surface, color, closed, points, width=1):
+            c = _coerce_color(color)
+            for i in range(len(points)-1):
+                _pg.drawLine(c[0],c[1],c[2], points[i][0],points[i][1],points[i+1][0],points[i+1][1], width)
+            if closed and len(points)>1:
+                _pg.drawLine(c[0],c[1],c[2], points[-1][0],points[-1][1],points[0][0],points[0][1], width)
+        def polygon(self, surface, color, points, width=0):
+            c = _coerce_color(color)
+            pts = [[p[0],p[1]] for p in points]
+            _pg.drawPolygon(c[0],c[1],c[2], pts, width)
+        def ellipse(self, surface, color, rect, width=0):
+            c = _coerce_color(color)
+            if hasattr(rect, 'x'): x,y,w,h = rect.x,rect.y,rect.width,rect.height
+            else: x,y,w,h = rect[0],rect[1],rect[2],rect[3]
+            _pg.drawEllipse(c[0],c[1],c[2], x,y,w,h, width)
+        def aaline(self, surface, color, start, end, blend=1):
+            self.line(surface, color, start, end, 1)
+
+    class _Event:
+        def __init__(self, type_=0, **kwargs):
+            self.type = type_
+            for k,v in kwargs.items(): setattr(self, k, v)
+
+    class _EventModule:
+        QUIT=256; KEYDOWN=768; KEYUP=769; MOUSEBUTTONDOWN=1025; MOUSEBUTTONUP=1026; MOUSEMOTION=1024
+        def __init__(self): self._q = []
+        def get(self):
+            evs = list(self._q); self._q.clear(); return evs
+        def poll(self):
+            return self._q.pop(0) if self._q else _PygameModule._Event(0)
+        def pump(self): pass
+        def post(self, ev): self._q.append(ev)
+
+    class _KeyModule:
+        # Key constants
+        K_LEFT=276; K_RIGHT=275; K_UP=273; K_DOWN=274; K_SPACE=32; K_RETURN=13; K_ESCAPE=27
+        K_a=97;K_b=98;K_c=99;K_d=100;K_e=101;K_f=102;K_g=103;K_h=104;K_i=105
+        K_j=106;K_k=107;K_l=108;K_m=109;K_n=110;K_o=111;K_p=112;K_q=113;K_r=114
+        K_s=115;K_t=116;K_u=117;K_v=118;K_w=119;K_x=120;K_y=121;K_z=122
+        K_0=48;K_1=49;K_2=50;K_3=51;K_4=52;K_5=53;K_6=54;K_7=55;K_8=56;K_9=57
+        K_LSHIFT=304;K_RSHIFT=303;K_LCTRL=306;K_RCTRL=305;K_LALT=308;K_RALT=307
+        K_F1=282;K_F2=283;K_F3=284;K_F4=285;K_F5=286
+        def __init__(self): self._pressed = {}
+        def get_pressed(self):
+            return self._pressed
+        def get_mods(self): return 0
+
+    class _MouseModule:
+        def __init__(self): self._pos=(0,0); self._buttons=(False,False,False)
+        def get_pos(self): return self._pos
+        def get_pressed(self): return self._buttons
+        def get_rel(self): return (0,0)
+
+    class _TimeModule:
+        def get_ticks(self): return int(_time.time() * 1000)
+        def delay(self, ms): pass
+        def wait(self, ms): pass
+
+    class _MixerModule:
+        class Sound:
+            def __init__(self, *a): pass
+            def play(self): pass
+            def stop(self): pass
+        def init(self): pass
+        def quit(self): pass
+        def pre_init(self, *a): pass
+
+    # Module-level constants
+    QUIT=256; KEYDOWN=768; KEYUP=769
+    MOUSEBUTTONDOWN=1025; MOUSEBUTTONUP=1026; MOUSEMOTION=1024
+    FULLSCREEN=1; RESIZABLE=16; NOFRAME=32; HWSURFACE=1; DOUBLEBUF=2
+
+    def init(self): pass
+    def quit(self): pass
+
+def _coerce_color(c):
+    if isinstance(c, _PygameModule.Color): return (c.r, c.g, c.b)
+    if hasattr(c, '__iter__'):
+        lst = list(c); return (lst[0], lst[1], lst[2])
+    return (128, 128, 128)
+
+# Create singleton instances
+_pg_instance = _PygameModule()
+_pg_instance.display = _PygameModule._Display()
+_pg_instance.draw    = _PygameModule._DrawModule()
+_pg_instance.font    = _PygameModule._FontModule()
+_pg_instance.event   = _PygameModule._EventModule()
+_pg_instance.key     = _PygameModule._KeyModule()
+_pg_instance.mouse   = _PygameModule._MouseModule()
+_pg_instance.time    = _PygameModule._TimeModule()
+_pg_instance.mixer   = _PygameModule._MixerModule()
+_pg_instance.image   = type('img', (), {'load': lambda s,p: _PygameModule._Surface((32,32))})()
+_pg_instance.transform = type('tr', (), {
+    'scale': lambda s,surf,size: surf,
+    'rotate': lambda s,surf,a: surf,
+    'flip': lambda s,surf,x,y: surf,
+})()
+_pg_instance.Surface = _PygameModule._Surface
+_pg_instance.Rect    = _PygameModule.Rect
+_pg_instance.Color   = _PygameModule.Color
+_pg_instance.Clock   = _PygameModule._Clock
+
+# Patch blit to handle text surfaces
+_orig_blit = _PygameModule._Screen.blit
+def _smart_blit(self, surf, pos, *args):
+    if hasattr(surf, '_text'):
+        _pg.renderText(surf._text, surf._color[0],surf._color[1],surf._color[2],
+                       pos[0], pos[1], surf._size, getattr(surf,'_bold',False))
+_PygameModule._Screen.blit = _smart_blit
+
+# Inject as sys module
+sys.modules['pygame'] = _pg_instance
+sys.modules['pygame.display'] = _pg_instance.display
+sys.modules['pygame.draw'] = _pg_instance.draw
+sys.modules['pygame.font'] = _pg_instance.font
+sys.modules['pygame.event'] = _pg_instance.event
+sys.modules['pygame.key'] = _pg_instance.key
+sys.modules['pygame.mouse'] = _pg_instance.mouse
+sys.modules['pygame.time'] = _pg_instance.time
+sys.modules['pygame.mixer'] = _pg_instance.mixer
+sys.modules['pygame.transform'] = _pg_instance.transform
+
+# Also override print to capture output
+import builtins
+_orig_print = builtins.print
+def _captured_print(*args, sep=' ', end='\\n', **kwargs):
+    msg = sep.join(str(a) for a in args)
+    _pg.log(msg)
+builtins.print = _captured_print
+
+print("✓ Pygame simulátor připraven")
+`)
+
+    setPyStatus('Spouštím…')
+
+    // Escape the user code for embedding in Python string
+    const escapedCode = code
+      .replace(/\\/g, '\\\\')
+      .replace(/"""/g, '\\"\\"\\"')
+
+    // Run user code directly - the while loop will block but we
+    // patch clock.tick to yield control every frame via asyncio
     try {
-      await py.runPythonAsync(code)
+      await py.runPythonAsync(`
+import asyncio
+
+# Patch clock.tick to yield to JS event loop each frame
+_orig_clock_tick = _PygameModule._Clock.tick
+async def _async_clock_tick(self, fps=60):
+    _pg.setFps(fps)
+    if _pg.isStopped():
+        raise SystemExit("stopped")
+    await asyncio.sleep(1.0 / max(1, fps))
+_PygameModule._Clock.tick = _async_clock_tick
+
+# Patch event.get to check stop flag
+def _event_get(self):
+    if _pg.isStopped():
+        raise SystemExit("stopped")
+    return []
+_PygameModule._EventModule.get = _event_get
+
+async def _main():
+    try:
+        _ns = {'__name__': '__main__', 'asyncio': asyncio}
+        exec("""${escapedCode}""", _ns)
+    except SystemExit:
+        pass
+    except Exception as e:
+        import traceback
+        _pg.log('❌ ' + type(e).__name__ + ': ' + str(e))
+
+await _main()
+`)
     } catch (e: any) {
-      if (!stopFlagRef.current) throw e
+      if (!stopFlagRef.current) {
+        addLog('❌ ' + (e?.message ?? String(e)))
+      }
     }
   }
 
