@@ -975,47 +975,58 @@ print("✓ Pygame simulátor připraven")
 
     setPyStatus('Spouštím…')
 
-    // Escape the user code for embedding in Python string
-    const escapedCode = code
-      .replace(/\\/g, '\\\\')
-      .replace(/"""/g, '\\"\\"\\"')
+    // The key insight: Pyodide's runPythonAsync CAN interleave with JS
+    // IF the Python code uses "await" at the right points.
+    // We transform the user code: replace clock.tick() calls with
+    // "await asyncio.sleep(0)" AND wrap the while loop body.
+    //
+    // But simpler: just transform the whole script into an async function
+    // by indenting everything inside "async def _main():" and replacing
+    // "clock.tick(N)" with "await asyncio.sleep(1/N)".
+    
+    // Transform code: indent all lines, make it an async function
+    const lines = code.split('\n')
+    const indented = lines.map((l: string) => '    ' + l).join('\n')
+    // Replace clock.tick patterns with await version
+    const transformed = indented
+      .replace(/(\s+)(clock\.tick\s*\([^)]*\))/g, '$1await $2')
+      .replace(/(\s+)(pygame\.time\.Clock\(\))/g, '$1$2')
+    
+    const wrappedCode = `import asyncio
+import sys
 
-    // Run user code directly - the while loop will block but we
-    // patch clock.tick to yield control every frame via asyncio
-    try {
-      await py.runPythonAsync(`
-import asyncio
-
-# Patch clock.tick to yield to JS event loop each frame
-_orig_clock_tick = _PygameModule._Clock.tick
 async def _async_clock_tick(self, fps=60):
     _pg.setFps(fps)
     if _pg.isStopped():
-        raise SystemExit("stopped")
+        raise SystemExit()
     await asyncio.sleep(1.0 / max(1, fps))
+
 _PygameModule._Clock.tick = _async_clock_tick
 
-# Patch event.get to check stop flag
 def _event_get(self):
     if _pg.isStopped():
-        raise SystemExit("stopped")
+        raise SystemExit()
     return []
 _PygameModule._EventModule.get = _event_get
 
 async def _main():
+${transformed}
+
+async def _run():
     try:
-        _ns = {'__name__': '__main__', 'asyncio': asyncio}
-        exec("""${escapedCode}""", _ns)
+        await _main()
     except SystemExit:
-        pass
+        _pg.log('⏹ Zastaveno')
     except Exception as e:
         import traceback
-        lines = traceback.format_exception(type(e), e, e.__traceback__)
-        last = [l.strip() for l in ''.join(lines).split('\\n') if l.strip()]
-        _pg.log('❌ ' + (last[-1] if last else str(e)))
+        tb = traceback.format_exc()
+        lines = [l.strip() for l in tb.split('\\n') if l.strip()]
+        _pg.log('❌ ' + (lines[-1] if lines else str(e)))
 
-await _main()
-`)
+await _run()
+`
+    try {
+      await py.runPythonAsync(wrappedCode)
     } catch (e: any) {
       if (!stopFlagRef.current) {
         const msg = e?.message ?? String(e)
@@ -1023,7 +1034,6 @@ await _main()
         addLog('❌ ' + lastLine)
       }
     } finally {
-      // Clean up event listeners
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       canvas.removeEventListener('mousemove', onMouseMove)
