@@ -13,6 +13,28 @@ async function getTeacher() {
   return { user, admin }
 }
 
+export async function getSubmissionsForAssignment(assignmentId: string) {
+  const { admin } = await getTeacher()
+  const { data } = await admin
+    .from('task_submissions')
+    .select('*, profiles:student_id(full_name, email)')
+    .eq('assignment_id', assignmentId)
+    .order('submitted_at', { ascending: false })
+  return data ?? []
+}
+
+export async function getAssignments() {
+  const { user, admin } = await getTeacher()
+  const { data } = await admin
+    .from('task_assignments')
+    .select(`id,title,description,editor_type,deadline,allow_resubmit,status,published_at,created_at,
+             task_targets(id,student_id,group_id),
+             task_submissions(id,status,student_id)`)
+    .eq('teacher_id', user.id)
+    .order('created_at', { ascending: false })
+  return data ?? []
+}
+
 export async function saveAssignment(payload: {
   editId: string | null
   title: string
@@ -23,17 +45,21 @@ export async function saveAssignment(payload: {
   publishNow: boolean
   studentIds: string[]
   groupIds: string[]
+  starter_code?: string
+  starter_filename?: string
 }) {
   const { user, admin } = await getTeacher()
 
   const asgPayload: any = {
-    teacher_id:     user.id,
-    title:          payload.title,
-    description:    payload.description,
-    editor_type:    payload.editor_type,
-    deadline:       payload.deadline,
-    allow_resubmit: payload.allow_resubmit,
-    status:         payload.publishNow ? 'published' : 'draft',
+    teacher_id:       user.id,
+    title:            payload.title,
+    description:      payload.description,
+    editor_type:      payload.editor_type,
+    deadline:         payload.deadline,
+    allow_resubmit:   payload.allow_resubmit,
+    status:           payload.publishNow ? 'published' : 'draft',
+    starter_code:     payload.starter_code ?? '',
+    starter_filename: payload.starter_filename ?? '',
   }
   if (payload.publishNow) asgPayload.published_at = new Date().toISOString()
 

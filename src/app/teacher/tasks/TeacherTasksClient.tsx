@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { saveAssignment, changeAssignmentStatus, deleteAssignmentAction, gradeSubmission, toggleResubmitAction } from './actions'
+import { saveAssignment, changeAssignmentStatus, deleteAssignmentAction, gradeSubmission, toggleResubmitAction, getAssignments, getSubmissionsForAssignment } from './actions'
 
 const EDITOR_LABELS: Record<string, string> = {
   python:    '🐍 Python',
@@ -59,7 +59,7 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
   const [msg, setMsg] = useState('')
 
   // ── Form state ────────────────────────────────────────────────────────────
-  const blank = { title:'', description:'', editor_type:'python', deadline:'', allow_resubmit:false, status:'draft' }
+  const blank = { title:'', description:'', editor_type:'python', deadline:'', allow_resubmit:false, status:'draft', starter_code:'', starter_filename:'' }
   const [form, setForm] = useState<any>(blank)
   const [selStudents, setSelStudents] = useState<Set<string>>(new Set())
   const [selGroups, setSelGroups]     = useState<Set<string>>(new Set())
@@ -69,15 +69,9 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
 
   // ── Refresh ───────────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
-    const { data } = await supabase
-      .from('task_assignments')
-      .select(`id,title,description,editor_type,deadline,allow_resubmit,status,published_at,created_at,
-               task_targets(id,student_id,group_id),
-               task_submissions(id,status,student_id)`)
-      .eq('teacher_id', teacherId)
-      .order('created_at', { ascending: false })
-    setAssignments(data ?? [])
-  }, [teacherId])
+    const data = await getAssignments()
+    setAssignments(data as any[])
+  }, [])
 
   // ── Save assignment via server action ────────────────────────────────────
   async function save(publishNow = false) {
@@ -95,6 +89,8 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
         publishNow,
         studentIds: [...selStudents],
         groupIds: [...selGroups],
+        starter_code: form.starter_code ?? '',
+        starter_filename: form.starter_filename ?? '',
       })
       if (result.error) {
         flash(`Chyba: ${result.error}`)
@@ -133,6 +129,8 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
       title: a.title, description: a.description, editor_type: a.editor_type,
       deadline: a.deadline ? a.deadline.slice(0,16) : '',
       allow_resubmit: a.allow_resubmit, status: a.status,
+      starter_code: a.starter_code ?? '',
+      starter_filename: a.starter_filename ?? '',
     })
     const ss = new Set<string>(), sg = new Set<string>()
     ;(a.task_targets ?? []).forEach((t: any) => {
@@ -297,6 +295,19 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
               </Field>
             </div>
 
+            <Field label="Starter kód (volitelné — výchozí obsah souboru pro žáka)">
+              <textarea value={form.starter_code ?? ''} onChange={e => setForm({ ...form, starter_code: e.target.value })}
+                placeholder={form.editor_type === 'python'
+                  ? '# Váš starter kód zde\n\ndef main():\n    pass\n'
+                  : form.editor_type === 'sql'
+                  ? '-- Váš starter SQL dotaz\nSELECT * FROM ...'
+                  : 'Výchozí obsah souboru pro žáky...'}
+                style={{ ...inputStyle, minHeight: 140, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }} />
+              <div style={{ fontSize: 11, color: D.txtSec ?? '#a1a7b3', marginTop: 4 }}>
+                Pokud nevyplníš, žák začne s prázdným souborem. Použij pro šablony, příklady nebo částečná řešení.
+              </div>
+            </Field>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
                 <input type="checkbox" checked={form.allow_resubmit} onChange={e => setForm({ ...form, allow_resubmit: e.target.checked })}
@@ -375,7 +386,6 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
         <SubmissionsDetail
           assignment={detail}
           onRefresh={refresh}
-          supabase={supabase}
         />
       )}
     </div>
@@ -383,7 +393,8 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
 }
 
 // ── Submissions Detail ────────────────────────────────────────────────────────
-function SubmissionsDetail({ assignment, onRefresh, supabase }: { assignment: any; onRefresh: () => void; supabase: any }) {
+function SubmissionsDetail({ assignment, onRefresh }: { assignment: any; onRefresh: () => void }) {
+  const supabase = createClient()
   const [submissions, setSubmissions] = useState<any[]>(assignment.task_submissions ?? [])
   const [selected, setSelected] = useState<any | null>(null)
   const [comment, setComment] = useState('')
@@ -394,12 +405,9 @@ function SubmissionsDetail({ assignment, onRefresh, supabase }: { assignment: an
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 3000) }
 
   async function refreshSubs() {
-    const { data } = await supabase
-      .from('task_submissions')
-      .select('*, profiles:student_id(full_name, email)')
-      .eq('assignment_id', assignment.id)
-      .order('submitted_at', { ascending: false })
-    setSubmissions(data ?? [])
+    // Use admin-level server action to bypass RLS for teacher
+    const data = await getSubmissionsForAssignment(assignment.id)
+    setSubmissions(data as any[])
   }
 
   async function returnSubmission(sub: any) {
