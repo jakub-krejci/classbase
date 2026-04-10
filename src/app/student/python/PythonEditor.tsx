@@ -653,7 +653,7 @@ print(_j.dumps(_out))`,
           assignmentId={assignmentId}
           studentId={uid}
           accent={accent}
-          onSaveBeforeSubmit={async () => { await save() }}
+          onSaveBeforeSubmit={async () => { await saveCurrentFile() }}
         />
       )}
 
