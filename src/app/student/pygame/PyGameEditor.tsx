@@ -860,11 +860,11 @@ sys.modules['turtle'] = _TurtleModule()
         </div>
 
         {/* ══ CENTER ══ */}
-        <div id="pygame-center" style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
+        <div id="pygame-center" style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden',position:'relative'}}>
 
-          {isEmpty ? (
-            /* ── Welcome screen ── */
-            <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:20,padding:40}}>
+          {/* ── Welcome screen overlay (shown when no projects) ── */}
+          {isEmpty && (
+            <div style={{position:'absolute',inset:0,zIndex:10,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:20,padding:40,background:D.bgMain}}>
               <div style={{fontSize:64}}>🎮</div>
               <div style={{fontSize:24,fontWeight:800,color:D.txtPri,textAlign:'center'}}>PyGame Edit</div>
               <div style={{fontSize:14,color:D.txtSec,textAlign:'center',maxWidth:420,lineHeight:1.7}}>
@@ -881,74 +881,63 @@ sys.modules['turtle'] = _TurtleModule()
                 <span>✓ Detekce kolizí</span>
               </div>
             </div>
-          ) : (
-            <>
-              {/* Editor section */}
-              <div style={{height:`${editorHeight}%`,minHeight:'20%',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-                {/* Editor toolbar */}
-                <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderBottom:`1px solid ${D.border}`,flexShrink:0,background:D.bgCard}}>
-                  <span style={{fontSize:12,color:D.txtSec,fontFamily:'monospace'}}>{activeFile?.project??'—'} / {activeFile?.name??'—'}</span>
-                  <div style={{flex:1}}/>
-                  {/* Mode switcher */}
-                  <div style={{display:'flex',border:`1px solid ${D.border}`,borderRadius:7,overflow:'hidden'}}>
-                    {(['pygame','turtle'] as const).map(m=>(
-                      <button key={m} onClick={()=>setMode(m)}
-                        style={{padding:'4px 12px',background:mode===m?accent:'transparent',color:mode===m?'#fff':D.txtSec,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>
-                        {m==='pygame'?'🎮 Pygame':'🐢 Turtle'}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={runCode} disabled={running||!activeFile}
-                    style={{padding:'5px 16px',background:running?D.bgMid:accent,color:running?D.txtSec:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:running||!activeFile?'not-allowed':'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
-                    {running?<><div style={{width:10,height:10,border:`2px solid ${D.border}`,borderTopColor:'#fff',borderRadius:'50%',animation:'spin .6s linear infinite'}}/>Spouštím…</>:'▶ Spustit'}
-                  </button>
-                  {running&&<button onClick={stopCode} style={{padding:'5px 12px',background:'rgba(239,68,68,.15)',color:D.danger,border:`1px solid rgba(239,68,68,.3)`,borderRadius:7,fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>■ Stop</button>}
-                </div>
-                {/* Monaco */}
-                <div style={{flex:1,position:'relative',overflow:'hidden'}}>
-                  {!monacoReady&&<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#0d1117',color:D.txtSec,fontSize:13}}>Načítám editor…</div>}
-                  {!activeFile&&monacoReady&&<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#0d1117',color:D.txtSec,fontSize:13,flexDirection:'column',gap:10}}>
-                    <span style={{fontSize:32}}>📄</span>
-                    <span>Vyber nebo vytvoř soubor</span>
-                  </div>}
-                  <div ref={containerRef} style={{width:'100%',height:'100%'}}/>
-                </div>
-              </div>
-
-              {/* ── Resize handle ── */}
-              <div onMouseDown={onResizeStart}
-                style={{height:6,background:D.border,cursor:'row-resize',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}
-              >
-                <div style={{width:40,height:3,borderRadius:2,background:'rgba(255,255,255,.15)'}}/>
-              </div>
-
-              {/* Canvas + toolbar section */}
-              <div style={{flex:1,minHeight:'20%',display:'flex',flexDirection:'column',overflow:'hidden',background:'#0a0d13'}}>
-                {/* Canvas toolbar */}
-                <div style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',borderBottom:`1px solid ${D.border}`,flexShrink:0,background:D.bgCard}}>
-                  <span style={{fontSize:11,color:D.txtSec}}>🖥 Canvas — {mode==='pygame'?'Pygame':'Turtle'}</span>
-                  {pyStatus&&<span style={{fontSize:11,color:accent}}>{pyStatus}</span>}
-                  <div style={{flex:1}}/>
-                  <button onClick={()=>setFullscreenCanvas(true)}
-                    style={{padding:'3px 10px',background:'rgba(255,255,255,.06)',color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:'pointer'}}>
-                    ⛶ Fullscreen
-                  </button>
-                </div>
-                {/* Canvas */}
-                <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}
-                  onMouseMove={e=>{const r=e.currentTarget.getBoundingClientRect();setMousePos({x:Math.round(e.clientX-r.left),y:Math.round(e.clientY-r.top)})}}>
-                  <canvas id="pygame-canvas" ref={canvasRef} width={800} height={500}
-                    style={{border:`1px solid ${D.border}`,borderRadius:4,maxWidth:'100%',maxHeight:'100%',objectFit:'contain',background:'#0d1117'}}/>
-                </div>
-                {/* Logs */}
-                {logs.length>0&&(
-                  <div style={{height:80,borderTop:`1px solid ${D.border}`,background:'#0a0d13',overflowY:'auto',padding:'6px 12px',fontFamily:'monospace',fontSize:11}}>
-                    {logs.map((l,i)=><div key={i} style={{color:l.startsWith('❌')?D.danger:l.startsWith('⚠')?D.warning:D.txtSec,lineHeight:1.5}}>{l}</div>)}
-                  </div>
-                )}
-              </div>
-            </>
           )}
+
+          {/* Editor section — always in DOM so Monaco container persists */}
+          <div style={{height:`${editorHeight}%`,minHeight:'20%',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            {/* Editor toolbar */}
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderBottom:`1px solid ${D.border}`,flexShrink:0,background:D.bgCard}}>
+              <span style={{fontSize:12,color:D.txtSec,fontFamily:'monospace'}}>{activeFile?.project??'—'} / {activeFile?.name??'—'}</span>
+              <div style={{flex:1}}/>
+              <div style={{display:'flex',border:`1px solid ${D.border}`,borderRadius:7,overflow:'hidden'}}>
+                {(['pygame','turtle'] as const).map(m=>(
+                  <button key={m} onClick={()=>setMode(m)}
+                    style={{padding:'4px 12px',background:mode===m?accent:'transparent',color:mode===m?'#fff':D.txtSec,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>
+                    {m==='pygame'?'🎮 Pygame':'🐢 Turtle'}
+                  </button>
+                ))}
+              </div>
+              <button onClick={runCode} disabled={running||!activeFile}
+                style={{padding:'5px 16px',background:running?D.bgMid:(!activeFile?D.bgMid:accent),color:running||!activeFile?D.txtSec:'#fff',border:'none',borderRadius:7,fontSize:12,fontWeight:700,cursor:running||!activeFile?'not-allowed':'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+                {running?<><div style={{width:10,height:10,border:`2px solid ${D.border}`,borderTopColor:'#fff',borderRadius:'50%',animation:'spin .6s linear infinite'}}/>Spouštím…</>:'▶ Spustit'}
+              </button>
+              {running&&<button onClick={stopCode} style={{padding:'5px 12px',background:'rgba(239,68,68,.15)',color:D.danger,border:`1px solid rgba(239,68,68,.3)`,borderRadius:7,fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>■ Stop</button>}
+            </div>
+            {/* Monaco */}
+            <div style={{flex:1,position:'relative',overflow:'hidden'}}>
+              {!monacoReady&&<div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#0d1117',color:D.txtSec,fontSize:13,zIndex:2}}>Načítám editor…</div>}
+              <div ref={containerRef} style={{width:'100%',height:'100%'}}/>
+            </div>
+          </div>
+
+          {/* ── Resize handle ── */}
+          <div onMouseDown={onResizeStart}
+            style={{height:6,background:D.border,cursor:'row-resize',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{width:40,height:3,borderRadius:2,background:'rgba(255,255,255,.15)'}}/>
+          </div>
+
+          {/* Canvas + logs section */}
+          <div style={{flex:1,minHeight:'20%',display:'flex',flexDirection:'column',overflow:'hidden',background:'#0a0d13'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',borderBottom:`1px solid ${D.border}`,flexShrink:0,background:D.bgCard}}>
+              <span style={{fontSize:11,color:D.txtSec}}>🖥 Canvas — {mode==='pygame'?'Pygame':'Turtle'}</span>
+              {pyStatus&&<span style={{fontSize:11,color:accent}}>{pyStatus}</span>}
+              <div style={{flex:1}}/>
+              <button onClick={()=>setFullscreenCanvas(true)}
+                style={{padding:'3px 10px',background:'rgba(255,255,255,.06)',color:D.txtSec,border:`1px solid ${D.border}`,borderRadius:6,fontSize:11,cursor:'pointer'}}>
+                ⛶ Fullscreen
+              </button>
+            </div>
+            <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}
+              onMouseMove={e=>{const r=e.currentTarget.getBoundingClientRect();setMousePos({x:Math.round(e.clientX-r.left),y:Math.round(e.clientY-r.top)})}}>
+              <canvas id="pygame-canvas" ref={canvasRef} width={800} height={500}
+                style={{border:`1px solid ${D.border}`,borderRadius:4,maxWidth:'100%',maxHeight:'100%',objectFit:'contain',background:'#0d1117'}}/>
+            </div>
+            {logs.length>0&&(
+              <div style={{height:80,borderTop:`1px solid ${D.border}`,background:'#0a0d13',overflowY:'auto',padding:'6px 12px',fontFamily:'monospace',fontSize:11}}>
+                {logs.map((l,i)=><div key={i} style={{color:l.startsWith('❌')?D.danger:l.startsWith('⚠')?D.warning:D.txtSec,lineHeight:1.5}}>{l}</div>)}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ══ RIGHT ══ */}
