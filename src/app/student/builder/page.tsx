@@ -4,7 +4,7 @@ import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import BuilderEditor from './BuilderEditor'
 
-export default async function VexPage() {
+export default async function VexPage({ searchParams }: { searchParams: Promise<any> }) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
