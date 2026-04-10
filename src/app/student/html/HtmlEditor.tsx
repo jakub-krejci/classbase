@@ -941,7 +941,6 @@ export default function HtmlEditor({ profile, assignmentId }: { profile: any; as
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {
       {/* ── Assignment panel ── */}
       {assignmentId && (
         <AssignmentPanel

@@ -1004,6 +1004,8 @@ export default function MicrobitEditor({ profile, assignmentId }: { profile: any
         <div style={{display:'flex',gap:8}}><button onClick={()=>renameProject(rpm,rpv)} style={btn()}>Uložit</button><button onClick={()=>setRPM(null)} style={ghost}>Zrušit</button></div>
       </Modal>}
 
+
+      {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid??profile?.id} accent={accent}/>}
       <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
 
         {/* ═══ LEFT PANEL ═══ */}

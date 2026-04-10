@@ -764,7 +764,6 @@ export default function SqlEditor({ profile, assignmentId }: { profile: any; ass
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
-      {
       {/* ── Assignment panel ── */}
       {assignmentId && (
         <AssignmentPanel

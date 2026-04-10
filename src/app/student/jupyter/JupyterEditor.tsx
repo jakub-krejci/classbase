@@ -825,7 +825,6 @@ print(_j.dumps(_out))`,
         @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
       `}</style>
 
-      {
       {/* ── Assignment panel ── */}
       {assignmentId && (
         <AssignmentPanel

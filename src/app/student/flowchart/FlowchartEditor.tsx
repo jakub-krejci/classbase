@@ -644,6 +644,8 @@ export default function FlowchartEditor({profile}:{profile:any}){
         </>
       )}
 
+
+      {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid??profile?.id} accent={accent}/>}
       <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
 
         {/* ═══ LEFT PANEL ═══ */}

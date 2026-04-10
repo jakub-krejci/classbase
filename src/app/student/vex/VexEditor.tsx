@@ -720,6 +720,8 @@ export default function VexEditor({ profile, assignmentId }: { profile: any; ass
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
       `}</style>
 
+
+      {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid??profile?.id} accent={accent}/>}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
         {/* ══ LEFT: Sidebar ══ */}
