@@ -303,7 +303,7 @@ export default function TeacherTasksClient({ teacherId, assignments: init, stude
                   ? '-- Váš starter SQL dotaz\nSELECT * FROM ...'
                   : 'Výchozí obsah souboru pro žáky...'}
                 style={{ ...inputStyle, minHeight: 140, resize: 'vertical', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5 }} />
-              <div style={{ fontSize: 11, color: D.txtSec ?? '#a1a7b3', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: '#a1a7b3', marginTop: 4 }}>
                 Pokud nevyplníš, žák začne s prázdným souborem. Použij pro šablony, příklady nebo částečná řešení.
               </div>
             </Field>
