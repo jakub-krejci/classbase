@@ -810,6 +810,7 @@ class _PygameModule:
         def get_ticks(self): return int(_time.time() * 1000)
         def delay(self, ms): pass
         def wait(self, ms): pass
+        Clock = None  # set after class definition
 
     class _MixerModule:
         class Sound:
@@ -843,6 +844,7 @@ _pg_instance.event   = _PygameModule._EventModule()
 _pg_instance.key     = _PygameModule._KeyModule()
 _pg_instance.mouse   = _PygameModule._MouseModule()
 _pg_instance.time    = _PygameModule._TimeModule()
+_pg_instance.time.Clock = _PygameModule._Clock   # fix: pygame.time.Clock()
 _pg_instance.mixer   = _PygameModule._MixerModule()
 _pg_instance.image   = type('img', (), {'load': lambda s,p: _PygameModule._Surface((32,32))})()
 _pg_instance.transform = type('tr', (), {
@@ -853,7 +855,7 @@ _pg_instance.transform = type('tr', (), {
 _pg_instance.Surface = _PygameModule._Surface
 _pg_instance.Rect    = _PygameModule.Rect
 _pg_instance.Color   = _PygameModule.Color
-_pg_instance.Clock   = _PygameModule._Clock
+_pg_instance.Clock   = _PygameModule._Clock   # also pygame.Clock() directly
 
 # Patch blit to handle text surfaces
 _orig_blit = _PygameModule._Screen.blit
@@ -923,13 +925,17 @@ async def _main():
         pass
     except Exception as e:
         import traceback
-        _pg.log('❌ ' + type(e).__name__ + ': ' + str(e))
+        lines = traceback.format_exception(type(e), e, e.__traceback__)
+        last = [l.strip() for l in ''.join(lines).split('\\n') if l.strip()]
+        _pg.log('❌ ' + (last[-1] if last else str(e)))
 
 await _main()
 `)
     } catch (e: any) {
       if (!stopFlagRef.current) {
-        addLog('❌ ' + (e?.message ?? String(e)))
+        const msg = e?.message ?? String(e)
+        const lastLine = msg.split('\n').filter((l: string) => l.trim()).pop() ?? msg
+        addLog('❌ ' + lastLine)
       }
     }
   }
@@ -997,36 +1003,146 @@ await _main()
       width: (w: number) => { ctx.lineWidth = w },
       pensize: (w: number) => { ctx.lineWidth = w },
       done: () => {},
+      log: (s: string) => addLog(s),
     }
 
-    // Execute code line-by-line (simplified turtle execution)
+    // Execute turtle code via canvas
     try {
+      // Expose turtle env to Python via window
+      ;(window as any).__turtleEnv = turtleEnv
+
       await py.runPythonAsync(`
-import sys
-class _TurtleProxy:
-    def __init__(self, env):
-        self._env = env
-    def __getattr__(self, name):
-        fn = self._env.get(name)
-        if fn: return lambda *a, **kw: fn(*[a_.to_py() if hasattr(a_,'to_py') else a_ for a_ in a])
-        return lambda *a, **kw: None
+import sys, js, builtins
 
-import js
-_proxy = _TurtleProxy(js._turtleEnv)
+_te = js.__turtleEnv
 
-import sys
+class _T:
+    def forward(self, d): _te.forward(float(d))
+    def fd(self, d): self.forward(d)
+    def backward(self, d): _te.backward(float(d))
+    def back(self, d): self.backward(d)
+    def bk(self, d): self.backward(d)
+    def right(self, a): _te.right(float(a))
+    def rt(self, a): self.right(a)
+    def left(self, a): _te.left(float(a))
+    def lt(self, a): self.left(a)
+    def penup(self): _te.penup()
+    def pu(self): self.penup()
+    def up(self): self.penup()
+    def pendown(self): _te.pendown()
+    def pd(self): self.pendown()
+    def down(self): self.pendown()
+    def color(self, *args):
+        if len(args)==1: _te.color(str(args[0]))
+        elif len(args)==3: _te.color(f"rgb({int(args[0])},{int(args[1])},{int(args[2])})")
+    def pencolor(self, *args): self.color(*args)
+    def bgcolor(self, c): _te.bgcolor(str(c))
+    def speed(self, s=None): pass
+    def goto(self, x, y=None):
+        if y is None: x,y = x[0],x[1]
+        _te.goto(float(x), float(y))
+    def setpos(self, x, y=None): self.goto(x, y)
+    def setx(self, x): _te.goto(float(x), 0)
+    def sety(self, y): _te.goto(0, float(y))
+    def home(self): _te.home()
+    def clear(self): _te.clear()
+    def reset(self): _te.reset()
+    def circle(self, r, extent=360, steps=None): _te.circle(float(r))
+    def dot(self, size=None, *color):
+        c = color[0] if color else None
+        _te.dot(float(size or 10), c)
+    def width(self, w): _te.width(float(w))
+    def pensize(self, w=None):
+        if w: self.width(w)
+    def hideturtle(self): pass
+    def ht(self): pass
+    def showturtle(self): pass
+    def st(self): pass
+    def stamp(self): pass
+    def shape(self, s): pass
+    def xcor(self): return 0
+    def ycor(self): return 0
+    def heading(self): return 0
+    def isdown(self): return True
+    def write(self, text, move=False, align="left", font=("Arial",12,"normal")):
+        _te.dot(0)  # no-op for now
+    def setheading(self, a): _te.right(float(a))
+    def seth(self, a): self.setheading(a)
+
+class _Screen:
+    def bgcolor(self, c): _te.bgcolor(str(c))
+    def title(self, t): pass
+    def setup(self, w=None, h=None, *a): pass
+    def screensize(self, *a): pass
+    def tracer(self, *a): pass
+    def update(self): pass
+    def listen(self): pass
+    def onkey(self, *a): pass
+    def onkeypress(self, *a): pass
+    def mainloop(self): pass
+    def done(self): pass
+    def exitonclick(self): pass
+
+_t_instance = _T()
+
 class _TurtleModule:
-    Turtle = lambda self: _proxy
-    Screen = lambda self: _proxy
-    def __getattr__(self, name):
-        return getattr(_proxy, name)
-sys.modules['turtle'] = _TurtleModule()
-`,{ globals: py.toPy({_turtleEnv: turtleEnv}) })
+    def Turtle(self): return _t_instance
+    def Screen(self): return _Screen()
+    def bgcolor(self, c): _te.bgcolor(str(c))
+    def done(self): pass
+    def mainloop(self): pass
+    def exitonclick(self): pass
+    def speed(self, s): pass
+    def color(self, *a): _t_instance.color(*a)
+    def forward(self, d): _t_instance.forward(d)
+    def fd(self, d): _t_instance.forward(d)
+    def backward(self, d): _t_instance.backward(d)
+    def back(self, d): _t_instance.backward(d)
+    def right(self, a): _t_instance.right(a)
+    def rt(self, a): _t_instance.right(a)
+    def left(self, a): _t_instance.left(a)
+    def lt(self, a): _t_instance.left(a)
+    def penup(self): _t_instance.penup()
+    def pu(self): _t_instance.penup()
+    def pendown(self): _t_instance.pendown()
+    def pd(self): _t_instance.pendown()
+    def goto(self, x, y=None): _t_instance.goto(x, y)
+    def home(self): _t_instance.home()
+    def circle(self, r, extent=360, steps=None): _t_instance.circle(r)
+    def width(self, w): _t_instance.width(w)
+    def pensize(self, w=None): _t_instance.pensize(w)
+    def hideturtle(self): pass
+    def showturtle(self): pass
+    def setheading(self, a): _t_instance.setheading(a)
+    def seth(self, a): _t_instance.setheading(a)
+    def reset(self): _t_instance.reset()
+    def clear(self): _t_instance.clear()
+    def dot(self, *a): _t_instance.dot(*a)
+    def write(self, *a, **kw): pass
 
-      await py.runPythonAsync(code)
-      setLogs(['✓ Hotovo'])
+sys.modules['turtle'] = _TurtleModule()
+
+# Capture print
+_orig_print = builtins.print
+def _cap_print(*args, sep=' ', end='\\n', **kw):
+    import js
+    js.__turtleEnv.log(sep.join(str(a) for a in args))
+builtins.print = _cap_print
+`)
+
+      // Run user code
+      try {
+        await py.runPythonAsync(code)
+        addLog('✓ Hotovo')
+      } catch (e: any) {
+        const msg = e?.message ?? String(e)
+        // Extract Python traceback if available
+        const lines = msg.split('\n')
+        const lastLine = lines.filter((l: string) => l.trim()).pop() ?? msg
+        addLog('❌ ' + lastLine)
+      }
     } catch (e: any) {
-      setLogs(['❌ ' + (e?.message ?? String(e))])
+      addLog('❌ Chyba turtle setupu: ' + (e?.message ?? String(e)))
     }
   }
 
