@@ -215,7 +215,7 @@ function genPseudo(d:Diagram): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function FlowchartEditor({profile}:{profile:any}){
+export default function FlowchartEditor({profile,assignmentId}:{profile:any;assignmentId?:string|null}){
   const supabase=createClient()
   const accent=profile?.accent_color??'#7C3AED'
   const uid=profile?.id as string
