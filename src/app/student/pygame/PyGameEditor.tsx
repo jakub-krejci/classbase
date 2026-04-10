@@ -1047,7 +1047,7 @@ sys.modules['turtle'] = _TurtleModule()
 
                 <DocSection title="⌨ Klávesy" items={[
                     ['pygame.key.get_pressed()', 'Slovník stisknutých kláves'],
-                    ...KEY_CODES.slice(0,10).map(k=>[`pygame.${k}`, k.replace('K_','')]),
+                    ...KEY_CODES.slice(0,10).map(k=>[`pygame.${k}`, k.replace('K_','')] as [string,string]),
                   ]}/>
 
                 <DocSection title="🖱 Myš" items={[
