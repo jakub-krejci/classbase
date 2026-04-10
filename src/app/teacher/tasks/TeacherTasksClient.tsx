@@ -533,6 +533,7 @@ function SubmissionsDetail({ assignment, onRefresh }: { assignment: any; onRefre
             </div>
           ))}
         </div>
+      )}
 
       {/* Code viewer modal */}
       {viewingCode && (
@@ -550,7 +551,6 @@ function SubmissionsDetail({ assignment, onRefresh }: { assignment: any; onRefre
             </pre>
           </div>
         </>
-      )}
       )}
 
       {/* Grade modal */}
