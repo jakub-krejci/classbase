@@ -22,6 +22,7 @@ interface Submission {
   teacher_comment: string | null
   grade: string | null
   allow_resubmit_override: boolean | null
+  file_path?: string | null
 }
 
 interface Props {
