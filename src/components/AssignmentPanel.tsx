@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { D } from '@/components/DarkLayout'
+import { getAssignmentForStudent, submitAssignment, unsubmitAssignment } from '@/app/student/tasks/actions'
 
 interface Assignment {
   id: string
@@ -45,57 +46,23 @@ export default function AssignmentPanel({ assignmentId, studentId, accent, onSav
   }, [assignmentId])
 
   async function loadData() {
-    // Load assignment
-    const { data: asg } = await supabase
-      .from('task_assignments')
-      .select('*, profiles:teacher_id(full_name)')
-      .eq('id', assignmentId)
-      .single()
-    if (asg) setAssignment({ ...asg, teacher_name: (asg.profiles as any)?.full_name })
-
-    // Load or create submission
-    const { data: sub } = await supabase
-      .from('task_submissions')
-      .select('*')
-      .eq('assignment_id', assignmentId)
-      .eq('student_id', studentId)
-      .maybeSingle()
-    if (sub) {
-      setSubmission(sub)
-    } else {
-      // Create draft submission
-      const { data: newSub } = await supabase
-        .from('task_submissions')
-        .insert({ assignment_id: assignmentId, student_id: studentId, status: 'in_progress' })
-        .select()
-        .single()
-      if (newSub) setSubmission(newSub)
-    }
+    const result = await getAssignmentForStudent(assignmentId)
+    if (result.error || !result.assignment) return
+    setAssignment({ ...result.assignment, teacher_name: result.assignment.teacher_name })
+    if (result.submission) setSubmission(result.submission)
   }
 
   async function submit() {
     if (!submission) return
     setSubmitting(true)
     setConfirmSubmit(false)
-
-    // Let editor save current file first
     if (onSaveBeforeSubmit) {
       try { await onSaveBeforeSubmit() } catch {}
     }
-
-    const { data, error } = await supabase
-      .from('task_submissions')
-      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-      .eq('id', submission.id)
-      .select()
-      .single()
-
-    if (error) {
-      flash('❌ Chyba při odevzdání')
-    } else {
-      setSubmission(data)
-      flash('✓ Úkol byl úspěšně odevzdán!')
-    }
+    const res = await submitAssignment(assignmentId, submission.file_path ?? '')
+    if (res.error) { flash('❌ Chyba při odevzdání'); setSubmitting(false); return }
+    setSubmission((p: any) => ({ ...p, status: 'submitted', submitted_at: new Date().toISOString() }))
+    flash('✓ Úkol byl úspěšně odevzdán!')
     setSubmitting(false)
   }
 
@@ -105,13 +72,9 @@ export default function AssignmentPanel({ assignmentId, studentId, accent, onSav
     if (!canResubmit) { flash('Učitel neumožnil vrácení odevzdání'); return }
     setSubmitting(true)
     setConfirmReturn(false)
-    const { data } = await supabase
-      .from('task_submissions')
-      .update({ status: 'in_progress' })
-      .eq('id', submission.id)
-      .select()
-      .single()
-    if (data) setSubmission(data)
+    const res = await unsubmitAssignment(assignmentId)
+    if (res.error) { flash(`Chyba: ${res.error}`); setSubmitting(false); return }
+    setSubmission((p: any) => ({ ...p, status: 'in_progress' }))
     flash('✓ Odevzdání vráceno — můžeš upravit a znovu odevzdat')
     setSubmitting(false)
   }

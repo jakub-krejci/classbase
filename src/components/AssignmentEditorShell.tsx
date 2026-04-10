@@ -1,8 +1,14 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { D } from '@/components/DarkLayout'
+import {
+  getAssignmentForStudent,
+  submitAssignment,
+  unsubmitAssignment,
+  getAssignmentFileContent,
+  saveAssignmentFile,
+} from '@/app/student/tasks/actions'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 export interface AssignmentInfo {
@@ -15,12 +21,6 @@ export interface AssignmentInfo {
   starter_code: string
   starter_filename: string
   teacher_name: string
-}
-
-export interface AssignmentFileHandle {
-  path: string       // full storage path
-  bucket: string     // storage bucket name
-  content: string    // current file content
 }
 
 // Extension per editor type
@@ -59,94 +59,54 @@ const DEFAULT_STARTERS: Record<string, string> = {
 }
 
 // ── Hook: useAssignmentFile ────────────────────────────────────────────────────
-// Manages the assignment work file in Storage
 export function useAssignmentFile(
   assignmentId: string | null,
-  studentId: string,
   editorType: string,
 ) {
-  const supabase = createClient()
   const [assignment, setAssignment] = useState<AssignmentInfo | null>(null)
   const [submission, setSubmission] = useState<any | null>(null)
+  const [studentId, setStudentId]   = useState<string | null>(null)
   const [fileContent, setFileContent] = useState<string | null>(null)
-  const [filePath, setFilePath] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [filePath, setFilePath]     = useState<string | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState<string | null>(null)
 
   const bucket = EDITOR_BUCKETS[editorType] ?? 'python-files'
   const ext    = EDITOR_EXTENSIONS[editorType] ?? 'txt'
 
   useEffect(() => {
     if (!assignmentId) { setLoading(false); return }
-    initAssignment()
-  }, [assignmentId, studentId])
+    init()
+  }, [assignmentId])
 
-  async function initAssignment() {
-    setLoading(true)
-    setError(null)
+  async function init() {
+    setLoading(true); setError(null)
     try {
-      // 1. Load assignment details
-      const { data: asg, error: asgErr } = await supabase
-        .from('task_assignments')
-        .select('*, profiles:teacher_id(full_name)')
-        .eq('id', assignmentId!)
-        .single()
-
-      if (asgErr || !asg) { setError('Úkol nenalezen'); setLoading(false); return }
-      setAssignment({
-        ...asg,
-        teacher_name: (asg.profiles as any)?.full_name ?? 'Učitel',
-      })
-
-      // 2. Load or create submission record
-      let sub: any = null
-      const { data: existingSub } = await supabase
-        .from('task_submissions')
-        .select('*')
-        .eq('assignment_id', assignmentId!)
-        .eq('student_id', studentId)
-        .maybeSingle()
-
-      if (existingSub) {
-        sub = existingSub
-      } else {
-        const { data: newSub } = await supabase
-          .from('task_submissions')
-          .insert({ assignment_id: assignmentId!, student_id: studentId, status: 'in_progress' })
-          .select()
-          .single()
-        sub = newSub
+      // Use server action to bypass RLS
+      const result = await getAssignmentForStudent(assignmentId!)
+      if (result.error || !result.assignment) {
+        setError(result.error ?? 'Úkol nenalezen')
+        setLoading(false); return
       }
-      setSubmission(sub)
+      setAssignment(result.assignment as AssignmentInfo)
+      setSubmission(result.submission)
+      setStudentId(result.studentId ?? null)
 
-      // 3. Load or create the work file
-      // Path: assignments/{assignmentId}/{studentId}/work.{ext}
-      const workPath = `assignments/${assignmentId}/${studentId}/work.${ext}`
+      const sid = result.studentId!
+      const workPath = `assignments/${assignmentId}/${sid}/work.${ext}`
       setFilePath(workPath)
 
-      const { data: existingFile } = await supabase.storage
-        .from(bucket)
-        .download(workPath + '?t=' + Date.now())
-
-      if (existingFile) {
-        const content = await existingFile.text()
+      // Try to load existing file via server action
+      const { content } = await getAssignmentFileContent(bucket, workPath)
+      if (content !== null) {
         setFileContent(content)
       } else {
         // Create file from starter_code or default
-        const starterContent = asg.starter_code?.trim()
-          ? asg.starter_code
+        const starter = result.assignment.starter_code?.trim()
+          ? result.assignment.starter_code
           : DEFAULT_STARTERS[editorType] ?? ''
-        const blob = new Blob([starterContent], { type: 'text/plain' })
-        await supabase.storage.from(bucket).upload(workPath, blob, {
-          cacheControl: '0', upsert: false,
-        })
-        setFileContent(starterContent)
-        // Mark as in_progress
-        if (sub) {
-          await supabase.from('task_submissions')
-            .update({ status: 'in_progress', file_path: workPath })
-            .eq('id', sub.id)
-        }
+        await saveAssignmentFile(bucket, workPath, starter)
+        setFileContent(starter)
       }
     } catch (e: any) {
       setError(e?.message ?? 'Neznámá chyba')
@@ -156,49 +116,35 @@ export function useAssignmentFile(
 
   async function saveFile(content: string) {
     if (!filePath) return
-    const blob = new Blob([content], { type: 'text/plain' })
-    await supabase.storage.from(bucket).remove([filePath])
-    await supabase.storage.from(bucket).upload(filePath, blob, { cacheControl: '0' })
+    await saveAssignmentFile(bucket, filePath, content)
     setFileContent(content)
   }
 
   async function submit(content: string) {
-    await saveFile(content)
-    if (!submission) return
-    await supabase.from('task_submissions').update({
-      status: 'submitted',
-      submitted_at: new Date().toISOString(),
-      file_path: filePath,
-    }).eq('id', submission.id)
+    if (!filePath || !assignmentId) return
+    await saveAssignmentFile(bucket, filePath, content)
+    await submitAssignment(assignmentId, filePath)
     setSubmission((p: any) => ({ ...p, status: 'submitted', submitted_at: new Date().toISOString() }))
   }
 
   async function unsubmit() {
-    if (!submission) return
-    await supabase.from('task_submissions').update({ status: 'in_progress' }).eq('id', submission.id)
+    if (!assignmentId) return
+    const result = await unsubmitAssignment(assignmentId)
+    if (result.error) throw new Error(result.error)
     setSubmission((p: any) => ({ ...p, status: 'in_progress' }))
   }
 
-  async function refreshSubmission() {
-    if (!assignmentId) return
-    const { data } = await supabase.from('task_submissions').select('*')
-      .eq('assignment_id', assignmentId).eq('student_id', studentId).maybeSingle()
-    if (data) setSubmission(data)
-  }
-
   return {
-    assignment, submission, fileContent, filePath, loading, error,
-    saveFile, submit, unsubmit, refreshSubmission,
+    assignment, submission, studentId, fileContent, filePath, loading, error,
+    saveFile, submit, unsubmit,
     bucket, ext,
   }
 }
 
 // ── AssignmentEditorShell ─────────────────────────────────────────────────────
-// Wraps any editor in assignment mode: shows task panel + submit button
-// Pass children as a render prop receiving the file content + save function
 interface ShellProps {
   assignmentId: string
-  studentId: string
+  studentId?: string  // kept for compat but not used (server action gets it)
   editorType: string
   accent: string
   children: (props: {
@@ -210,11 +156,11 @@ interface ShellProps {
   }) => React.ReactNode
 }
 
-export function AssignmentEditorShell({ assignmentId, studentId, editorType, accent, children }: ShellProps) {
+export function AssignmentEditorShell({ assignmentId, editorType, accent, children }: ShellProps) {
   const {
     assignment, submission, fileContent, filePath, loading, error,
     saveFile, submit, unsubmit,
-  } = useAssignmentFile(assignmentId, studentId, editorType)
+  } = useAssignmentFile(assignmentId, editorType)
 
   const [confirmSubmit, setConfirmSubmit]   = useState(false)
   const [confirmUnsubmit, setConfirmUnsubmit] = useState(false)
