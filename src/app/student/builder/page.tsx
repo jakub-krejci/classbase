@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic'
 import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import BuilderEditor from './BuilderEditor'
-import AssignmentGenericEditor from '@/components/AssignmentGenericEditor'
 
 export default async function BuilderEditorPage({ searchParams }: { searchParams: Promise<any> }) {
   const supabase = await createServerClient()
@@ -13,9 +12,5 @@ export default async function BuilderEditorPage({ searchParams }: { searchParams
   const { data: pd } = await admin.from('profiles').select('*').eq('id', (user as any).id).single()
   if ((pd as any)?.role !== 'student') redirect('/teacher/dashboard')
   const sp = await searchParams
-  const assignmentId = sp?.assignment ?? null
-  if (assignmentId) {
-    return <AssignmentGenericEditor profile={pd as any} assignmentId={assignmentId} editorType="builder" />
-  }
-  return <BuilderEditor profile={pd as any} assignmentId={null} />
+  return <BuilderEditor profile={pd as any} assignmentId={sp?.assignment ?? null} />
 }

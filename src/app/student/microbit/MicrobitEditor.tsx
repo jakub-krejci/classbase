@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import AssignmentPanel from '@/components/AssignmentPanel'
+import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 import { DarkLayout, D } from '@/components/DarkLayout'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -509,6 +510,7 @@ export default function MicrobitEditor({ profile, assignmentId }: { profile: any
   const uid = profile?.id as string
 
   // ── File state ─────────────────────────────────────────────────────────────
+  const [assignmentFile, setAssignmentFile] = useState<{path:string;content:string}|null>(null)
   const [projects, setProjects]     = useState<Project[]>([])
   const [loadingProj, setLP]        = useState(true)
   const [activeFile, setActiveFile] = useState<MbFile | null>(null)
@@ -613,6 +615,30 @@ export default function MicrobitEditor({ profile, assignmentId }: { profile: any
     setNFP(res[0]?.name ?? DEFAULT_PROJ)
     setLP(false)
   }, [uid])
+
+  // ── Assignment mode: load assignment file ─────────────────────────────────
+
+  // Load assignment file into editor when ready
+  useEffect(() => {
+    if (!assignmentFile) return
+    // Each editor has its own way to set content - we use a custom event
+    window.dispatchEvent(new CustomEvent('cb-assignment-file', { detail: assignmentFile }))
+  }, [assignmentFile])
+
+  useEffect(() => {
+    if (!assignmentId) return
+    ;(async () => {
+      const result = await getAssignmentForStudent(assignmentId)
+      if (result.error || !result.assignment) return
+      const workPath = `assignments/${assignmentId}/${uid}/work.py`
+      const { content } = await getAssignmentFileContent('microbit-files', workPath)
+      const starter = content ?? (result.assignment.starter_code?.trim() || 'from microbit import *\n\nwhile True:\n    pass\n')
+      if (content === null) await saveAssignmentFile('microbit-files', workPath, starter)
+      // Signal to editor to open this path
+      setAssignmentFile({ path: workPath, content: starter })
+    })()
+  }, [assignmentId])
+
   useEffect(() => { refresh() }, [refresh])
 
   async function openFile(file: MbFile) {
@@ -1008,8 +1034,8 @@ export default function MicrobitEditor({ profile, assignmentId }: { profile: any
       {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid??profile?.id} accent={accent}/>}
       <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
 
-        {/* ═══ LEFT PANEL ═══ */}
-        <div style={{width:200,flexShrink:0,borderRight:`1px solid ${D.border}`,background:D.bgCard,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {/* ═══ LEFT (hidden in assignment mode) PANEL ═══ */}
+        <div style={{width:200,flexShrink:0,display:assignmentId?'none':'flex',borderRight:`1px solid ${D.border}`,background:D.bgCard,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <div style={{padding:'12px 12px 10px',borderBottom:`1px solid ${D.border}`,flexShrink:0}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <span style={{fontSize:16}}>🔬</span>

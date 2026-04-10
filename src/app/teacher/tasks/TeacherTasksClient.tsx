@@ -15,7 +15,12 @@ const EDITOR_LABELS: Record<string, string> = {
   flowchart: '📊 Flowchart',
 }
 
-const STATUS_LABELS: Record<string, string> = {
+const EDITOR_BUCKETS: Record<string, string> = {
+  python: 'python-files', html: 'web-files', jupyter: 'jupyter-files',
+  sql: 'sql-files', microbit: 'microbit-files', vex: 'vex-files',
+  builder: 'builder-files', flowchart: 'flowchart-files',
+}
+
   draft:     'Koncept',
   published: 'Publikováno',
   closed:    'Uzavřeno',
@@ -401,13 +406,26 @@ function SubmissionsDetail({ assignment, onRefresh }: { assignment: any; onRefre
   const [grade, setGrade] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [viewingCode, setViewingCode] = useState<{name:string;content:string}|null>(null)
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 3000) }
 
   async function refreshSubs() {
-    // Use admin-level server action to bypass RLS for teacher
     const data = await getSubmissionsForAssignment(assignment.id)
     setSubmissions(data as any[])
+  }
+
+  async function viewSubmission(sub: any) {
+    if (!sub.file_path) { flash('Soubor nebyl nalezen'); return }
+    try {
+      const { data } = await supabase.storage
+        .from(EDITOR_BUCKETS[assignment.editor_type] ?? 'python-files')
+        .download(sub.file_path)
+      if (!data) { flash('Nepodařilo se načíst soubor'); return }
+      const content = await data.text()
+      const studentName = sub.profiles?.full_name ?? 'Žák'
+      setViewingCode({ name: studentName, content })
+    } catch { flash('Chyba při načítání souboru') }
   }
 
   async function returnSubmission(sub: any) {
@@ -471,7 +489,9 @@ function SubmissionsDetail({ assignment, onRefresh }: { assignment: any; onRefre
             <div key={sub.id} style={{ background: '#14171F', border: '1px solid rgba(255,255,255,.06)', borderRadius: 12, padding: '16px 20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, color: '#fff', fontSize: 14 }}>{sub.profiles?.full_name ?? sub.student_id}</div>
+                  <div style={{ fontWeight: 600, color: '#fff', fontSize: 14 }}>
+                    {sub.profiles?.full_name ?? '(neznámý žák)'}
+                  </div>
                   <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{sub.profiles?.email}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -487,11 +507,10 @@ function SubmissionsDetail({ assignment, onRefresh }: { assignment: any; onRefre
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {sub.file_path && (
-                    <a href={`${EDITOR_PATHS[assignment.editor_type]}?assignment=${assignment.id}&student=${sub.student_id}&readonly=1`}
-                      target="_blank"
-                      style={{ padding: '6px 12px', background: 'rgba(59,130,246,.12)', color: '#3b82f6', border: '1px solid rgba(59,130,246,.25)', borderRadius: 7, fontSize: 11, textDecoration: 'none', fontWeight: 600 }}>
-                      👁 Zobrazit
-                    </a>
+                    <button onClick={() => viewSubmission(sub)}
+                      style={{ padding: '6px 12px', background: 'rgba(59,130,246,.12)', color: '#3b82f6', border: '1px solid rgba(59,130,246,.25)', borderRadius: 7, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                      👁 Zobrazit kód
+                    </button>
                   )}
                   {['submitted','returned'].includes(sub.status) && (
                     <button onClick={() => { setSelected(sub); setComment(sub.teacher_comment ?? ''); setGrade(sub.grade ?? '') }}
@@ -513,6 +532,24 @@ function SubmissionsDetail({ assignment, onRefresh }: { assignment: any; onRefre
             </div>
           ))}
         </div>
+
+      {/* Code viewer modal */}
+      {viewingCode && (
+        <>
+          <div onClick={() => setViewingCode(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', zIndex: 9998, backdropFilter: 'blur(4px)' }} />
+          <div style={{ position: 'fixed', top: '5%', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, width: '80%', maxWidth: 900, maxHeight: '90vh', background: '#0d1117', border: '1px solid rgba(255,255,255,.1)', borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,.9)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,.08)', flexShrink: 0, background: '#14171F' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#fff', flex: 1 }}>
+                👁 Kód žáka: {viewingCode.name}
+              </span>
+              <button onClick={() => setViewingCode(null)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 22, lineHeight: 1 }}>×</button>
+            </div>
+            <pre style={{ flex: 1, overflowY: 'auto', margin: 0, padding: '20px 24px', fontSize: 13, lineHeight: 1.7, color: '#e2e8f0', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {viewingCode.content}
+            </pre>
+          </div>
+        </>
+      )}
       )}
 
       {/* Grade modal */}

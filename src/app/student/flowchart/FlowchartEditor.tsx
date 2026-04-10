@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import AssignmentPanel from '@/components/AssignmentPanel'
+import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 import { DarkLayout, D } from '@/components/DarkLayout'
 
 const BUCKET = 'flowchart-files'
@@ -98,6 +99,7 @@ function curvePath(x1:number,y1:number,x2:number,y2:number,fromPort?:string,toPo
       default:       return [px,py-d]
     }
   }
+  const [assignmentFile, setAssignmentFile] = useState<{path:string;content:string}|null>(null)
   const [c1x,c1y]=outward(x1,y1,fromPort||'bottom',dist)
   const [c2x,c2y]=inward(x2,y2,toPort||'top',dist)
   return `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`
@@ -295,6 +297,30 @@ export default function FlowchartEditor({profile,assignmentId}:{profile:any;assi
     if(res.length===0){await push(fp(uid,DEFAULT_PROJ,'diagram.flow'),EMPTY_DIAGRAM);await refresh();return}
     setNFP(res[0]?.name??DEFAULT_PROJ); setLP(false)
   },[uid])
+
+  // ── Assignment mode: load assignment file ─────────────────────────────────
+
+  // Load assignment file into editor when ready
+  useEffect(() => {
+    if (!assignmentFile) return
+    // Each editor has its own way to set content - we use a custom event
+    window.dispatchEvent(new CustomEvent('cb-assignment-file', { detail: assignmentFile }))
+  }, [assignmentFile])
+
+  useEffect(() => {
+    if (!assignmentId) return
+    ;(async () => {
+      const result = await getAssignmentForStudent(assignmentId)
+      if (result.error || !result.assignment) return
+      const workPath = `assignments/${assignmentId}/${uid}/work.json`
+      const { content } = await getAssignmentFileContent('flowchart-files', workPath)
+      const starter = content ?? (result.assignment.starter_code?.trim() || '{"nodes":[],"edges":[]}')
+      if (content === null) await saveAssignmentFile('flowchart-files', workPath, starter)
+      // Signal to editor to open this path
+      setAssignmentFile({ path: workPath, content: starter })
+    })()
+  }, [assignmentId])
+
   useEffect(()=>{refresh()},[refresh])
 
   async function openFile(file:FFile){
@@ -648,8 +674,8 @@ export default function FlowchartEditor({profile,assignmentId}:{profile:any;assi
       {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid??profile?.id} accent={accent}/>}
       <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
 
-        {/* ═══ LEFT PANEL ═══ */}
-        <div style={{width:200,flexShrink:0,borderRight:`1px solid ${D.border}`,background:D.bgCard,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {/* ═══ LEFT (hidden in assignment mode) PANEL ═══ */}
+        <div style={{width:200,flexShrink:0,display:assignmentId?'none':'flex',borderRight:`1px solid ${D.border}`,background:D.bgCard,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <div style={{padding:'11px 11px 9px',borderBottom:`1px solid ${D.border}`,flexShrink:0}}>
             <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:7}}>
               <span style={{fontSize:15}}>📊</span>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { runPython } from '@/lib/pyodide-runner'
 import AssignmentPanel from '@/components/AssignmentPanel'
+import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -113,6 +114,7 @@ export default function JupyterEditor({ profile, assignmentId }: { profile: any;
   const uid      = profile?.id as string
 
   // ── Notebook state ──────────────────────────────────────────────────────────
+  const [assignmentFile, setAssignmentFile] = useState<{path:string;content:string}|null>(null)
   const [notebook, setNotebook]         = useState<Notebook>(emptyNotebook())
   const [activeFile, setActiveFile]     = useState<NbFile | null>(null)
   const [isDirty, setIsDirty]           = useState(false)
@@ -223,6 +225,30 @@ export default function JupyterEditor({ profile, assignmentId }: { profile: any;
   }
 
   // ── Load Monaco ────────────────────────────────────────────────────────────
+
+  // ── Assignment mode: load assignment file ─────────────────────────────────
+
+  // Load assignment file into editor when ready
+  useEffect(() => {
+    if (!assignmentFile) return
+    // Each editor has its own way to set content - we use a custom event
+    window.dispatchEvent(new CustomEvent('cb-assignment-file', { detail: assignmentFile }))
+  }, [assignmentFile])
+
+  useEffect(() => {
+    if (!assignmentId) return
+    ;(async () => {
+      const result = await getAssignmentForStudent(assignmentId)
+      if (result.error || !result.assignment) return
+      const workPath = `assignments/${assignmentId}/${uid}/work.json`
+      const { content } = await getAssignmentFileContent('jupyter-files', workPath)
+      const starter = content ?? (result.assignment.starter_code?.trim() || '{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":4}')
+      if (content === null) await saveAssignmentFile('jupyter-files', workPath, starter)
+      // Signal to editor to open this path
+      setAssignmentFile({ path: workPath, content: starter })
+    })()
+  }, [assignmentId])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const s = document.createElement('script')
@@ -836,8 +862,8 @@ print(_j.dumps(_out))`,
       {/* ── 3-col layout ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-        {/* ══ LEFT: Sidebar ══ */}
-        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* ══ LEFT (hidden in assignment mode): Sidebar ══ */}
+        <div style={{ width: 210, flexShrink: 0, display: assignmentId ? 'none' : 'flex', borderRight: `1px solid ${D.border}`, background: D.bgCard, flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Header */}
           <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>

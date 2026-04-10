@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { createClient } from '@/lib/supabase/client'
 import { DarkLayout, D } from '@/components/DarkLayout'
 import AssignmentPanel from '@/components/AssignmentPanel'
+import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const BUCKET = 'builder-files'
@@ -90,6 +91,30 @@ function ThreeViewport({
   }>({ mode:'none' })
 
   // ── init ────────────────────────────────────────────────────────────────────
+
+  // ── Assignment mode: load assignment file ─────────────────────────────────
+
+  // Load assignment file into editor when ready
+  useEffect(() => {
+    if (!assignmentFile) return
+    // Each editor has its own way to set content - we use a custom event
+    window.dispatchEvent(new CustomEvent('cb-assignment-file', { detail: assignmentFile }))
+  }, [assignmentFile])
+
+  useEffect(() => {
+    if (!assignmentId) return
+    ;(async () => {
+      const result = await getAssignmentForStudent(assignmentId)
+      if (result.error || !result.assignment) return
+      const workPath = `assignments/${assignmentId}/${uid}/work.json`
+      const { content } = await getAssignmentFileContent('builder-files', workPath)
+      const starter = content ?? (result.assignment.starter_code?.trim() || '{"objects":[],"groups":[]}')
+      if (content === null) await saveAssignmentFile('builder-files', workPath, starter)
+      // Signal to editor to open this path
+      setAssignmentFile({ path: workPath, content: starter })
+    })()
+  }, [assignmentId])
+
   useEffect(()=>{
     if(!mountRef.current) return
     const el=mountRef.current
@@ -852,6 +877,7 @@ export default function BuilderEditor({profile,assignmentId}:{profile:any;assign
   const threeLoaded=true  // Three.js loaded via npm import
 
   // ── Scene state + Undo/Redo ───────────────────────────────────────────────
+  const [assignmentFile, setAssignmentFile] = useState<{path:string;content:string}|null>(null)
   const [scene,setScene]           = useState<Scene>(emptyScene())
   const [selectedIds,setSelectedIds] = useState<Set<string>>(new Set())
   const [isDirty,setIsDirty]       = useState(false)
@@ -1243,8 +1269,8 @@ export default function BuilderEditor({profile,assignmentId}:{profile:any;assign
       {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid} accent={accent}/>}
       <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
 
-        {/* ══ LEFT ══ */}
-        <div style={{width:210,flexShrink:0,borderRight:`1px solid ${D.border}`,background:D.bgCard,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {/* ══ LEFT (hidden in assignment mode) ══ */}
+        <div style={{width:210,flexShrink:0,display:assignmentId?'none':'flex',borderRight:`1px solid ${D.border}`,background:D.bgCard,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           <div style={{padding:'12px 12px 10px',borderBottom:`1px solid ${D.border}`,flexShrink:0}}>
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <div style={{width:28,height:28,borderRadius:7,background:accent+'30',border:`1px solid ${accent}50`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>🧱</div>

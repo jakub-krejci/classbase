@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import AssignmentPanel from '@/components/AssignmentPanel'
+import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -130,6 +131,7 @@ export default function HtmlEditor({ profile, assignmentId }: { profile: any; as
   const uid      = profile?.id as string
 
   // ── Projects & files ──────────────────────────────────────────────────────
+  const [assignmentFile, setAssignmentFile] = useState<{path:string;content:string}|null>(null)
   const [projects, setProjects]         = useState<WebProject[]>([])
   const [loadingProj, setLoadingProj]   = useState(true)
   const [activeProject, setActiveProject] = useState<WebProject | null>(null)
@@ -280,6 +282,30 @@ export default function HtmlEditor({ profile, assignmentId }: { profile: any; as
   }
 
   // ── Monaco loader ─────────────────────────────────────────────────────────
+
+  // ── Assignment mode: load assignment file ─────────────────────────────────
+
+  // Load assignment file into editor when ready
+  useEffect(() => {
+    if (!assignmentFile) return
+    // Each editor has its own way to set content - we use a custom event
+    window.dispatchEvent(new CustomEvent('cb-assignment-file', { detail: assignmentFile }))
+  }, [assignmentFile])
+
+  useEffect(() => {
+    if (!assignmentId) return
+    ;(async () => {
+      const result = await getAssignmentForStudent(assignmentId)
+      if (result.error || !result.assignment) return
+      const workPath = `assignments/${assignmentId}/${uid}/work.html`
+      const { content } = await getAssignmentFileContent('web-files', workPath)
+      const starter = content ?? (result.assignment.starter_code?.trim() || '<!DOCTYPE html>\n<html lang="cs">\n<head>\n  <meta charset="UTF-8">\n  <title>Úkol</title>\n</head>\n<body>\n  \n</body>\n</html>\n')
+      if (content === null) await saveAssignmentFile('web-files', workPath, starter)
+      // Signal to editor to open this path
+      setAssignmentFile({ path: workPath, content: starter })
+    })()
+  }, [assignmentId])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const s = document.createElement('script')
@@ -351,6 +377,10 @@ export default function HtmlEditor({ profile, assignmentId }: { profile: any; as
           editorRef.current.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => document.getElementById('html-save-btn')?.click())
         }
         setMonacoReady(true)
+        window.addEventListener('cb-assignment-file', (ev: any) => {
+          ed.setValue(ev.detail.content)
+          ed.setScrollPosition({ scrollTop: 0 })
+        })
       })
     }
     document.head.appendChild(s)
@@ -952,8 +982,8 @@ export default function HtmlEditor({ profile, assignmentId }: { profile: any; as
       {/* ── 3-col layout ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-        {/* ══ LEFT: Sidebar ══ */}
-        <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* ══ LEFT (hidden in assignment mode): Sidebar ══ */}
+        <div style={{ width: 210, flexShrink: 0, display: assignmentId ? 'none' : 'flex', borderRight: `1px solid ${D.border}`, background: D.bgCard, flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Header */}
           <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>

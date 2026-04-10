@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import AssignmentPanel from '@/components/AssignmentPanel'
+import { getAssignmentForStudent, getAssignmentFileContent, saveAssignmentFile } from '@/app/student/tasks/actions'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -131,6 +132,7 @@ export default function SqlEditor({ profile, assignmentId }: { profile: any; ass
   // ── SQL.js state ──────────────────────────────────────────────────────────
   const sqlJsRef   = useRef<any>(null)   // SQL.js library
   const dbRef      = useRef<any>(null)   // current Database instance
+  const [assignmentFile, setAssignmentFile] = useState<{path:string;content:string}|null>(null)
   const [sqlReady, setSqlReady] = useState(false)
 
   // ── Editor/project state ──────────────────────────────────────────────────
@@ -183,6 +185,30 @@ export default function SqlEditor({ profile, assignmentId }: { profile: any; ass
   const [renameVal, setRenameVal]           = useState('')
 
   // ── Load SQL.js from CDN ──────────────────────────────────────────────────
+
+  // ── Assignment mode: load assignment file ─────────────────────────────────
+
+  // Load assignment file into editor when ready
+  useEffect(() => {
+    if (!assignmentFile) return
+    // Each editor has its own way to set content - we use a custom event
+    window.dispatchEvent(new CustomEvent('cb-assignment-file', { detail: assignmentFile }))
+  }, [assignmentFile])
+
+  useEffect(() => {
+    if (!assignmentId) return
+    ;(async () => {
+      const result = await getAssignmentForStudent(assignmentId)
+      if (result.error || !result.assignment) return
+      const workPath = `assignments/${assignmentId}/${uid}/work.sql`
+      const { content } = await getAssignmentFileContent('sql-files', workPath)
+      const starter = content ?? (result.assignment.starter_code?.trim() || '-- Tvůj SQL kód zde\n')
+      if (content === null) await saveAssignmentFile('sql-files', workPath, starter)
+      // Signal to editor to open this path
+      setAssignmentFile({ path: workPath, content: starter })
+    })()
+  }, [assignmentId])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const w = window as any
@@ -775,8 +801,8 @@ export default function SqlEditor({ profile, assignmentId }: { profile: any; ass
       {/* ── 3-col layout ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-        {/* ══ LEFT: Sidebar ══ */}
-        <div style={{ width: 200, flexShrink: 0, borderRight: `1px solid ${D.border}`, background: D.bgCard, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* ══ LEFT (hidden in assignment mode): Sidebar ══ */}
+        <div style={{ width: 200, flexShrink: 0, display: assignmentId ? 'none' : 'flex', borderRight: `1px solid ${D.border}`, background: D.bgCard, flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${D.border}`, flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <img src="/icons/database.png" alt="SQL" style={{ width: 18, height: 18, objectFit: 'contain' }} onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
