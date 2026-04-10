@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import AssignmentPanel from '@/components/AssignmentPanel'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ function fmtMs(ms: number) { return ms < 1000 ? `${ms}ms` : `${(ms/1000).toFixed
 function fmtSize(b?: number) { if (!b) return ''; return b < 1024 ? `${b}B` : b < 1048576 ? `${(b/1024).toFixed(1)}kB` : `${(b/1048576).toFixed(1)}MB` }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function SqlEditor({ profile }: { profile: any }) {
+export default function SqlEditor({ profile, assignmentId }: { profile: any; assignmentId?: string | null }) {
   const supabase = createClient()
   const accent   = profile?.accent_color ?? '#7C3AED'
   const uid      = profile?.id as string
@@ -763,6 +764,15 @@ export default function SqlEditor({ profile }: { profile: any }) {
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
 
+      {
+      {/* ── Assignment panel ── */}
+      {assignmentId && (
+        <AssignmentPanel
+          assignmentId={assignmentId}
+          studentId={uid ?? profile?.id}
+          accent={accent}
+        />
+      )}
       {/* ── 3-col layout ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 

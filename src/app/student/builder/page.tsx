@@ -11,5 +11,6 @@ export default async function VexPage() {
   const admin = createAdminClient()
   const { data: pd } = await admin.from('profiles').select('*').eq('id', (user as any).id).single()
   if ((pd as any)?.role !== 'student') redirect('/teacher/dashboard')
-  return <BuilderEditor profile={pd as any} />
+  const sp = await searchParams
+  return <BuilderEditor profile={pd as any} assignmentId={sp?.assignment ?? null} />
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { runPython } from '@/lib/pyodide-runner'
+import AssignmentPanel from '@/components/AssignmentPanel'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -106,7 +107,7 @@ function renderMarkdown(src: string): string {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function JupyterEditor({ profile }: { profile: any }) {
+export default function JupyterEditor({ profile, assignmentId }: { profile: any; assignmentId?: string | null }) {
   const supabase = createClient()
   const accent   = profile?.accent_color ?? '#7C3AED'
   const uid      = profile?.id as string
@@ -824,6 +825,15 @@ print(_j.dumps(_out))`,
         @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
       `}</style>
 
+      {
+      {/* ── Assignment panel ── */}
+      {assignmentId && (
+        <AssignmentPanel
+          assignmentId={assignmentId}
+          studentId={uid ?? profile?.id}
+          accent={accent}
+        />
+      )}
       {/* ── 3-col layout ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 

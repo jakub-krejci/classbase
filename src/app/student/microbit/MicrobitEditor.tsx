@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import AssignmentPanel from '@/components/AssignmentPanel'
 import { DarkLayout, D } from '@/components/DarkLayout'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -502,7 +503,7 @@ function transpileMicroPython(code: string, _ctx: any): string {
 
 
 // ── Main Editor Component ─────────────────────────────────────────────────────
-export default function MicrobitEditor({ profile }: { profile: any }) {
+export default function MicrobitEditor({ profile, assignmentId }: { profile: any; assignmentId?: string | null }) {
   const supabase = createClient()
   const accent = profile?.accent_color ?? '#7C3AED'
   const uid = profile?.id as string

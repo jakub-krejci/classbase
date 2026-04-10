@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import * as THREE from 'three'
 import { createClient } from '@/lib/supabase/client'
 import { DarkLayout, D } from '@/components/DarkLayout'
+import AssignmentPanel from '@/components/AssignmentPanel'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const BUCKET = 'builder-files'
@@ -843,7 +844,7 @@ function NumSlider({label,value,onChange,min=0.1,max=20,step=0.1,accent}:{
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export default function BuilderEditor({profile}:{profile:any}){
+export default function BuilderEditor({profile,assignmentId}:{profile:any;assignmentId?:string|null}){
   const supabase=createClient()
   const accent=profile?.accent_color??'#7C3AED'
   const uid=profile?.id as string
@@ -1239,6 +1240,7 @@ export default function BuilderEditor({profile}:{profile:any}){
         @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
 
+      {assignmentId&&<AssignmentPanel assignmentId={assignmentId} studentId={uid} accent={accent}/>}
       <div style={{display:'flex',flex:1,minHeight:0,overflow:'hidden'}}>
 
         {/* ══ LEFT ══ */}

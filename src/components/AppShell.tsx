@@ -96,6 +96,7 @@ export default function AppShell({ user, role, children, wide }: { user: any; ro
     { label: 'Moduly', href: '/teacher/modules' },
     { label: 'Hodnocení', href: '/teacher/grade' },
     { label: 'Testy', href: '/teacher/tests' },
+    { label: '📋 Úkoly', href: '/teacher/tasks' },
     { label: '📚 Banka', href: '/teacher/question-bank' },
     { label: 'Skupiny', href: '/teacher/groups' },
   ]

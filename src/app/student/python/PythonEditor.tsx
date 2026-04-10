@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { runPython } from '@/lib/pyodide-runner'
 import { DarkLayout, D, card, SectionLabel } from '@/components/DarkLayout'
+import AssignmentPanel from '@/components/AssignmentPanel'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const BUCKET       = 'python-files'
@@ -31,7 +32,7 @@ interface PyFile     { path: string; name: string; project: string; size?: numbe
 interface Project    { name: string; files: PyFile[] }
 interface RecentEntry{ path: string; name: string; project: string; openedAt: string }
 
-export default function PythonEditor({ profile }: { profile: any }) {
+export default function PythonEditor({ profile, assignmentId }: { profile: any; assignmentId?: string | null }) {
   const supabase = createClient()
   const accent   = profile?.accent_color ?? '#7C3AED'
   const uid      = profile?.id as string
@@ -645,6 +646,16 @@ print(_j.dumps(_out))`,
         .py-row:hover .py-acts { opacity: 1 !important; }
         @keyframes spin { to { transform: rotate(360deg) } }
       `}</style>
+
+      {/* ── Assignment panel (shown when opened from Tasks) ── */}
+      {assignmentId && (
+        <AssignmentPanel
+          assignmentId={assignmentId}
+          studentId={uid}
+          accent={accent}
+          onSaveBeforeSubmit={async () => { await save() }}
+        />
+      )}
 
       {/* ── 3-col layout ── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>

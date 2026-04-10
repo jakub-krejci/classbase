@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import AssignmentPanel from '@/components/AssignmentPanel'
 import { DarkLayout, D } from '@/components/DarkLayout'
 
 const BUCKET = 'flowchart-files'

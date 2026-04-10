@@ -4,12 +4,13 @@ import { createServerClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import HtmlEditor from './HtmlEditor'
 
-export default async function HtmlEditorPage() {
+export default async function HtmlEditorPage({ searchParams }: { searchParams: Promise<any> }) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
   const admin = createAdminClient()
   const { data: pd } = await admin.from('profiles').select('*').eq('id', (user as any).id).single()
   if ((pd as any)?.role !== 'student') redirect('/teacher/dashboard')
-  return <HtmlEditor profile={pd as any} />
+  const sp = await searchParams
+  return <HtmlEditor profile={pd as any} assignmentId={sp?.assignment ?? null} />
 }

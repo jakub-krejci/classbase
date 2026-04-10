@@ -118,6 +118,7 @@ export function DarkLayout({ profile, activeRoute, children, wide = false, fullC
 
   const navItems = [
     { icon: '🏠',                    label: 'Domů',         href: '/student/dashboard' },
+    { icon: '📋',                    label: 'Úkoly',        href: '/student/tasks' },
     { icon: '📖',                    label: 'Moduly',       href: '/student/modules' },
     { icon: '🧪',                    label: 'Testy',        href: '/student/tests' },
     { icon: '📊',                    label: 'Pokrok',       href: '/student/progress' },
