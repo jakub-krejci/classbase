@@ -617,9 +617,10 @@ export default function PyGameEditor({ profile }: { profile: any }) {
       // Mouse state
       mouseX: 0, mouseY: 0,
       mouseButtons: [false, false, false],
-      getKeys: function() { return this.keys },
-      getMousePos: function() { return [this.mouseX, this.mouseY] },
-      getMouseButtons: function() { return this.mouseButtons },
+      getKeyState: function(code: number) { return this.keys[code] === true },
+      getMouseX: function() { return this.mouseX },
+      getMouseY: function() { return this.mouseY },
+      getMouseBtn: function(i: number) { return this.mouseButtons[i] === true },
     }
 
     // Pygame key code map (JS keyCode/key -> pygame int)
@@ -848,19 +849,23 @@ class _PygameModule:
         K_F1=282;K_F2=283;K_F3=284;K_F4=285;K_F5=286
         def __init__(self): pass
         def get_pressed(self):
-            # Read live key state from JS pgSim
-            js_keys = _pg.getKeys()
-            return js_keys
+            # Convert JS keys object to Python dict indexed by int key codes
+            result = {}
+            for code in [273,274,275,276,32,13,27,8,
+                         97,98,99,100,101,102,103,104,105,106,107,108,109,
+                         110,111,112,113,114,115,116,117,118,119,120,121,122,
+                         48,49,50,51,52,53,54,55,56,57,
+                         304,303,306,305,308,307,282,283,284,285,286]:
+                result[code] = bool(_pg.getKeyState(code))
+            return result
         def get_mods(self): return 0
 
     class _MouseModule:
         def __init__(self): pass
         def get_pos(self):
-            pos = _pg.getMousePos()
-            return (int(pos[0]), int(pos[1]))
+            return (int(_pg.getMouseX()), int(_pg.getMouseY()))
         def get_pressed(self):
-            btns = _pg.getMouseButtons()
-            return (bool(btns[0]), bool(btns[1]), bool(btns[2]))
+            return (bool(_pg.getMouseBtn(0)), bool(_pg.getMouseBtn(1)), bool(_pg.getMouseBtn(2)))
         def get_rel(self): return (0,0)
 
     class _TimeModule:
