@@ -309,6 +309,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
             <div style={{ height: 1, background: 'rgba(255,255,255,.07)', margin: '4px 8px', flexShrink: 0 }} />
             {/* Editors */}
             <SideIconImg src="/icons/python.png" href="/student/python" label="Python editor" accent={accent} />
+            <SideIcon icon="🎮" href="/student/pygame" label="PyGame Edit" accent={accent} />
             <SideIconImg src="/icons/html.png" href="/student/html" label="HTML editor" accent={accent} />
             <SideIconImg src="/icons/jupyter.png" href="/student/jupyter" label="Jupyter Notebook" accent={accent} />
             <SideIconImg src="/icons/database.png" href="/student/sql" label="SQL editor" accent={accent} />
@@ -371,6 +372,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {[
                     { icon: '/icons/python.png',   label: 'Spustit Python editor',   href: '/student/python' },
+                    { icon: '🎮',                  label: 'PyGame Edit',              href: '/student/pygame' },
                     { icon: '/icons/jupyter.png',  label: 'Otevřít Jupyter Notebook', href: '/student/jupyter' },
                     { icon: '/icons/html.png',     label: 'Spustit HTML editor',      href: '/student/html' },
                     { icon: '/icons/database.png', label: 'Spustit SQL editor',       href: '/student/sql' },

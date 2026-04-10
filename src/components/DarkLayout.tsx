@@ -123,6 +123,7 @@ export function DarkLayout({ profile, activeRoute, children, wide = false, fullC
     { icon: '📊',                    label: 'Pokrok',       href: '/student/progress' },
     { icon: '🔖',                    label: 'Záložky',      href: '/student/bookmarks' },
     { icon: '/icons/python.png',     label: 'Python',       href: '/student/python' },
+    { icon: '🎮',                    label: 'PyGame Edit',  href: '/student/pygame' },
     { icon: '/icons/html.png',       label: 'HTML',         href: '/student/html' },
     { icon: '/icons/jupyter.png',    label: 'Jupyter',      href: '/student/jupyter' },
     { icon: '/icons/database.png',   label: 'SQL',          href: '/student/sql' },
