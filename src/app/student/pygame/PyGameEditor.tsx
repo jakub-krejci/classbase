@@ -1027,8 +1027,7 @@ sys.modules['turtle'] = _TurtleModule()
               <div style={{padding:10}}>
                 <div style={{fontSize:10,fontWeight:700,color:D.txtSec,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}}>Rychlá reference</div>
 
-                <DocSection title="🎮 Pygame — základy">
-                  {[
+                <DocSection title="🎮 Pygame — základy" items={[
                     ['pygame.init()', 'Inicializace pygame'],
                     ['pygame.display.set_mode((w,h))', 'Vytvoří okno'],
                     ['pygame.display.set_caption("název")', 'Název okna'],
@@ -1036,37 +1035,29 @@ sys.modules['turtle'] = _TurtleModule()
                     ['pygame.display.flip()', 'Aktualizuje displej'],
                     ['clock.tick(60)', 'Omezí FPS na 60'],
                     ['pygame.quit()', 'Ukončí pygame'],
-                  ]}
-                </DocSection>
+                  ]}/>
 
-                <DocSection title="✏ Kreslení">
-                  {[
+                <DocSection title="✏ Kreslení" items={[
                     ['pygame.draw.rect(screen, barva, (x,y,w,h))', 'Obdélník'],
                     ['pygame.draw.circle(screen, barva, (x,y), r)', 'Kruh'],
                     ['pygame.draw.line(screen, barva, start, end, w)', 'Čára'],
                     ['pygame.draw.polygon(screen, barva, body)', 'Polygon'],
                     ['screen.blit(surface, (x,y))', 'Vykreslí surface'],
-                  ]}
-                </DocSection>
+                  ]}/>
 
-                <DocSection title="⌨ Klávesy">
-                  {[
+                <DocSection title="⌨ Klávesy" items={[
                     ['pygame.key.get_pressed()', 'Slovník stisknutých kláves'],
                     ...KEY_CODES.slice(0,10).map(k=>[`pygame.${k}`, k.replace('K_','')]),
-                  ]}
-                </DocSection>
+                  ]}/>
 
-                <DocSection title="🖱 Myš">
-                  {[
+                <DocSection title="🖱 Myš" items={[
                     ['pygame.mouse.get_pos()', 'Pozice myši (x, y)'],
                     ['pygame.mouse.get_pressed()', 'Stisk tlačítek'],
                     ['event.type == pygame.MOUSEBUTTONDOWN', 'Klik myší'],
                     ['event.pos', 'Pozice u eventu'],
-                  ]}
-                </DocSection>
+                  ]}/>
 
-                <DocSection title="🐢 Turtle">
-                  {[
+                <DocSection title="🐢 Turtle" items={[
                     ['t.forward(n)', 'Dopředu o n pixelů'],
                     ['t.right(a)', 'Otočení doprava o a stupňů'],
                     ['t.left(a)', 'Otočení doleva'],
@@ -1075,8 +1066,7 @@ sys.modules['turtle'] = _TurtleModule()
                     ['t.goto(x, y)', 'Přesun na souřadnice'],
                     ['t.circle(r)', 'Nakreslí kruh'],
                     ['t.speed(n)', '1=pomalé, 0=bez animace'],
-                  ]}
-                </DocSection>
+                  ]}/>
               </div>
             )}
           </div>
@@ -1124,7 +1114,7 @@ function StatRow({ label, value, color }: { label:string; value:string; color?:s
   )
 }
 
-function DocSection({ title, children }: { title:string; children:[string,string][] }) {
+function DocSection({ title, items }: { title:string; items:[string,string][] }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{marginBottom:8}}>
@@ -1135,7 +1125,7 @@ function DocSection({ title, children }: { title:string; children:[string,string
       </button>
       {open&&(
         <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:3}}>
-          {children.map(([code,desc],i)=>(
+          {items.map(([code,desc],i)=>(
             <div key={i} style={{padding:'5px 10px',background:'rgba(255,255,255,.02)',borderRadius:6,borderLeft:`2px solid rgba(255,255,255,.08)`}}>
               <div style={{fontFamily:'monospace',fontSize:10,color:'#7dd3fc',marginBottom:2}}>{code}</div>
               <div style={{fontSize:10,color:D.txtSec}}>{desc}</div>
