@@ -21,6 +21,7 @@ const EDITOR_BUCKETS: Record<string, string> = {
   builder: 'builder-files', flowchart: 'flowchart-files',
 }
 
+const STATUS_LABELS: Record<string, string> = {
   draft:     'Koncept',
   published: 'Publikováno',
   closed:    'Uzavřeno',
