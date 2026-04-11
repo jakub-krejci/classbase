@@ -14,6 +14,17 @@ const SIMS = [
     ready: true,
   },
   {
+    id: 'machine-learning',
+    icon: '🤖',
+    title: 'Strojové učení',
+    desc: 'Animovaný přehled typů učení — dozorované, nedozorované a posilované. Interaktivní simulace s agenty, clustery a odměnami.',
+    difficulty: 'Lehká',
+    tags: ['AI', 'Strojové učení'],
+    color: '#06b6d4',
+    href: '/student/simulations/machine-learning',
+    ready: true,
+  },
+  {
     id: 'blockchain',
     icon: '🔗',
     title: 'Blockchain',
