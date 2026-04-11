@@ -1,8 +1,11 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { LinearRegressionSim, LinearRegressionInfo } from './LinearRegression'
+import { LogisticRegressionSim, LogisticRegressionInfo } from './LogisticRegression'
+import { SVMSim, SVMInfo } from './SVM'
 
-type Tab = 'supervised' | 'unsupervised' | 'reinforcement'
+type Tab = 'supervised' | 'unsupervised' | 'reinforcement' | 'linear' | 'logistic' | 'svm'
 
 const TAB_INFO = {
   supervised: {
@@ -31,6 +34,33 @@ const TAB_INFO = {
     steps: ['Agent pozoruje stav prostředí','Provede akci (pohyb, rozhodnutí)','Dostane odměnu (+) nebo trest (−)','Aktualizuje strategii → opakuje'],
     pros: ['Nevyžaduje štítky','Může překonat lidský výkon'],
     cons: ['Potřebuje miliony iterací','Definování odměn je složité'],
+  },
+  linear: {
+    icon: '📈', title: 'Lineární regrese', subtitle: 'Linear Regression',
+    color: '#6366f1', tagline: 'Hledání nejlepší přímky skrze data',
+    description: 'Lineární regrese modeluje vztah mezi vstupní proměnnou x a výstupem y jako přímku y = ax + b. Minimalizuje průměrnou kvadratickou chybu (MSE).',
+    when: 'Předpověď cen nemovitostí, odhad tržeb, vztah výšky a váhy, predikce spotřeby energie.',
+    steps: ['Inicializujeme náhodnou přímku','Spočítáme chybu (MSE) pro každý bod','Gradient descent upraví a a b','Opakujeme dokud MSE neklesne na minimum'],
+    pros: ['Jednoduchý a interpretovatelný','Rychlý trénink'],
+    cons: ['Předpokládá lineární vztah','Citlivý na odlehlé hodnoty (outliers)'],
+  },
+  logistic: {
+    icon: '🔀', title: 'Logistická regrese', subtitle: 'Logistic Regression',
+    color: '#ec4899', tagline: 'Klasifikace pomocí pravděpodobnosti',
+    description: 'Logistická regrese predikuje pravděpodobnost příslušnosti ke třídě pomocí sigmoid funkce. Výstup je vždy číslo mezi 0 a 1.',
+    when: 'Detekce spamu, diagnostika nemocí (ano/ne), kreditní scoring, predikce odchodu zákazníků.',
+    steps: ['Data mají binární štítky (0 nebo 1)','Sigmoid funkce převede skóre na pravděp.','Trénink minimalizuje cross-entropy loss','Práh rozhoduje o finální klasifikaci'],
+    pros: ['Výstupem je pravděpodobnost','Dobře interpretovatelné váhy'],
+    cons: ['Pouze lineární hranice','Nefunguje pro složité vzory'],
+  },
+  svm: {
+    icon: '⚔️', title: 'Support Vector Machine', subtitle: 'SVM',
+    color: '#a855f7', tagline: 'Maximalizace marginu mezi třídami',
+    description: 'SVM hledá nadrovinu s maximálním marginem mezi třídami. Support vektory jsou body nejblíže hranici — jen ty určují polohu hranice.',
+    when: 'Klasifikace textu, rozpoznávání obrazu, bioinformatika, detekce anomálií.',
+    steps: ['Hledá nadrovinu oddělující třídy','Maximalizuje vzdálenost k nejbližším bodům','Support vektory definují hranici','Kernel trick umožní nelineární hranice'],
+    pros: ['Efektivní ve vysokých dimenzích','Robustní vůči outlierům'],
+    cons: ['Pomalý na velkých datech','Výběr kernelu vyžaduje zkušenost'],
   },
 }
 
@@ -455,6 +485,9 @@ export default function MLSim({ accentColor }:{ accentColor:string }) {
     {id:'supervised' as Tab, label:'Dozorované', icon:'👨‍🏫'},
     {id:'unsupervised' as Tab, label:'Nedozorované', icon:'🔍'},
     {id:'reinforcement' as Tab, label:'Posilované', icon:'🎮'},
+    {id:'linear' as Tab, label:'Lin. regrese', icon:'📈'},
+    {id:'logistic' as Tab, label:'Log. regrese', icon:'🔀'},
+    {id:'svm' as Tab, label:'SVM', icon:'⚔️'},
   ]
 
   return (
@@ -465,18 +498,24 @@ export default function MLSim({ accentColor }:{ accentColor:string }) {
       <div style={{ padding:'10px 20px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:12, flexShrink:0, background:C.card }}>
         <a href="/student/simulations" style={{ color:C.sec, fontSize:13, textDecoration:'none' }}>← Simulace</a>
         <div style={{ width:1, height:14, background:C.border }}/>
-        <span style={{ fontSize:14, fontWeight:700 }}>🤖 Strojové učení — Typy učení</span>
+        <span style={{ fontSize:14, fontWeight:700 }}>🤖 Strojové učení</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:10, alignItems:'center' }}>
-          <button onClick={()=>setPlaying(p=>!p)}
-            style={{ padding:'6px 18px', background:playing?'rgba(239,68,68,.15)':'rgba(34,197,94,.15)', color:playing?'#f87171':'#4ade80', border:`1px solid ${playing?'rgba(239,68,68,.3)':'rgba(34,197,94,.3)'}`, borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700, fontFamily:'inherit' }}>
-            {playing?'⏸ Pauza':'▶ Spustit animaci'}
-          </button>
-          <label style={{ fontSize:10, color:C.sec, display:'flex', alignItems:'center', gap:5 }}>
-            Rychlost:
-            <input type="range" min={0.3} max={3} step={0.1} value={speed} onChange={e=>setSpeed(+e.target.value)}
-              style={{ width:70, accentColor }} />
-            <span style={{ color:C.txt, minWidth:24 }}>{speed.toFixed(1)}×</span>
-          </label>
+          {/* Play/speed only for animation tabs */}
+          {['supervised','unsupervised','reinforcement'].includes(tab) && (<>
+            <button onClick={()=>setPlaying(p=>!p)}
+              style={{ padding:'6px 18px', background:playing?'rgba(239,68,68,.15)':'rgba(34,197,94,.15)', color:playing?'#f87171':'#4ade80', border:`1px solid ${playing?'rgba(239,68,68,.3)':'rgba(34,197,94,.3)'}`, borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700, fontFamily:'inherit' }}>
+              {playing?'⏸ Pauza':'▶ Spustit animaci'}
+            </button>
+            <label style={{ fontSize:10, color:C.sec, display:'flex', alignItems:'center', gap:5 }}>
+              Rychlost:
+              <input type="range" min={0.3} max={3} step={0.1} value={speed} onChange={e=>setSpeed(+e.target.value)}
+                style={{ width:70, accentColor }} />
+              <span style={{ color:C.txt, minWidth:24 }}>{speed.toFixed(1)}×</span>
+            </label>
+          </>)}
+          {['linear','logistic','svm'].includes(tab) && (
+            <span style={{ fontSize:11, color:C.sec }}>👆 Klikej do grafu pro přidání bodů</span>
+          )}
         </div>
       </div>
 
@@ -499,14 +538,14 @@ export default function MLSim({ accentColor }:{ accentColor:string }) {
         <div ref={containerRef} style={{ flex:1, position:'relative', overflow:'hidden' }}>
           <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,transparent,${info.color},transparent)` }}/>
 
-          {/* Play overlay — shown when paused and not yet started */}
-          {!playing && (
+          {/* Play overlay — only for animation tabs when paused */}
+          {!playing && ['supervised','unsupervised','reinforcement'].includes(tab) && (
             <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', zIndex:5, pointerEvents:'none' }}>
               <div style={{ padding:'16px 32px', background:'rgba(9,11,16,.85)', border:`1px solid ${info.color}44`, borderRadius:16, textAlign:'center', backdropFilter:'blur(4px)' }}>
                 <div style={{ fontSize:36, marginBottom:8 }}>{info.icon}</div>
                 <div style={{ fontSize:15, fontWeight:700, color:'#fff', marginBottom:4 }}>{info.title}</div>
                 <div style={{ fontSize:12, color:C.sec, marginBottom:14 }}>{info.tagline}</div>
-                <div style={{ fontSize:11, color:info.color, pointerEvents:'auto' }}>
+                <div style={{ pointerEvents:'auto' }}>
                   <button onClick={()=>setPlaying(true)} style={{ padding:'8px 24px', background:info.color, color:'#000', border:'none', borderRadius:8, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight:700 }}>
                     ▶ Spustit simulaci
                   </button>
@@ -521,6 +560,9 @@ export default function MLSim({ accentColor }:{ accentColor:string }) {
                 {tab==='supervised'    && <SupervisedSim     playing={playing} speed={speed} canvasSize={canvasSize}/>}
                 {tab==='unsupervised'  && <UnsupervisedSim   playing={playing} speed={speed} canvasSize={canvasSize}/>}
                 {tab==='reinforcement' && <ReinforcementSim  playing={playing} speed={speed} canvasSize={canvasSize}/>}
+                {tab==='linear'        && <LinearRegressionSim  canvasSize={canvasSize} accentColor={accentColor}/>}
+                {tab==='logistic'      && <LogisticRegressionSim canvasSize={canvasSize} accentColor={accentColor}/>}
+                {tab==='svm'           && <SVMSim               canvasSize={canvasSize} accentColor={accentColor}/>}
               </>
             )}
           </div>
@@ -544,32 +586,33 @@ export default function MLSim({ accentColor }:{ accentColor:string }) {
 
               <p style={{ fontSize:12, color:'#cbd5e1', lineHeight:1.75, margin:'0 0 13px' }}>{info.description}</p>
 
-              <div style={{ marginBottom:13 }}>
-                <div style={{ fontSize:9, fontWeight:700, color:C.sec, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:7 }}>Jak funguje</div>
-                {info.steps.map((s,i)=>(
-                  <div key={i} style={{ display:'flex', gap:8, marginBottom:6, alignItems:'flex-start' }}>
-                    <div style={{ width:17, height:17, borderRadius:'50%', background:info.color+'25', border:`1px solid ${info.color}50`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:info.color, flexShrink:0, marginTop:1 }}>{i+1}</div>
-                    <span style={{ fontSize:11, color:'#94a3b8', lineHeight:1.6 }}>{s}</span>
+              {/* Steps + pros/cons only for learning-type tabs */}
+              {['supervised','unsupervised','reinforcement'].includes(tab) && (<>
+                <div style={{ marginBottom:13 }}>
+                  <div style={{ fontSize:9, fontWeight:700, color:C.sec, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:7 }}>Jak funguje</div>
+                  {info.steps.map((s,i)=>(
+                    <div key={i} style={{ display:'flex', gap:8, marginBottom:6, alignItems:'flex-start' }}>
+                      <div style={{ width:17, height:17, borderRadius:'50%', background:info.color+'25', border:`1px solid ${info.color}50`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:info.color, flexShrink:0, marginTop:1 }}>{i+1}</div>
+                      <span style={{ fontSize:11, color:'#94a3b8', lineHeight:1.6 }}>{s}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding:'8px 10px', background:'rgba(251,191,36,.05)', border:'1px solid rgba(251,191,36,.15)', borderRadius:8, marginBottom:13 }}>
+                  <p style={{ fontSize:11, color:'#fcd34d', margin:0, lineHeight:1.65 }}>💡 {info.when}</p>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7, marginBottom:13 }}>
+                  <div style={{ padding:'8px 9px', background:'rgba(34,197,94,.06)', border:'1px solid rgba(34,197,94,.17)', borderRadius:8 }}>
+                    <div style={{ fontSize:8, fontWeight:700, color:'#4ade80', textTransform:'uppercase', marginBottom:5 }}>✓ Výhody</div>
+                    {info.pros.map((p,i)=><div key={i} style={{ fontSize:10.5, color:'#86efac', marginBottom:3, lineHeight:1.5 }}>• {p}</div>)}
                   </div>
-                ))}
-              </div>
-
-              <div style={{ padding:'8px 10px', background:'rgba(251,191,36,.05)', border:'1px solid rgba(251,191,36,.15)', borderRadius:8, marginBottom:13 }}>
-                <p style={{ fontSize:11, color:'#fcd34d', margin:0, lineHeight:1.65 }}>💡 {info.when}</p>
-              </div>
-
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7, marginBottom:16 }}>
-                <div style={{ padding:'8px 9px', background:'rgba(34,197,94,.06)', border:'1px solid rgba(34,197,94,.17)', borderRadius:8 }}>
-                  <div style={{ fontSize:8, fontWeight:700, color:'#4ade80', textTransform:'uppercase', marginBottom:5 }}>✓ Výhody</div>
-                  {info.pros.map((p,i)=><div key={i} style={{ fontSize:10.5, color:'#86efac', marginBottom:3, lineHeight:1.5 }}>• {p}</div>)}
+                  <div style={{ padding:'8px 9px', background:'rgba(239,68,68,.06)', border:'1px solid rgba(239,68,68,.17)', borderRadius:8 }}>
+                    <div style={{ fontSize:8, fontWeight:700, color:'#f87171', textTransform:'uppercase', marginBottom:5 }}>✗ Nevýhody</div>
+                    {info.cons.map((c,i)=><div key={i} style={{ fontSize:10.5, color:'#fca5a5', marginBottom:3, lineHeight:1.5 }}>• {c}</div>)}
+                  </div>
                 </div>
-                <div style={{ padding:'8px 9px', background:'rgba(239,68,68,.06)', border:'1px solid rgba(239,68,68,.17)', borderRadius:8 }}>
-                  <div style={{ fontSize:8, fontWeight:700, color:'#f87171', textTransform:'uppercase', marginBottom:5 }}>✗ Nevýhody</div>
-                  {info.cons.map((c,i)=><div key={i} style={{ fontSize:10.5, color:'#fca5a5', marginBottom:3, lineHeight:1.5 }}>• {c}</div>)}
-                </div>
-              </div>
+              </>)}
 
-              {/* Supervised: click hint */}
+              {/* Per-tab specialized content */}
               {tab==='supervised'&&(
                 <div style={{ padding:'8px 10px', background:'rgba(59,130,246,.08)', border:'1px solid rgba(59,130,246,.2)', borderRadius:8, marginBottom:13 }}>
                   <div style={{ fontSize:10, color:'#93c5fd', lineHeight:1.6 }}>👆 Po dotrénování modelu klikni kdekoliv na canvas — model předpoví zda se jedná o kočku nebo psa!</div>
@@ -577,30 +620,32 @@ export default function MLSim({ accentColor }:{ accentColor:string }) {
               )}
               {tab==='unsupervised'&&(
                 <div style={{ padding:'8px 10px', background:'rgba(34,197,94,.08)', border:'1px solid rgba(34,197,94,.2)', borderRadius:8, marginBottom:13 }}>
-                  <div style={{ fontSize:10, color:'#86efac', lineHeight:1.6 }}>🔍 Body začínají šedé (bez skupiny). Sleduj jak je K-Means postupně rozdělí do barevných clusterů na základě vzdálenosti.</div>
+                  <div style={{ fontSize:10, color:'#86efac', lineHeight:1.6 }}>🔍 Body začínají šedé (bez skupiny). Sleduj jak je K-Means postupně rozdělí do barevných clusterů.</div>
                 </div>
               )}
               {tab==='reinforcement'&&(
                 <div style={{ padding:'8px 10px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, marginBottom:13 }}>
-                  <div style={{ fontSize:10, color:'#fcd34d', lineHeight:1.6 }}>🎮 Sleduj ε (epsilon) bar — zpočátku agent exploruje náhodně, postupně přechází na naučenou strategii. Zelená heatmapa = naučené Q-hodnoty.</div>
+                  <div style={{ fontSize:10, color:'#fcd34d', lineHeight:1.6 }}>🎮 Sleduj ε bar — zpočátku agent exploruje náhodně, postupně přechází na naučenou strategii.</div>
                 </div>
               )}
+              {tab==='linear' && <LinearRegressionInfo color={info.color} />}
+              {tab==='logistic' && <LogisticRegressionInfo color={info.color} />}
+              {tab==='svm' && <SVMInfo color={info.color} />}
 
               {/* Comparison table */}
               <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:13 }}>
-                <div style={{ fontSize:9, fontWeight:700, color:C.sec, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>Srovnání typů učení</div>
+                <div style={{ fontSize:9, fontWeight:700, color:C.sec, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>Všechny metody</div>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10 }}>
                   <thead><tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                    <th style={{ padding:'3px 5px', color:C.sec, fontWeight:600, textAlign:'left' }}>Typ</th>
-                    <th style={{ padding:'3px 5px', color:C.sec, fontWeight:600 }}>Štítky</th>
-                    <th style={{ padding:'3px 5px', color:C.sec, fontWeight:600, textAlign:'left' }}>Příklad</th>
+                    <th style={{ padding:'3px 4px', color:C.sec, fontWeight:600, textAlign:'left' }}>Metoda</th>
+                    <th style={{ padding:'3px 4px', color:C.sec, fontWeight:600, textAlign:'left' }}>Typ</th>
                   </tr></thead>
                   <tbody>
-                    {([['supervised','👨‍🏫 Dozor.','Ano','Spam filtr'],['unsupervised','🔍 Nedozor.','Ne','K-Means'],['reinforcement','🎮 Posilované','Odměna','AlphaGo']] as [Tab,string,string,string][]).map(([id,name,lbl,ex])=>(
-                      <tr key={id} style={{ borderBottom:`1px solid ${C.border}`, background:tab===id?TAB_INFO[id].color+'10':'transparent' }}>
-                        <td style={{ padding:'4px 5px', color:tab===id?TAB_INFO[id].color:'#64748b', fontWeight:tab===id?700:400 }}>{name}</td>
-                        <td style={{ padding:'4px 5px', textAlign:'center', color:'#94a3b8' }}>{lbl}</td>
-                        <td style={{ padding:'4px 5px', color:'#94a3b8' }}>{ex}</td>
+                    {(Object.entries(TAB_INFO) as [Tab, typeof TAB_INFO[Tab]][]).map(([id, ti])=>(
+                      <tr key={id} onClick={()=>{setTab(id);if(['linear','logistic','svm'].includes(id))setPlaying(false)}}
+                        style={{ borderBottom:`1px solid ${C.border}`, background:tab===id?ti.color+'12':'transparent', cursor:'pointer' }}>
+                        <td style={{ padding:'4px 4px', color:tab===id?ti.color:'#64748b', fontWeight:tab===id?700:400 }}>{ti.icon} {ti.title}</td>
+                        <td style={{ padding:'4px 4px', color:'#475569', fontSize:9 }}>{ti.subtitle}</td>
                       </tr>
                     ))}
                   </tbody>
