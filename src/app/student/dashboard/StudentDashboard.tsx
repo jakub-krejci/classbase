@@ -395,6 +395,7 @@ export default function StudentDashboard({ profile, enrollments, completedLesson
                     { icon: '📊', label: 'Flowchart', href: '/student/flowchart' },
                     { icon: '📁', label: 'Moje soubory', href: '/student/files' },
                     { icon: '🔖', label: 'Záložky',       href: '/student/bookmarks' },
+                    { icon: '🧪', label: 'Simulace',      href: '/student/simulations' },
                     { icon: '💬', label: 'Chat',           href: '#' },
                   ].map(({ icon, label, href }) => (
                     <a key={label} href={href} className="bento-hover"
