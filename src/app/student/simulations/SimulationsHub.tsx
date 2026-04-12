@@ -72,12 +72,12 @@ const SIMS = [
     id: 'pathfinding',
     icon: '🗺️',
     title: 'Pathfinding (A*)',
-    desc: 'Nakresli překážky a sleduj jak algoritmus A* hledá nejkratší cestu.',
+    desc: 'Nakresli překážky a sleduj jak A*, Dijkstra, BFS, DFS a Greedy hledají cestu. Porovnej efektivitu a optimálnost.',
     difficulty: 'Střední',
     tags: ['Algoritmy', 'AI'],
     color: '#f97316',
-    href: '#',
-    ready: false,
+    href: '/student/simulations/pathfinding',
+    ready: true,
   },
 ]
 
