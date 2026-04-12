@@ -9,11 +9,12 @@ const C = {
   bg:'#090B10', card:'#11141D', border:'rgba(255,255,255,0.07)',
   txt:'#fff', sec:'#8892a4',
   wall:'#1e293b', empty:'#0f172a',
-  open:'rgba(59,130,246,0.25)',   // open set
-  closed:'rgba(124,58,237,0.22)', // closed set
+  open:'rgba(59,130,246,0.25)',
+  closed:'rgba(124,58,237,0.22)',
   path:'#f97316',
   start:'#22c55e', goal:'#ef4444',
   weight:'#f59e0b',
+  green:'#22c55e', red:'#ef4444',
 }
 
 type CellType = 'empty' | 'wall' | 'start' | 'goal' | 'weight'

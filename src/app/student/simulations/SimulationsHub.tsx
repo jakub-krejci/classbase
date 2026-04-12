@@ -79,6 +79,17 @@ const SIMS = [
     href: '/student/simulations/pathfinding',
     ready: true,
   },
+  {
+    id: 'graphics',
+    icon: '🎨',
+    title: 'Počítačová grafika',
+    desc: 'Rastr vs vektor, barevné modely (RGB/CMYK/HSL), rozlišení & DPI, JPEG komprese s DCT sandboxem, Bézierovy křivky a rasterizace.',
+    difficulty: 'Střední',
+    tags: ['Grafika', 'Design'],
+    color: '#ec4899',
+    href: '/student/simulations/graphics',
+    ready: true,
+  },
 ]
 
 export default function SimulationsHub() {
