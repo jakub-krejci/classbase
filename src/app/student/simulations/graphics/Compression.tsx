@@ -230,10 +230,10 @@ export function CompressionTab() {
           <div style={{fontSize:10,fontWeight:700,color:'#ec4899',marginBottom:8}}>Bázová DCT funkce</div>
           <canvas ref={basisCvRef} width={160} height={165} style={{width:'100%',borderRadius:7,border:'1px solid rgba(236,72,153,.3)'}}/>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginTop:8}}>
-            {[['U (vert.)',basisU,setBasisU],['V (horiz.)',basisV,setBasisV]].map(([l,val,set])=>(
-              <div key={l as string}>
+            {([['U (vert.)',basisU,setBasisU],['V (horiz.)',basisV,setBasisV]] as [string,number,(v:number)=>void][]).map(([l,val,set])=>(
+              <div key={l}>
                 <div style={{fontSize:8,color:C.sec,marginBottom:2}}>{l}: {val}</div>
-                <input type="range" min={0} max={7} value={val as number} onChange={e=>(set as any)(+e.target.value)}
+                <input type="range" min={0} max={7} value={val} onChange={e=>set(+e.target.value)}
                   style={{width:'100%',accentColor:'#ec4899'}}/>
               </div>
             ))}
