@@ -101,6 +101,17 @@ const SIMS = [
     href: '/student/simulations/layout',
     ready: true,
   },
+  {
+    id: 'mnist',
+    icon: '✍️',
+    title: 'MNIST Neural Network',
+    desc: 'Nakresli číslici a sleduj jak neuronová síť (784→16→16→10) rozpoznává tvůj rukopis. Forward pass, backpropagation, aktivace neuronů — vše živě.',
+    difficulty: 'Pokročilá',
+    tags: ['AI', 'Neuronové sítě', 'MNIST'],
+    color: '#39ff14',
+    href: '/student/simulations/mnist',
+    ready: true,
+  },
 ]
 
 export default function SimulationsHub() {
