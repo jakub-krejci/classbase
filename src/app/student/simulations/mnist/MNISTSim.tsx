@@ -315,20 +315,6 @@ export default function MNISTSim() {
   const isDrawing = useRef(false)
   const lastXY    = useRef<[number,number]|null>(null)
   const netSize   = useRef({ w: 900, h: 440 })
-  const netDiv    = useRef<HTMLDivElement>(null)
-
-  // Měření canvasu sítě
-  useEffect(() => {
-    const el = netDiv.current; if (!el) return
-    const ro = new ResizeObserver(e => {
-      const { width, height } = e[0].contentRect
-      netSize.current = { w: Math.floor(width), h: Math.floor(height) }
-      // Force redraw
-      setDots(d => [...d])
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   // Animační loop
   useEffect(() => {
@@ -443,131 +429,7 @@ export default function MNISTSim() {
     }, 1400)
   }, [label, net, inputs, pred, runFwd])
 
-  // ── Kreslit síť na canvas ──────────────────────────────────────────────────
-  useEffect(() => {
-    const cv = netCv.current; if (!cv) return
-    const ctx = cv.getContext('2d')!
-    const W = cv.width, H = cv.height
-
-    ctx.clearRect(0, 0, W, H)
-    ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H)
-
-    // Jemná mřížka
-    ctx.strokeStyle = 'rgba(255,255,255,.03)'; ctx.lineWidth = 1
-    for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke() }
-    for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke() }
-
-    // ── Spoje vstup→H1 ────────────────────────────────────────────────────────
-    SAMPLE_IDX.forEach((si, vi) => {
-      for (let hi = 0; hi < H1; hi++) {
-        const w = net.W1[hi][si]
-        const a = Math.min(0.55, Math.abs(w) * 0.3 + 0.03)
-        ctx.strokeStyle = w > 0 ? `rgba(0,245,255,${a})` : `rgba(255,45,120,${a})`
-        ctx.lineWidth = Math.min(1.8, Math.abs(w) * 1.2 + 0.2)
-        ctx.beginPath(); ctx.moveTo(LX[0]*W, lY(VIS_IN,vi,H)); ctx.lineTo(LX[1]*W, lY(H1,hi,H)); ctx.stroke()
-      }
-    })
-
-    // ── Spoje H1→H2 ──────────────────────────────────────────────────────────
-    for (let i = 0; i < H1; i++) for (let j = 0; j < H2; j++) {
-      const w = net.W2[j][i]
-      const a = Math.min(0.5, Math.abs(w) * 0.25 + 0.03)
-      const jitter = backRunning ? (Math.random()-0.5)*3 : 0
-      ctx.strokeStyle = w > 0 ? `rgba(57,255,20,${a})` : `rgba(255,215,0,${a})`
-      ctx.lineWidth = Math.min(1.5, Math.abs(w) * 1.0 + 0.2)
-      ctx.beginPath()
-      ctx.moveTo(LX[1]*W, lY(H1,i,H)+jitter); ctx.lineTo(LX[2]*W, lY(H2,j,H)+jitter)
-      ctx.stroke()
-    }
-
-    // ── Spoje H2→výstup ────────────────────────────────────────────────────────
-    for (let i = 0; i < H2; i++) for (let j = 0; j < OUT; j++) {
-      const w = net.W3[j][i]
-      const a = Math.min(0.6, Math.abs(w) * 0.3 + 0.04)
-      const isWin = pred === j
-      ctx.strokeStyle = isWin ? `rgba(255,215,0,${a+0.15})` : w > 0 ? `rgba(57,255,20,${a})` : `rgba(255,45,120,${a})`
-      ctx.lineWidth = isWin ? 1.8 : Math.min(1.5, Math.abs(w)*1.0+0.2)
-      ctx.beginPath(); ctx.moveTo(LX[2]*W, lY(H2,i,H)); ctx.lineTo(LX[3]*W, lY(OUT,j,H)); ctx.stroke()
-    }
-
-    // ── Animované tečky ────────────────────────────────────────────────────────
-    dotsRef.current.forEach(d => {
-      const t = Math.max(0, Math.min(1, d.t)); if (t <= 0) return
-      const px = d.x + (d.tx-d.x)*t, py = d.y + (d.ty-d.y)*t
-      const al = t<0.1?t*10:t>0.85?(1-t)*6.7:1
-      ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2)
-      ctx.fillStyle = d.col+Math.round(al*200).toString(16).padStart(2,'0')
-      ctx.shadowColor = d.col; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0
-    })
-
-    // ── Vstupní neurony ────────────────────────────────────────────────────────
-    SAMPLE_IDX.forEach((si, vi) => {
-      const x = LX[0]*W, y = lY(VIS_IN,vi,H), v = inputs[si]
-      if (v>0.05) { ctx.beginPath(); ctx.arc(x,y,12,0,Math.PI*2); ctx.fillStyle=`rgba(0,245,255,${v*0.3})`; ctx.fill() }
-      ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2)
-      ctx.fillStyle = v>0.05?`rgba(0,245,255,${0.2+v*0.7})`:'#111827'; ctx.fill()
-      ctx.strokeStyle = NB+'55'; ctx.lineWidth=1; ctx.stroke()
-    })
-
-    // ── H1 neurony ─────────────────────────────────────────────────────────────
-    for (let i=0;i<H1;i++) {
-      const x=LX[1]*W, y=lY(H1,i,H), a=acts?.a1[i]??0
-      if(a>0.05){ctx.beginPath();ctx.arc(x,y,15,0,Math.PI*2);ctx.fillStyle=`rgba(57,255,20,${a*0.2})`;ctx.fill()}
-      ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2)
-      ctx.fillStyle=a>0.05?`rgba(57,255,20,${0.15+a*0.7})`:'#111827';ctx.fill()
-      ctx.strokeStyle=a>0.3?NG+'bb':'#1a2e1a';ctx.lineWidth=1.5;ctx.stroke()
-      if(a>0.08){
-        ctx.fillStyle='#fff';ctx.font='bold 6.5px monospace';ctx.textAlign='center'
-        ctx.fillText(a.toFixed(2),x,y+2.5)
-      }
-    }
-
-    // ── H2 neurony ─────────────────────────────────────────────────────────────
-    for (let i=0;i<H2;i++) {
-      const x=LX[2]*W, y=lY(H2,i,H), a=acts?.a2[i]??0
-      if(a>0.05){ctx.beginPath();ctx.arc(x,y,15,0,Math.PI*2);ctx.fillStyle=`rgba(0,245,255,${a*0.2})`;ctx.fill()}
-      ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2)
-      ctx.fillStyle=a>0.05?`rgba(0,245,255,${0.15+a*0.7})`:'#111827';ctx.fill()
-      ctx.strokeStyle=a>0.3?NB+'bb':'#1a2e38';ctx.lineWidth=1.5;ctx.stroke()
-      if(a>0.08){ctx.fillStyle='#fff';ctx.font='bold 6.5px monospace';ctx.textAlign='center';ctx.fillText(a.toFixed(2),x,y+2.5)}
-    }
-
-    // ── Výstupní neurony ────────────────────────────────────────────────────────
-    for (let i=0;i<OUT;i++) {
-      const x=LX[3]*W, y=lY(OUT,i,H), p=probs[i], isWin=pred===i, isLbl=label===i
-      if(isWin){ctx.beginPath();ctx.arc(x,y,20,0,Math.PI*2);ctx.fillStyle=`rgba(255,215,0,${p*0.35})`;ctx.fill();ctx.shadowColor=NY;ctx.shadowBlur=18}
-      ctx.beginPath();ctx.arc(x,y,12,0,Math.PI*2)
-      ctx.fillStyle=isWin?`rgba(255,215,0,${0.25+p*0.7})`:isLbl?`rgba(57,255,20,0.25)`:'#111827';ctx.fill()
-      ctx.strokeStyle=isWin?NY:isLbl?NG:'#1e293b';ctx.lineWidth=isWin?2.5:1.5;ctx.stroke()
-      ctx.shadowBlur=0
-      ctx.fillStyle=isWin?NY:'#e2e8f0';ctx.font=`bold ${isWin?11:9}px monospace`;ctx.textAlign='center'
-      ctx.fillText(String(i),x,y+4)
-      // % label
-      ctx.fillStyle=isWin?NY:'#334155';ctx.font='8px monospace';ctx.textAlign='left'
-      ctx.fillText(`${(p*100).toFixed(0)}%`,x+17,y+3)
-    }
-
-    // ── Popisky vrstev – NAHOŘE nad neurony ────────────────────────────────────
-    const layerLabels = [
-      [LX[0]*W, '784 vstupů', NB],
-      [LX[1]*W, 'Skrytá 1 – ReLU', NG],
-      [LX[2]*W, 'Skrytá 2 – ReLU', NB],
-      [LX[3]*W, 'Výstup 0–9', NY],
-    ]
-    layerLabels.forEach(([x,label,col]) => {
-      ctx.fillStyle = col as string + 'cc'
-      ctx.font = 'bold 10px monospace'; ctx.textAlign='center'
-      ctx.fillText(label as string, x as number, 18)
-    })
-
-    // ── Šipky mezi vrstvami ────────────────────────────────────────────────────
-    [[0,1],[1,2],[2,3]].forEach(([a,b]) => {
-      const mx = (LX[a]*W + LX[b]*W)/2
-      ctx.fillStyle='#334155'; ctx.font='16px sans-serif'; ctx.textAlign='center'
-      ctx.fillText('→', mx, H/2+6)
-    })
-
-  }, [net, inputs, acts, probs, pred, label, backRunning, dots])
+  // Poznámka: Vykreslování sítě zajišťuje komponenta NetworkCanvas níže.
 
   // ── Metriky ────────────────────────────────────────────────────────────────
   const avgLoss = lossHist.length ? (lossHist.reduce((a,b)=>a+b)/lossHist.length).toFixed(3) : '—'
@@ -755,7 +617,7 @@ export default function MNISTSim() {
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
           {/* Síťový canvas – přes celou šířku */}
-          <div ref={netDiv} style={{ flex:1, overflow:'hidden', background:'#07090f', position:'relative' }}>
+          <div style={{ flex:1, overflow:'hidden', background:'#07090f', position:'relative' }}>
             <NetworkCanvas
               net={net} inputs={inputs} acts={acts} probs={probs} pred={pred}
               label={label} backRunning={backRunning} dots={dots}
