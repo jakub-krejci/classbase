@@ -90,6 +90,17 @@ const SIMS = [
     href: '/student/simulations/graphics',
     ready: true,
   },
+  {
+    id: 'layout',
+    icon: '📦',
+    title: 'Flexbox / Grid',
+    desc: 'Interaktivní playground pro CSS Flexbox a Grid — posuvníky a live náhled, generátor kódu, výzvy a vizuální reference.',
+    difficulty: 'Lehká',
+    tags: ['CSS', 'Web design'],
+    color: '#06b6d4',
+    href: '/student/simulations/layout',
+    ready: true,
+  },
 ]
 
 export default function SimulationsHub() {
