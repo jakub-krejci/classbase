@@ -1,828 +1,1082 @@
 'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* ============================================================
-   MNIST Neuronová síť – interaktivní vizualizace
-   Architektura: 784 → 16 → 16 → 10
-   Toy engine: Forward + Backpropagation v čistém JS
-   ============================================================ */
+/*
+ * MNIST Neuronová síť – interaktivní vizualizace
+ * Architektura: 784 → 16 → 16 → 10
+ * Toy engine: Forward + Backpropagation v čistém JS
+ *
+ * OPRAVY:
+ * - Síť se před-trénuje na syntetických datech (čísla 0-9 jako bitmapy)
+ *   aby měla smysluplnou váhu před prvním použitím
+ * - Digitalizační náhled zobrazuje mřížku a hodnoty
+ * - Backpropagation tlačítko viditelné vždy
+ * - Síťový canvas přes celou šířku
+ * - Popisky vrstev posunuty nahoru mimo neurony
+ * - ReLU/Sigmoid vizualizace v info panelu
+ * - Loss graf opravený
+ */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-// ── Konstanty architektury ────────────────────────────────────────────────────
-const INPUT_SIZE  = 784   // 28×28 pixelů
-const HIDDEN1     = 16    // první skrytá vrstva
-const HIDDEN2     = 16    // druhá skrytá vrstva
-const OUTPUT_SIZE = 10    // čísla 0–9
-const LEARN_RATE  = 0.05
+// ── Konstanty ─────────────────────────────────────────────────────────────────
+const H1 = 16
+const H2 = 16
+const OUT = 10
+const LR  = 0.1
 
-// ── Matematické utility ───────────────────────────────────────────────────────
-const relu     = (x: number) => Math.max(0, x)
-const reluD    = (x: number) => x > 0 ? 1 : 0
-const sigmoid  = (x: number) => 1 / (1 + Math.exp(-x))
-const sigmoidD = (y: number) => y * (1 - y)
+// ── Aktivační funkce ──────────────────────────────────────────────────────────
+const relu    = (x: number) => Math.max(0, x)
+const reluD   = (x: number) => (x > 0 ? 1 : 0)
 
-/** Softmax – výstupní vrstva (pravděpodobnosti) */
 function softmax(arr: number[]): number[] {
-  const max = Math.max(...arr)
-  const exps = arr.map(x => Math.exp(x - max))
-  const sum = exps.reduce((a, b) => a + b, 0)
-  return exps.map(e => e / sum)
+  const mx = Math.max(...arr)
+  const e  = arr.map(v => Math.exp(v - mx))
+  const s  = e.reduce((a, b) => a + b, 0)
+  return e.map(v => v / s)
 }
 
-/** Xavier inicializace vah */
-function xavier(rows: number, cols: number): number[][] {
-  const limit = Math.sqrt(6 / (rows + cols))
-  return Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => (Math.random() * 2 - 1) * limit)
-  )
+// ── Inicializace ──────────────────────────────────────────────────────────────
+function xavier(r: number, c: number): number[][] {
+  const lim = Math.sqrt(6 / (r + c))
+  return Array.from({ length: r }, () =>
+    Array.from({ length: c }, () => (Math.random() * 2 - 1) * lim))
 }
+function zeros(n: number) { return Array(n).fill(0) }
 
-/** Náhodný vektor biasů */
-const randBias = (n: number) => Array.from({ length: n }, () => (Math.random() - 0.5) * 0.1)
+interface Net { W1:number[][];b1:number[];W2:number[][];b2:number[];W3:number[][];b3:number[] }
 
-/** Maticový součin vektoru × matice */
-function dotVecMat(vec: number[], mat: number[][]): number[] {
-  return mat.map(row => row.reduce((s, w, i) => s + w * vec[i], 0))
-}
-
-// ── Typ sítě ──────────────────────────────────────────────────────────────────
-interface Network {
-  W1: number[][]   // [HIDDEN1 × INPUT_SIZE]
-  b1: number[]
-  W2: number[][]   // [HIDDEN2 × HIDDEN1]
-  b2: number[]
-  W3: number[][]   // [OUTPUT_SIZE × HIDDEN2]
-  b3: number[]
-}
-
-/** Vytvoř novou náhodnou síť */
-function makeNetwork(): Network {
+function makeNet(): Net {
   return {
-    W1: xavier(HIDDEN1, INPUT_SIZE), b1: randBias(HIDDEN1),
-    W2: xavier(HIDDEN2, HIDDEN1),    b2: randBias(HIDDEN2),
-    W3: xavier(OUTPUT_SIZE, HIDDEN2),b3: randBias(OUTPUT_SIZE),
+    W1: xavier(H1, 784), b1: zeros(H1),
+    W2: xavier(H2,  H1), b2: zeros(H2),
+    W3: xavier(OUT,  H2), b3: zeros(OUT),
   }
 }
 
-/** Forward propagation – vrátí aktivace všech vrstev */
-function forward(net: Network, inputs: number[]) {
-  // Skrytá vrstva 1 – ReLU
-  const z1 = net.W1.map((row, i) => row.reduce((s, w, j) => s + w * inputs[j], 0) + net.b1[i])
+// ── Forward propagation ───────────────────────────────────────────────────────
+function fwd(net: Net, x: number[]) {
+  const z1 = net.W1.map((row, i) => row.reduce((s, w, j) => s + w * x[j], 0) + net.b1[i])
   const a1 = z1.map(relu)
-  // Skrytá vrstva 2 – ReLU
   const z2 = net.W2.map((row, i) => row.reduce((s, w, j) => s + w * a1[j], 0) + net.b2[i])
   const a2 = z2.map(relu)
-  // Výstupní vrstva – Softmax
   const z3 = net.W3.map((row, i) => row.reduce((s, w, j) => s + w * a2[j], 0) + net.b3[i])
   const a3 = softmax(z3)
   return { z1, a1, z2, a2, z3, a3 }
 }
 
-/** Backpropagation – vrátí novou aktualizovanou síť + ztrátu */
-function backprop(
-  net: Network,
-  inputs: number[],
-  target: number,   // správná třída 0–9
-  { z1, a1, z2, a2, a3 }: ReturnType<typeof forward>
-): { net: Network; loss: number } {
-  // Ztráta – Cross-Entropy
-  const loss = -Math.log(Math.max(a3[target], 1e-9))
+// ── Backpropagation ───────────────────────────────────────────────────────────
+function backprop(net: Net, x: number[], label: number, lr: number): { net: Net; loss: number } {
+  const { z1, a1, z2, a2, a3 } = fwd(net, x)
+  const loss = -Math.log(Math.max(a3[label], 1e-9))
 
-  // Δ výstupu (softmax + cross-entropy derivace)
-  const dz3 = a3.map((p, i) => p - (i === target ? 1 : 0))
-
-  // Gradienty W3, b3
+  // Δ výstup
+  const dz3 = a3.map((p, i) => p - (i === label ? 1 : 0))
   const dW3 = dz3.map(d => a2.map(a => d * a))
   const db3 = [...dz3]
 
-  // Δ skrytá vrstva 2
+  // Δ H2
   const da2 = a2.map((_, j) => dz3.reduce((s, d, i) => s + d * net.W3[i][j], 0))
   const dz2 = da2.map((d, i) => d * reluD(z2[i]))
-
-  // Gradienty W2, b2
   const dW2 = dz2.map(d => a1.map(a => d * a))
   const db2 = [...dz2]
 
-  // Δ skrytá vrstva 1
+  // Δ H1
   const da1 = a1.map((_, j) => dz2.reduce((s, d, i) => s + d * net.W2[i][j], 0))
   const dz1 = da1.map((d, i) => d * reluD(z1[i]))
-
-  // Gradienty W1, b1
-  const dW1 = dz1.map(d => inputs.map(x => d * x))
+  const dW1 = dz1.map(d => x.map(xi => d * xi))
   const db1 = [...dz1]
 
-  // Aktualizace gradient descent
   const upd = (w: number[][], dw: number[][]) =>
-    w.map((row, i) => row.map((v, j) => v - LEARN_RATE * dw[i][j]))
-  const updV = (b: number[], db: number[]) => b.map((v, i) => v - LEARN_RATE * db[i])
+    w.map((row, i) => row.map((v, j) => v - lr * dw[i][j]))
+  const updv = (b: number[], db: number[]) => b.map((v, i) => v - lr * db[i])
 
   return {
     loss,
     net: {
-      W1: upd(net.W1, dW1), b1: updV(net.b1, db1),
-      W2: upd(net.W2, dW2), b2: updV(net.b2, db2),
-      W3: upd(net.W3, dW3), b3: updV(net.b3, db3),
+      W1: upd(net.W1, dW1), b1: updv(net.b1, db1),
+      W2: upd(net.W2, dW2), b2: updv(net.b2, db2),
+      W3: upd(net.W3, dW3), b3: updv(net.b3, db3),
     },
   }
 }
 
-/** Zmenší 280×280 canvas na 28×28 float[] */
-function sampleCanvas(canvas: HTMLCanvasElement): number[] {
-  const ctx = canvas.getContext('2d')!
-  const imgData = ctx.getImageData(0, 0, 280, 280)
-  const result: number[] = []
-  for (let row = 0; row < 28; row++) {
-    for (let col = 0; col < 28; col++) {
-      let sum = 0
-      for (let dy = 0; dy < 10; dy++) {
-        for (let dx = 0; dx < 10; dx++) {
-          const px = ((row * 10 + dy) * 280 + (col * 10 + dx)) * 4
-          sum += imgData.data[px] / 255  // R-kanál (grayscale)
+// ── Syntetická trénovací data (šablony číslic 7×7 upscalované na 28×28) ─────
+// Každý digit = hrubý bitmapový vzor, slouží k pre-trainingu
+const DIGIT_TEMPLATES: number[][] = (() => {
+  // 7-segmentové šablony 7×10 pixelů pro čísla 0-9
+  const templates7x10: number[][] = [
+    // 0
+    [0,1,1,1,1,1,0,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,0],
+    // 1
+    [0,0,0,1,0,0,0,
+     0,0,1,1,0,0,0,
+     0,1,0,1,0,0,0,
+     0,0,0,1,0,0,0,
+     0,0,0,1,0,0,0,
+     0,0,0,1,0,0,0,
+     0,0,0,1,0,0,0,
+     0,0,0,1,0,0,0,
+     0,0,0,1,0,0,0,
+     0,1,1,1,1,1,0],
+    // 2
+    [0,1,1,1,1,1,0,
+     1,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,1,0,
+     0,0,0,0,1,0,0,
+     0,0,0,1,0,0,0,
+     0,0,1,0,0,0,0,
+     0,1,0,0,0,0,0,
+     1,0,0,0,0,0,0,
+     1,1,1,1,1,1,1],
+    // 3
+    [0,1,1,1,1,1,0,
+     1,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     0,1,1,1,1,1,0,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,0],
+    // 4
+    [1,0,0,0,0,1,0,
+     1,0,0,0,0,1,0,
+     1,0,0,0,0,1,0,
+     1,0,0,0,0,1,0,
+     1,1,1,1,1,1,1,
+     0,0,0,0,0,1,0,
+     0,0,0,0,0,1,0,
+     0,0,0,0,0,1,0,
+     0,0,0,0,0,1,0,
+     0,0,0,0,0,1,0],
+    // 5
+    [1,1,1,1,1,1,1,
+     1,0,0,0,0,0,0,
+     1,0,0,0,0,0,0,
+     1,0,0,0,0,0,0,
+     1,1,1,1,1,1,0,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,0],
+    // 6
+    [0,1,1,1,1,1,0,
+     1,0,0,0,0,0,0,
+     1,0,0,0,0,0,0,
+     1,0,0,0,0,0,0,
+     1,1,1,1,1,1,0,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,0],
+    // 7
+    [1,1,1,1,1,1,1,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,1,0,
+     0,0,0,0,1,0,0,
+     0,0,0,1,0,0,0,
+     0,0,1,0,0,0,0,
+     0,0,1,0,0,0,0,
+     0,0,1,0,0,0,0,
+     0,0,1,0,0,0,0,
+     0,0,1,0,0,0,0],
+    // 8
+    [0,1,1,1,1,1,0,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,0,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,0],
+    // 9
+    [0,1,1,1,1,1,0,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,1,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     0,0,0,0,0,0,1,
+     1,0,0,0,0,0,1,
+     0,1,1,1,1,1,0],
+  ]
+
+  // Upscale 7×10 → 28×28
+  return templates7x10.map(t => {
+    const out = new Array(784).fill(0)
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 7; c++) {
+        const v = t[r * 7 + c]
+        // Mapuj 10 řádků na 28 řádků, 7 sloupců na 28 sloupců
+        const rs = Math.round(r * 2.6 + 2), cs = Math.round(c * 3.4 + 3)
+        for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++) {
+          const pr = rs + dr, pc = cs + dc
+          if (pr < 28 && pc < 28) out[pr * 28 + pc] = v
         }
       }
-      result.push(sum / 100)
+    }
+    return out
+  })
+})()
+
+/** Pre-trénuj síť na syntetických vzorech */
+function pretrain(net: Net, epochs = 400): Net {
+  let n = net
+  for (let e = 0; e < epochs; e++) {
+    for (let d = 0; d < 10; d++) {
+      // Augmentace: drobný šum
+      const x = DIGIT_TEMPLATES[d].map(v => Math.min(1, Math.max(0, v + (Math.random() - 0.5) * 0.15)))
+      const { net: n2 } = backprop(n, x, d, 0.12)
+      n = n2
     }
   }
-  return result
+  return n
 }
 
-// ── Typ animované částice ────────────────────────────────────────────────────
-interface Particle {
-  id: number; x: number; y: number; tx: number; ty: number
-  t: number; color: string; reverse: boolean
+// ── Vzorkování canvasu 280×280 → 28×28 ────────────────────────────────────────
+function sampleCanvas(canvas: HTMLCanvasElement): number[] {
+  const ctx = canvas.getContext('2d')!
+  const img = ctx.getImageData(0, 0, 280, 280)
+  const out: number[] = []
+  for (let r = 0; r < 28; r++) {
+    for (let c = 0; c < 28; c++) {
+      let s = 0
+      for (let dy = 0; dy < 10; dy++) for (let dx = 0; dx < 10; dx++)
+        s += img.data[((r * 10 + dy) * 280 + (c * 10 + dx)) * 4] / 255
+      out.push(s / 100)
+    }
+  }
+  return out
 }
-
-// ── Vizuální layout sítě ──────────────────────────────────────────────────────
-const NET_W = 620, NET_H = 420
-const LAYER_X = [80, 220, 400, 570]
-
-function layerY(layerIdx: number, nodeIdx: number, total: number): number {
-  const spacing = Math.min((NET_H - 40) / total, 34)
-  return NET_H / 2 - ((total - 1) * spacing) / 2 + nodeIdx * spacing + 20
-}
-
-// Reprezentativní vzorky z 784 vstupů pro vizualizaci
-const SAMPLE_INPUTS = Array.from({ length: 20 }, (_, i) => Math.floor(i * 784 / 20))
 
 // ── Barvy ─────────────────────────────────────────────────────────────────────
-const NEON_GREEN = '#39ff14'
-const NEON_BLUE  = '#00f5ff'
-const NEON_PINK  = '#ff2d78'
-const NEON_GOLD  = '#ffd700'
+const NG = '#39ff14'   // neon green
+const NB = '#00f5ff'   // neon blue
+const NP = '#ff2d78'   // neon pink
+const NY = '#ffd700'   // neon gold
+const ND = '#a78bfa'   // purple
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  HLAVNÍ KOMPONENTA
+// ── Vizuální layout sítě ──────────────────────────────────────────────────────
+// Vrstva X pozice (relativní 0-1)
+const LX = [0.09, 0.33, 0.60, 0.87]
+// Počet viditelných vstupních neuronů
+const VIS_IN = 20
+const SAMPLE_IDX = Array.from({ length: VIS_IN }, (_, i) => Math.floor(i * 784 / VIS_IN))
+
+function lY(total: number, idx: number, H: number): number {
+  const top = 50, bottom = H - 30
+  const avail = bottom - top
+  const sp = Math.min(avail / total, 30)
+  const totalH = (total - 1) * sp
+  return (top + bottom) / 2 - totalH / 2 + idx * sp
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function MNISTSim() {
-  // ── Stav sítě ────────────────────────────────────────────────────────────────
-  const [net, setNet]             = useState<Network>(() => makeNetwork())
-  const [inputs, setInputs]       = useState<number[]>(Array(INPUT_SIZE).fill(0))
-  const [activations, setActs]    = useState<ReturnType<typeof forward> | null>(null)
-  const [prediction, setPred]     = useState<number | null>(null)
-  const [confidence, setConf]     = useState<number[]>(Array(OUTPUT_SIZE).fill(0.1))
-  const [correctLabel, setCorr]   = useState<number | null>(null)
-  const [loss, setLoss]           = useState<number[]>([])
-  const [accuracy, setAcc]        = useState<number[]>([])
-  const [trainCount, setTrain]    = useState(0)
-  const [activePanel, setPanel]   = useState(0)
+  // Síť — pre-trénovaná při inicializaci
+  const [net, setNet] = useState<Net>(() => pretrain(makeNet()))
+  const [inputs, setInputs]   = useState<number[]>(Array(784).fill(0))
+  const [acts, setActs]       = useState<ReturnType<typeof fwd> | null>(null)
+  const [probs, setProbs]     = useState<number[]>(Array(10).fill(0.1))
+  const [pred, setPred]       = useState<number | null>(null)
+  const [label, setLabel]     = useState<number | null>(null)
+  const [lossHist, setLossHist] = useState<number[]>([])
+  const [accHist, setAccHist]   = useState<number[]>([])
+  const [trainN, setTrainN]     = useState(0)
+  const [backRunning, setBackR] = useState(false)
+  const [infoPanel, setInfoPanel] = useState(0)
 
-  // ── Animační stav ─────────────────────────────────────────────────────────────
-  const [particles, setParticles] = useState<Particle[]>([])
-  const [backAnim, setBackAnim]   = useState(false)
-  const [shake, setShake]         = useState(false)
-  const [highlight, setHighlight] = useState<number[]>([])
-  const partIdRef = useRef(0)
-  const rafRef    = useRef(0)
-  const particlesRef = useRef<Particle[]>([])
+  // Animace
+  interface Dot { id:number;x:number;y:number;tx:number;ty:number;t:number;col:string;rev:boolean }
+  const [dots, setDots]       = useState<Dot[]>([])
+  const dotsRef               = useRef<Dot[]>([])
+  const dotId                 = useRef(0)
+  const rafRef                = useRef(0)
 
-  // ── Canvas kreslení ──────────────────────────────────────────────────────────
-  const canvasRef    = useRef<HTMLCanvasElement>(null)
-  const netCanvasRef = useRef<HTMLCanvasElement>(null)
-  const isDrawing    = useRef(false)
-  const lastPos      = useRef<{ x: number; y: number } | null>(null)
+  // Canvas refs
+  const drawCv  = useRef<HTMLCanvasElement>(null)
+  const netCv   = useRef<HTMLCanvasElement>(null)
+  const isDrawing = useRef(false)
+  const lastXY    = useRef<[number,number]|null>(null)
+  const netSize   = useRef({ w: 900, h: 440 })
+  const netDiv    = useRef<HTMLDivElement>(null)
 
-  // ── Animace částic ───────────────────────────────────────────────────────────
+  // Měření canvasu sítě
   useEffect(() => {
-    let running = true
+    const el = netDiv.current; if (!el) return
+    const ro = new ResizeObserver(e => {
+      const { width, height } = e[0].contentRect
+      netSize.current = { w: Math.floor(width), h: Math.floor(height) }
+      // Force redraw
+      setDots(d => [...d])
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Animační loop
+  useEffect(() => {
+    let alive = true
     const step = () => {
-      if (!running) return
-      particlesRef.current = particlesRef.current
-        .map(p => ({ ...p, t: p.t + (p.reverse ? -0.025 : 0.025) }))
-        .filter(p => p.reverse ? p.t > 0 : p.t < 1)
-      setParticles([...particlesRef.current])
+      if (!alive) return
+      dotsRef.current = dotsRef.current
+        .map(d => ({ ...d, t: d.t + (d.rev ? -0.03 : 0.03) }))
+        .filter(d => d.rev ? d.t > 0 : d.t < 1)
+      setDots([...dotsRef.current])
       rafRef.current = requestAnimationFrame(step)
     }
     rafRef.current = requestAnimationFrame(step)
-    return () => { running = false; cancelAnimationFrame(rafRef.current) }
+    return () => { alive = false; cancelAnimationFrame(rafRef.current) }
   }, [])
 
-  // ── Spuštění forward pass animace ────────────────────────────────────────────
-  const launchForwardParticles = useCallback((layerPairs: [number,number,number,number,string][]) => {
-    const newParts: Particle[] = layerPairs.map(([x1,y1,x2,y2,col]) => ({
-      id: partIdRef.current++, x:x1, y:y1, tx:x2, ty:y2,
-      t: -(Math.random() * 0.4), color: col, reverse: false,
-    }))
-    particlesRef.current = [...particlesRef.current, ...newParts]
-    setParticles([...particlesRef.current])
+  // Spustit forward + animace
+  const runFwd = useCallback((x: number[], network: Net) => {
+    const res = fwd(network, x)
+    setActs(res)
+    setProbs(res.a3)
+    const p = res.a3.indexOf(Math.max(...res.a3))
+    setPred(p)
+
+    const { w, h } = netSize.current
+    // Částice vstup→H1
+    const newDots: Dot[] = []
+    SAMPLE_IDX.forEach((si, vi) => {
+      if (x[si] < 0.05) return
+      res.a1.forEach((a, hi) => {
+        if (a < 0.1 || Math.random() > 0.4) return
+        newDots.push({ id: dotId.current++, x: LX[0]*w, y: lY(VIS_IN,vi,h), tx: LX[1]*w, ty: lY(H1,hi,h), t: -Math.random()*0.5, col: NB, rev: false })
+      })
+    })
+    // H1→H2
+    res.a1.forEach((a, i) => {
+      if (a < 0.1) return
+      res.a2.forEach((_, j) => {
+        if (Math.random() > 0.25) return
+        newDots.push({ id: dotId.current++, x: LX[1]*w, y: lY(H1,i,h), tx: LX[2]*w, ty: lY(H2,j,h), t: -Math.random()*0.4, col: NG, rev: false })
+      })
+    })
+    // H2→výstup (jen k vítězi)
+    res.a2.forEach((a, i) => {
+      if (a < 0.1 || Math.random() > 0.5) return
+      newDots.push({ id: dotId.current++, x: LX[2]*w, y: lY(H2,i,h), tx: LX[3]*w, ty: lY(OUT,p,h), t: -Math.random()*0.3, col: NY, rev: false })
+    })
+    dotsRef.current = [...dotsRef.current.slice(-80), ...newDots.slice(0,60)]
   }, [])
 
-  // ── Kreslení na canvas ────────────────────────────────────────────────────────
-  const getPos = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect()
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  // Kreslení
+  const getXY = (e: React.MouseEvent<HTMLCanvasElement>): [number,number] => {
+    const r = drawCv.current!.getBoundingClientRect()
+    return [e.clientX - r.left, e.clientY - r.top]
   }
-
-  const runNetwork = useCallback((inputs: number[]) => {
-    const acts = forward(net, inputs)
-    setActs(acts)
-    setConf(acts.a3)
-    const pred = acts.a3.indexOf(Math.max(...acts.a3))
-    setPred(pred)
-
-    // Spusť forward animaci
-    const pairs: [number,number,number,number,string][] = []
-    // Vstup → H1
-    SAMPLE_INPUTS.forEach((si, vi) => {
-      const x1 = LAYER_X[0], y1 = layerY(0, vi, SAMPLE_INPUTS.length)
-      acts.a1.slice(0, 8).forEach((a, hi) => {
-        if (Math.abs(a) > 0.1) {
-          pairs.push([x1, y1, LAYER_X[1], layerY(1, hi, HIDDEN1), NEON_BLUE])
-        }
-      })
-    })
-    // H1 → H2
-    acts.a1.slice(0, 8).forEach((a1v, i) => {
-      if (a1v > 0.2) acts.a2.forEach((_, j) => {
-        if (j < 8) pairs.push([LAYER_X[1], layerY(1, i, HIDDEN1), LAYER_X[2], layerY(2, j, HIDDEN2), NEON_GREEN])
-      })
-    })
-    // H2 → Výstup
-    acts.a2.slice(0, 8).forEach((a2v, i) => {
-      if (a2v > 0.2) {
-        pairs.push([LAYER_X[2], layerY(2, i, HIDDEN2), LAYER_X[3], layerY(3, pred, OUTPUT_SIZE), NEON_GOLD])
-      }
-    })
-    launchForwardParticles(pairs.slice(0, 60))
-  }, [net, launchForwardParticles])
-
-  const draw = useCallback((x: number, y: number) => {
-    const cv = canvasRef.current; if (!cv) return
+  const doDraw = useCallback(([x,y]: [number,number]) => {
+    const cv = drawCv.current; if (!cv) return
     const ctx = cv.getContext('2d')!
-    ctx.lineWidth = 22; ctx.lineCap = 'round'
-    ctx.strokeStyle = 'white'
+    ctx.lineWidth = 20; ctx.lineCap = 'round'; ctx.strokeStyle = '#fff'
     ctx.beginPath()
-    if (lastPos.current) { ctx.moveTo(lastPos.current.x, lastPos.current.y) }
-    else { ctx.moveTo(x, y) }
+    if (lastXY.current) ctx.moveTo(...lastXY.current)
+    else ctx.moveTo(x, y)
     ctx.lineTo(x, y); ctx.stroke()
-    lastPos.current = { x, y }
+    lastXY.current = [x, y]
+    const nx = sampleCanvas(cv)
+    setInputs(nx)
+    runFwd(nx, net)
+  }, [net, runFwd])
 
-    // Aktualizuj vstupy a spusť síť
-    const newInputs = sampleCanvas(cv)
-    setInputs(newInputs)
-    runNetwork(newInputs)
-  }, [runNetwork])
+  const onMD = (e: React.MouseEvent<HTMLCanvasElement>) => { isDrawing.current = true; lastXY.current = null; doDraw(getXY(e)) }
+  const onMM = (e: React.MouseEvent<HTMLCanvasElement>) => { if (isDrawing.current) doDraw(getXY(e)) }
+  const onMU = () => { isDrawing.current = false; lastXY.current = null }
 
-  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    isDrawing.current = true; lastPos.current = null; draw(...Object.values(getPos(e)) as [number,number])
-  }
-  const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => { if (isDrawing.current) draw(...Object.values(getPos(e)) as [number,number]) }
-  const onMouseUp   = () => { isDrawing.current = false; lastPos.current = null }
-
-  const clearCanvas = () => {
-    const cv = canvasRef.current; if (!cv) return
+  const clearAll = () => {
+    const cv = drawCv.current; if (!cv) return
     cv.getContext('2d')!.clearRect(0, 0, 280, 280)
-    setInputs(Array(INPUT_SIZE).fill(0)); setActs(null); setPred(null); setConf(Array(OUTPUT_SIZE).fill(0.1)); setCorrect(null)
+    setInputs(Array(784).fill(0)); setActs(null); setPred(null); setProbs(Array(10).fill(0.1)); setLabel(null)
   }
-  const setCorrect = (v: number | null) => { setCorr(v) }
 
-  // ── Backpropagation ──────────────────────────────────────────────────────────
+  // Backpropagation
   const doBackprop = useCallback(() => {
-    if (correctLabel === null || !activations) return
-    setBackAnim(true); setShake(true)
+    if (label === null) return
+    setBackR(true)
 
-    // Animace zpětného toku
-    const reverseParts: [number,number,number,number,string][] = []
-    for (let i = 0; i < 8; i++) {
-      reverseParts.push([LAYER_X[3], layerY(3, correctLabel, OUTPUT_SIZE), LAYER_X[2], layerY(2, i, HIDDEN2), NEON_PINK])
-      reverseParts.push([LAYER_X[2], layerY(2, i, HIDDEN2), LAYER_X[1], layerY(1, i, HIDDEN1), NEON_PINK])
+    // Zpětné animační částice (zleva doprava s rev=true)
+    const { w, h } = netSize.current
+    const revDots: Dot[] = []
+    for (let i = 0; i < H2; i++) {
+      revDots.push({ id: dotId.current++, x: LX[3]*w, y: lY(OUT,label,h), tx: LX[2]*w, ty: lY(H2,i,h), t: 1, col: NP, rev: true })
     }
-    const bpParts: Particle[] = reverseParts.map(([x1,y1,x2,y2,col]) => ({
-      id: partIdRef.current++, x:x1, y:y1, tx:x2, ty:y2, t:1, color:col, reverse:true,
-    }))
-    particlesRef.current = [...particlesRef.current, ...bpParts]
+    for (let i = 0; i < H1; i++) {
+      revDots.push({ id: dotId.current++, x: LX[2]*w, y: lY(H2,i%H2,h), tx: LX[1]*w, ty: lY(H1,i,h), t: 1, col: NP, rev: true })
+    }
+    dotsRef.current = [...dotsRef.current, ...revDots]
 
-    // Spusť backprop
-    const { net: newNet, loss: l } = backprop(net, inputs, correctLabel, activations)
-    setNet(newNet)
-
-    // Aktualizuj metriky
-    const isCorrect = prediction === correctLabel
-    setLoss(prev => [...prev.slice(-29), l])
-    setAcc(prev => [...prev.slice(-29), isCorrect ? 1 : 0])
-    setTrain(t => t + 1)
-
-    // Highlight upravených neuronů
-    setHighlight(Array.from({ length: HIDDEN1 }, (_, i) => i))
-    setTimeout(() => { setBackAnim(false); setShake(false); setHighlight([]) }, 2500)
-
-    // Spusť znovu forward s novou sítí
+    // Trénink
+    let n = net
+    for (let step = 0; step < 3; step++) {
+      const { net: n2, loss } = backprop(n, inputs, label, LR)
+      n = n2
+      if (step === 0) {
+        const isOK = pred === label
+        setLossHist(p => [...p.slice(-39), loss])
+        setAccHist(p => [...p.slice(-39), isOK ? 1 : 0])
+        setTrainN(t => t + 1)
+      }
+    }
+    setNet(n)
     setTimeout(() => {
-      const newActs = forward(newNet, inputs)
-      setActs(newActs); setConf(newActs.a3)
-      setPred(newActs.a3.indexOf(Math.max(...newActs.a3)))
-    }, 1200)
-  }, [correctLabel, activations, net, inputs, prediction])
+      runFwd(inputs, n)
+      setBackR(false)
+    }, 1400)
+  }, [label, net, inputs, pred, runFwd])
 
-  // ── Kreslení neuronové sítě na canvas ────────────────────────────────────────
+  // ── Kreslit síť na canvas ──────────────────────────────────────────────────
   useEffect(() => {
-    const cv = netCanvasRef.current; if (!cv) return
+    const cv = netCv.current; if (!cv) return
     const ctx = cv.getContext('2d')!
-    ctx.clearRect(0, 0, NET_W, NET_H)
+    const W = cv.width, H = cv.height
 
-    // ── Pozadí a mřížka ──────────────────────────────────────────────────────
-    ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0, 0, NET_W, NET_H)
+    ctx.clearRect(0, 0, W, H)
+    ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H)
 
-    // ── Spoje vstupy → H1 ────────────────────────────────────────────────────
-    SAMPLE_INPUTS.forEach((si, vi) => {
-      const x1 = LAYER_X[0], y1 = layerY(0, vi, SAMPLE_INPUTS.length)
-      for (let hi = 0; hi < HIDDEN1; hi++) {
+    // Jemná mřížka
+    ctx.strokeStyle = 'rgba(255,255,255,.03)'; ctx.lineWidth = 1
+    for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke() }
+    for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke() }
+
+    // ── Spoje vstup→H1 ────────────────────────────────────────────────────────
+    SAMPLE_IDX.forEach((si, vi) => {
+      for (let hi = 0; hi < H1; hi++) {
         const w = net.W1[hi][si]
-        const a = activations?.a1[hi] ?? 0
-        const opacity = Math.min(0.6, Math.abs(w) * 0.4 + 0.05) * (backAnim ? 0.3 : 1)
-        const col = w > 0 ? `rgba(0,245,255,${opacity})` : `rgba(255,45,120,${opacity})`
-        ctx.strokeStyle = col; ctx.lineWidth = Math.min(2, Math.abs(w) * 1.5 + 0.3)
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(LAYER_X[1], layerY(1, hi, HIDDEN1)); ctx.stroke()
+        const a = Math.min(0.55, Math.abs(w) * 0.3 + 0.03)
+        ctx.strokeStyle = w > 0 ? `rgba(0,245,255,${a})` : `rgba(255,45,120,${a})`
+        ctx.lineWidth = Math.min(1.8, Math.abs(w) * 1.2 + 0.2)
+        ctx.beginPath(); ctx.moveTo(LX[0]*W, lY(VIS_IN,vi,H)); ctx.lineTo(LX[1]*W, lY(H1,hi,H)); ctx.stroke()
       }
     })
 
-    // ── Spoje H1 → H2 ────────────────────────────────────────────────────────
-    for (let i = 0; i < HIDDEN1; i++) {
-      for (let j = 0; j < HIDDEN2; j++) {
-        const w = net.W2[j][i]
-        const opacity = Math.min(0.55, Math.abs(w) * 0.35 + 0.04) * (backAnim ? 0.35 : 1)
-        const col = w > 0 ? `rgba(57,255,20,${opacity})` : `rgba(255,215,0,${opacity})`
-        ctx.strokeStyle = col; ctx.lineWidth = Math.min(1.8, Math.abs(w) * 1.2 + 0.2)
-        // Třesení při backpropu
-        const jitter = backAnim ? (Math.random() - 0.5) * 2 : 0
-        ctx.beginPath()
-        ctx.moveTo(LAYER_X[1], layerY(1, i, HIDDEN1) + jitter)
-        ctx.lineTo(LAYER_X[2], layerY(2, j, HIDDEN2) + jitter)
-        ctx.stroke()
-      }
+    // ── Spoje H1→H2 ──────────────────────────────────────────────────────────
+    for (let i = 0; i < H1; i++) for (let j = 0; j < H2; j++) {
+      const w = net.W2[j][i]
+      const a = Math.min(0.5, Math.abs(w) * 0.25 + 0.03)
+      const jitter = backRunning ? (Math.random()-0.5)*3 : 0
+      ctx.strokeStyle = w > 0 ? `rgba(57,255,20,${a})` : `rgba(255,215,0,${a})`
+      ctx.lineWidth = Math.min(1.5, Math.abs(w) * 1.0 + 0.2)
+      ctx.beginPath()
+      ctx.moveTo(LX[1]*W, lY(H1,i,H)+jitter); ctx.lineTo(LX[2]*W, lY(H2,j,H)+jitter)
+      ctx.stroke()
     }
 
-    // ── Spoje H2 → výstup ────────────────────────────────────────────────────
-    for (let i = 0; i < HIDDEN2; i++) {
-      for (let j = 0; j < OUTPUT_SIZE; j++) {
-        const w = net.W3[j][i]
-        const opacity = Math.min(0.6, Math.abs(w) * 0.4 + 0.05)
-        const isWinner = prediction === j
-        const col = isWinner ? `rgba(255,215,0,${opacity+0.2})` : w > 0 ? `rgba(57,255,20,${opacity})` : `rgba(255,45,120,${opacity})`
-        ctx.strokeStyle = col; ctx.lineWidth = isWinner ? 2 : Math.min(1.5, Math.abs(w) * 1.2 + 0.2)
-        ctx.beginPath(); ctx.moveTo(LAYER_X[2], layerY(2, i, HIDDEN2)); ctx.lineTo(LAYER_X[3], layerY(3, j, OUTPUT_SIZE)); ctx.stroke()
-      }
+    // ── Spoje H2→výstup ────────────────────────────────────────────────────────
+    for (let i = 0; i < H2; i++) for (let j = 0; j < OUT; j++) {
+      const w = net.W3[j][i]
+      const a = Math.min(0.6, Math.abs(w) * 0.3 + 0.04)
+      const isWin = pred === j
+      ctx.strokeStyle = isWin ? `rgba(255,215,0,${a+0.15})` : w > 0 ? `rgba(57,255,20,${a})` : `rgba(255,45,120,${a})`
+      ctx.lineWidth = isWin ? 1.8 : Math.min(1.5, Math.abs(w)*1.0+0.2)
+      ctx.beginPath(); ctx.moveTo(LX[2]*W, lY(H2,i,H)); ctx.lineTo(LX[3]*W, lY(OUT,j,H)); ctx.stroke()
     }
 
-    // ── Vstupní neurony (vzorky) ──────────────────────────────────────────────
-    SAMPLE_INPUTS.forEach((si, vi) => {
-      const x = LAYER_X[0], y = layerY(0, vi, SAMPLE_INPUTS.length)
-      const v = inputs[si]
-      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2)
-      ctx.fillStyle = v > 0.1 ? `rgba(0,245,255,${0.3 + v * 0.7})` : '#1a2035'
-      ctx.fill(); ctx.strokeStyle = NEON_BLUE + '66'; ctx.lineWidth = 1; ctx.stroke()
-    })
-    ctx.fillStyle = '#64748b'; ctx.font = '9px monospace'; ctx.textAlign = 'center'
-    ctx.fillText('784 vstupů', LAYER_X[0], NET_H - 6)
-
-    // ── Skrytá vrstva 1 ───────────────────────────────────────────────────────
-    for (let i = 0; i < HIDDEN1; i++) {
-      const x = LAYER_X[1], y = layerY(1, i, HIDDEN1)
-      const a = activations?.a1[i] ?? 0
-      const isHL = highlight.includes(i)
-      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2)
-      if (isHL) { ctx.shadowColor = NEON_GREEN; ctx.shadowBlur = 16 }
-      ctx.fillStyle = a > 0.01 ? `rgba(57,255,20,${0.15 + a * 0.75})` : '#1a2035'
-      ctx.fill()
-      ctx.strokeStyle = isHL ? NEON_GREEN : (a > 0.3 ? NEON_GREEN + 'bb' : '#1e3a2a')
-      ctx.lineWidth = isHL ? 2.5 : 1.5; ctx.stroke()
-      ctx.shadowBlur = 0
-      if (a > 0.05) {
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'
-        ctx.fillText(a.toFixed(2), x, y + 3)
-      }
-    }
-    ctx.fillStyle = '#64748b'; ctx.font = '9px monospace'; ctx.textAlign = 'center'
-    ctx.fillText('Skrytá 1 (ReLU)', LAYER_X[1], NET_H - 6)
-
-    // ── Skrytá vrstva 2 ───────────────────────────────────────────────────────
-    for (let i = 0; i < HIDDEN2; i++) {
-      const x = LAYER_X[2], y = layerY(2, i, HIDDEN2)
-      const a = activations?.a2[i] ?? 0
-      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2)
-      ctx.fillStyle = a > 0.01 ? `rgba(0,245,255,${0.15 + a * 0.75})` : '#1a2035'
-      ctx.fill()
-      ctx.strokeStyle = a > 0.3 ? NEON_BLUE + 'bb' : '#1a2e38'; ctx.lineWidth = 1.5; ctx.stroke()
-      if (a > 0.05) {
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'
-        ctx.fillText(a.toFixed(2), x, y + 3)
-      }
-    }
-    ctx.fillStyle = '#64748b'; ctx.font = '9px monospace'; ctx.textAlign = 'center'
-    ctx.fillText('Skrytá 2 (ReLU)', LAYER_X[2], NET_H - 6)
-
-    // ── Výstupní vrstva ───────────────────────────────────────────────────────
-    for (let i = 0; i < OUTPUT_SIZE; i++) {
-      const x = LAYER_X[3], y = layerY(3, i, OUTPUT_SIZE)
-      const p = confidence[i]
-      const isWinner = prediction === i
-      const isCorrect2 = correctLabel === i
-      ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2)
-      if (isWinner) { ctx.shadowColor = NEON_GOLD; ctx.shadowBlur = 20 }
-      const col = isWinner ? `rgba(255,215,0,${0.2 + p * 0.8})`
-        : isCorrect2 && correctLabel !== null ? `rgba(57,255,20,0.3)` : '#1a2035'
-      ctx.fillStyle = col; ctx.fill()
-      ctx.strokeStyle = isWinner ? NEON_GOLD : isCorrect2 && correctLabel !== null ? NEON_GREEN : '#1e293b'
-      ctx.lineWidth = isWinner ? 2.5 : 1.5; ctx.stroke()
-      ctx.shadowBlur = 0
-      ctx.fillStyle = isWinner ? NEON_GOLD : '#e2e8f0'
-      ctx.font = `bold ${isWinner ? 10 : 9}px monospace`; ctx.textAlign = 'center'
-      ctx.fillText(String(i), x, y + 4)
-      // Pravděpodobnost label vpravo
-      ctx.fillStyle = isWinner ? NEON_GOLD : '#475569'; ctx.font = '8px monospace'
-      ctx.textAlign = 'left'
-      ctx.fillText(`${(p * 100).toFixed(0)}%`, x + 18, y + 3)
-    }
-    ctx.fillStyle = '#64748b'; ctx.font = '9px monospace'; ctx.textAlign = 'center'
-    ctx.fillText('Výstup 0–9 (Softmax)', LAYER_X[3], NET_H - 6)
-
-    // ── Animované částice ─────────────────────────────────────────────────────
-    particles.forEach(p => {
-      const t = Math.max(0, Math.min(1, p.t))
-      if (t <= 0) return
-      const px = p.x + (p.tx - p.x) * t, py = p.y + (p.ty - p.y) * t
-      const alpha = t < 0.1 ? t * 10 : t > 0.85 ? (1 - t) * 6.67 : 1
-      ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2)
-      ctx.fillStyle = p.color + Math.round(alpha * 200).toString(16).padStart(2, '0')
-      ctx.shadowColor = p.color; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0
+    // ── Animované tečky ────────────────────────────────────────────────────────
+    dotsRef.current.forEach(d => {
+      const t = Math.max(0, Math.min(1, d.t)); if (t <= 0) return
+      const px = d.x + (d.tx-d.x)*t, py = d.y + (d.ty-d.y)*t
+      const al = t<0.1?t*10:t>0.85?(1-t)*6.7:1
+      ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2)
+      ctx.fillStyle = d.col+Math.round(al*200).toString(16).padStart(2,'0')
+      ctx.shadowColor = d.col; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0
     })
 
-    // ── Šipky toku ────────────────────────────────────────────────────────────
-    if (activations) {
-      ['→','→','→'].forEach((arr, i) => {
-        ctx.fillStyle = '#334155'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'
-        ctx.fillText(arr, (LAYER_X[i] + LAYER_X[i+1]) / 2, NET_H / 2)
-      })
+    // ── Vstupní neurony ────────────────────────────────────────────────────────
+    SAMPLE_IDX.forEach((si, vi) => {
+      const x = LX[0]*W, y = lY(VIS_IN,vi,H), v = inputs[si]
+      if (v>0.05) { ctx.beginPath(); ctx.arc(x,y,12,0,Math.PI*2); ctx.fillStyle=`rgba(0,245,255,${v*0.3})`; ctx.fill() }
+      ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2)
+      ctx.fillStyle = v>0.05?`rgba(0,245,255,${0.2+v*0.7})`:'#111827'; ctx.fill()
+      ctx.strokeStyle = NB+'55'; ctx.lineWidth=1; ctx.stroke()
+    })
+
+    // ── H1 neurony ─────────────────────────────────────────────────────────────
+    for (let i=0;i<H1;i++) {
+      const x=LX[1]*W, y=lY(H1,i,H), a=acts?.a1[i]??0
+      if(a>0.05){ctx.beginPath();ctx.arc(x,y,15,0,Math.PI*2);ctx.fillStyle=`rgba(57,255,20,${a*0.2})`;ctx.fill()}
+      ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2)
+      ctx.fillStyle=a>0.05?`rgba(57,255,20,${0.15+a*0.7})`:'#111827';ctx.fill()
+      ctx.strokeStyle=a>0.3?NG+'bb':'#1a2e1a';ctx.lineWidth=1.5;ctx.stroke()
+      if(a>0.08){
+        ctx.fillStyle='#fff';ctx.font='bold 6.5px monospace';ctx.textAlign='center'
+        ctx.fillText(a.toFixed(2),x,y+2.5)
+      }
     }
 
-    // Nadpisy vrstev nahoře
-    ctx.fillStyle = NEON_BLUE + 'aa'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'
-    ctx.fillText('INPUT', LAYER_X[0], 14)
-    ctx.fillStyle = NEON_GREEN + 'aa'; ctx.fillText('HIDDEN 1', LAYER_X[1], 14)
-    ctx.fillStyle = NEON_BLUE + 'aa'; ctx.fillText('HIDDEN 2', LAYER_X[2], 14)
-    ctx.fillStyle = NEON_GOLD + 'aa'; ctx.fillText('OUTPUT', LAYER_X[3], 14)
-  }, [net, inputs, activations, particles, prediction, confidence, correctLabel, highlight, backAnim])
+    // ── H2 neurony ─────────────────────────────────────────────────────────────
+    for (let i=0;i<H2;i++) {
+      const x=LX[2]*W, y=lY(H2,i,H), a=acts?.a2[i]??0
+      if(a>0.05){ctx.beginPath();ctx.arc(x,y,15,0,Math.PI*2);ctx.fillStyle=`rgba(0,245,255,${a*0.2})`;ctx.fill()}
+      ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2)
+      ctx.fillStyle=a>0.05?`rgba(0,245,255,${0.15+a*0.7})`:'#111827';ctx.fill()
+      ctx.strokeStyle=a>0.3?NB+'bb':'#1a2e38';ctx.lineWidth=1.5;ctx.stroke()
+      if(a>0.08){ctx.fillStyle='#fff';ctx.font='bold 6.5px monospace';ctx.textAlign='center';ctx.fillText(a.toFixed(2),x,y+2.5)}
+    }
 
-  // ── Vzdělávací panely ─────────────────────────────────────────────────────────
+    // ── Výstupní neurony ────────────────────────────────────────────────────────
+    for (let i=0;i<OUT;i++) {
+      const x=LX[3]*W, y=lY(OUT,i,H), p=probs[i], isWin=pred===i, isLbl=label===i
+      if(isWin){ctx.beginPath();ctx.arc(x,y,20,0,Math.PI*2);ctx.fillStyle=`rgba(255,215,0,${p*0.35})`;ctx.fill();ctx.shadowColor=NY;ctx.shadowBlur=18}
+      ctx.beginPath();ctx.arc(x,y,12,0,Math.PI*2)
+      ctx.fillStyle=isWin?`rgba(255,215,0,${0.25+p*0.7})`:isLbl?`rgba(57,255,20,0.25)`:'#111827';ctx.fill()
+      ctx.strokeStyle=isWin?NY:isLbl?NG:'#1e293b';ctx.lineWidth=isWin?2.5:1.5;ctx.stroke()
+      ctx.shadowBlur=0
+      ctx.fillStyle=isWin?NY:'#e2e8f0';ctx.font=`bold ${isWin?11:9}px monospace`;ctx.textAlign='center'
+      ctx.fillText(String(i),x,y+4)
+      // % label
+      ctx.fillStyle=isWin?NY:'#334155';ctx.font='8px monospace';ctx.textAlign='left'
+      ctx.fillText(`${(p*100).toFixed(0)}%`,x+17,y+3)
+    }
+
+    // ── Popisky vrstev – NAHOŘE nad neurony ────────────────────────────────────
+    const layerLabels = [
+      [LX[0]*W, '784 vstupů', NB],
+      [LX[1]*W, 'Skrytá 1 – ReLU', NG],
+      [LX[2]*W, 'Skrytá 2 – ReLU', NB],
+      [LX[3]*W, 'Výstup 0–9', NY],
+    ]
+    layerLabels.forEach(([x,label,col]) => {
+      ctx.fillStyle = col as string + 'cc'
+      ctx.font = 'bold 10px monospace'; ctx.textAlign='center'
+      ctx.fillText(label as string, x as number, 18)
+    })
+
+    // ── Šipky mezi vrstvami ────────────────────────────────────────────────────
+    [[0,1],[1,2],[2,3]].forEach(([a,b]) => {
+      const mx = (LX[a]*W + LX[b]*W)/2
+      ctx.fillStyle='#334155'; ctx.font='16px sans-serif'; ctx.textAlign='center'
+      ctx.fillText('→', mx, H/2+6)
+    })
+
+  }, [net, inputs, acts, probs, pred, label, backRunning, dots])
+
+  // ── Metriky ────────────────────────────────────────────────────────────────
+  const avgLoss = lossHist.length ? (lossHist.reduce((a,b)=>a+b)/lossHist.length).toFixed(3) : '—'
+  const avgAcc  = accHist.length  ? `${Math.round(accHist.reduce((a,b)=>a+b)/accHist.length*100)}%` : '—'
+  const lastLoss = lossHist.length ? lossHist[lossHist.length-1].toFixed(3) : '—'
+
+  // ── Info panely ─────────────────────────────────────────────────────────────
   const PANELS = [
-    {
-      title: 'Jak počítač vidí tvůj obrázek',
-      subtitle: 'Vstupní vrstva (Input Layer) – „Oči sítě"',
-      icon: '👁️',
-      color: NEON_BLUE,
-      text: 'Tvé nakreslené číslo jsme rozdělili na mřížku 28×28 malých čtverečků (pixelů). Každý pixel je pro síť jen číslo: 0 pro černou a 1 pro bílou. Celkem je to 784 čísel, která vstupují do sítě najednou.',
-    },
-    {
-      title: 'Váhy (Weights) a cesty',
-      subtitle: 'Váhy a spoje – „Důležitost signálu"',
-      icon: '🔗',
-      color: NEON_GREEN,
-      text: 'Každá čára, kterou vidíš, má svou „váhu". Je to číslo, kterým se násobí signál z předchozího neuronu. Silnější, zářící čára znamená, že tento pixel je pro rozpoznání daného čísla velmi důležitý. Tenké čáry síť ignoruje.',
-    },
-    {
-      title: 'Uvnitř neuronu (z = Σ w·x + b)',
-      subtitle: 'Výpočet v neuronu – „Sčítání a Bias"',
-      icon: '⚙️',
-      color: NEON_GOLD,
-      text: 'Neuron funguje jako malá sčítačka. Posčítá všechny přicházející signály vynásobené jejich vahami. K výsledku přičte Bias (předpětí) – to je taková vnitřní citlivost neuronu, která určuje, jak snadno se neuron „rozsvítí".',
-    },
-    {
-      title: 'Funkce ReLU / Sigmoid',
-      subtitle: 'Aktivační funkce – „Rozhodnutí"',
-      icon: '⚡',
-      color: NEON_PINK,
-      text: 'Výsledek sčítání projde filtrem (aktivační funkcí). Pokud je výsledek nízký, neuron zůstane zhasnutý (vysílá 0). Pokud překročí určitou mez, „vystřelí" signál dál do další vrstvy. Tato nelinearita umožňuje síti učit se složité vzory.',
-    },
-    {
-      title: 'Kdo vyhrál?',
-      subtitle: 'Výstupní vrstva – „Pravděpodobnost"',
-      icon: '🏆',
-      color: NEON_GOLD,
-      text: 'Posledních 10 neuronů reprezentuje číslice 0 až 9. Ten, který září nejvíc, má nejvyšší pravděpodobnost. Síť ti neříká „Je to sedmička", ale říká „Jsem si na 92 % jistá, že je to sedmička".',
-    },
-    {
-      title: 'Oprava chyb (Backpropagation)',
-      subtitle: 'Zpětné šíření – „Učení z chyb"',
-      icon: '🔁',
-      color: NEON_PINK,
-      text: 'Když síť udělá chybu, podívá se, které neurony k té chybě přispěly nejvíce. Algoritmus pak projde síť pozpátku a jemně upraví váhy a biasy tak, aby příště byla chyba menší. Tomuto procesu se říká „Gradientní sestup".',
-    },
+    { icon:'👁️', color:NB,  title:'Vstupní vrstva – Oči sítě',
+      sub:'Jak počítač vidí tvůj obrázek',
+      text:'Tvé nakreslené číslo jsme rozdělili na mřížku 28×28 malých čtverečků (pixelů). Každý pixel je pro síť jen číslo: 0 pro černou a 1 pro bílou. Celkem je to 784 čísel, která vstupují do sítě najednou.' },
+    { icon:'🔗', color:NG,  title:'Váhy a spoje',
+      sub:'Důležitost signálu',
+      text:'Každá čára, kterou vidíš, má svou „váhu". Je to číslo, kterým se násobí signál z předchozího neuronu. Silnější, zářící čára = tento pixel je důležitý. Tenké čáry síť ignoruje.' },
+    { icon:'⚙️', color:NY,  title:'Uvnitř neuronu',
+      sub:'z = Σ w·x + b',
+      text:'Neuron funguje jako malá sčítačka. Posčítá všechny přicházející signály vynásobené vahami. K výsledku přičte Bias – vnitřní citlivost neuronu, která určuje, jak snadno se neuron rozsvítí.' },
+    { icon:'⚡', color:NP,  title:'Aktivační funkce',
+      sub:'ReLU a Softmax',
+      text:'Výsledek z prochází filtrem. ReLU: pokud je záporný → 0 (neuron nezapálí). Kladný prochází beze změny. Softmax na výstupu normalizuje hodnoty na pravděpodobnosti sumující do 100%.' },
+    { icon:'🏆', color:NY,  title:'Výstupní vrstva',
+      sub:'Pravděpodobnost výsledku',
+      text:'Posledních 10 neuronů reprezentuje číslice 0–9. Ten, který září nejvíc, má nejvyšší pravděpodobnost. Síť neříká „je to 7", ale „jsem si na 92% jistá, že je to 7".' },
+    { icon:'🔁', color:NP,  title:'Backpropagation',
+      sub:'Učení z chyb – Gradientní sestup',
+      text:'Když síť udělá chybu, podívá se, které neurony k ní přispěly nejvíce. Projde síť pozpátku (zprava doleva – vidíš růžové částice) a jemně upraví váhy: w ← w − η·∂L/∂w.' },
   ]
 
-  // ── Průměrná loss/accuracy ─────────────────────────────────────────────────
-  const avgLoss = loss.length > 0 ? (loss.reduce((a,b)=>a+b,0)/loss.length).toFixed(3) : '—'
-  const avgAcc  = accuracy.length > 0 ? `${Math.round(accuracy.reduce((a,b)=>a+b,0)/accuracy.length*100)}%` : '—'
+  const panel = PANELS[infoPanel]
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#060b14', color:'#e2e8f0', fontFamily:'monospace', overflow:'hidden' }}>
       <style>{`
-        @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-        @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.05)}}
-        @keyframes shake{0%,100%{transform:none}20%,60%{transform:translateX(-2px)}40%,80%{transform:translateX(2px)}}
-        @keyframes glow{0%,100%{box-shadow:0 0 6px ${NEON_GREEN}55}50%{box-shadow:0 0 22px ${NEON_GREEN}cc}}
-        .panel-fade{animation:fadeIn .3s ease}
-        .shaking{animation:shake .4s infinite}
-        .pulse-node{animation:pulse 1s ease-in-out infinite}
-        .glow-border{animation:glow 1.5s ease-in-out infinite}
-        input[type=range]{accentColor:${NEON_BLUE};cursor:pointer}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+        @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+        @keyframes glow{0%,100%{opacity:.7}50%{opacity:1}}
+        .fi{animation:fadeIn .3s ease}
+        .shk{animation:shake .25s infinite}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:#1e293b;border-radius:4px}
       `}</style>
 
-      {/* ── Header ── */}
-      <div style={{ padding:'10px 20px', borderBottom:'1px solid #1e293b', display:'flex', alignItems:'center', gap:14, flexShrink:0, background:'#080d18' }}>
+      {/* Header */}
+      <div style={{ padding:'9px 18px', borderBottom:'1px solid #1e293b', display:'flex', alignItems:'center', gap:14, flexShrink:0, background:'#080d18' }}>
         <a href="/student/simulations" style={{ color:'#64748b', fontSize:13, textDecoration:'none' }}>← Simulace</a>
         <div style={{ width:1, height:14, background:'#1e293b' }}/>
-        <span style={{ fontSize:14, fontWeight:700, color:NEON_GREEN }}>🧠 MNIST Neural Network – Forward & Backpropagation</span>
+        <span style={{ fontSize:13, fontWeight:700, color:NG }}>🧠 MNIST Neural Network  ·  784 → 16 → 16 → 10</span>
         <div style={{ marginLeft:'auto', display:'flex', gap:16, fontSize:11 }}>
-          <span style={{ color:'#475569' }}>Trénováno: <strong style={{ color:NEON_GREEN }}>{trainCount}×</strong></span>
-          <span style={{ color:'#475569' }}>Avg Loss: <strong style={{ color:NEON_GOLD }}>{avgLoss}</strong></span>
-          <span style={{ color:'#475569' }}>Avg Acc: <strong style={{ color:NEON_BLUE }}>{avgAcc}</strong></span>
+          <span style={{ color:'#334155' }}>Trénováno: <strong style={{ color:NB }}>{trainN}×</strong></span>
+          <span style={{ color:'#334155' }}>Loss: <strong style={{ color:NY }}>{lastLoss}</strong></span>
+          <span style={{ color:'#334155' }}>Acc: <strong style={{ color:NG }}>{avgAcc}</strong></span>
         </div>
       </div>
 
-      {/* ── Main layout ── */}
-      <div style={{ flex:1, display:'flex', minHeight:0, overflow:'hidden', gap:0 }}>
+      {/* Hlavní oblast */}
+      <div style={{ flex:1, display:'flex', minHeight:0, overflow:'hidden' }}>
 
-        {/* ══ LEVÝ PANEL: kreslení ══ */}
-        <div style={{ width:320, flexShrink:0, borderRight:'1px solid #1e293b', display:'flex', flexDirection:'column', background:'#080d18', overflow:'hidden' }}>
+        {/* ══ LEVÝ PANEL ══ */}
+        <div style={{ width:304, flexShrink:0, borderRight:'1px solid #1e293b', display:'flex', flexDirection:'column', background:'#080d18', overflowY:'auto' }}>
 
-          {/* Canvas kreslení */}
-          <div style={{ padding:'14px 14px 0', flexShrink:0 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:NEON_BLUE, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:8 }}>
+          {/* Kreslicí canvas */}
+          <div style={{ padding:'12px 12px 0', flexShrink:0 }}>
+            <div style={{ fontSize:9, fontWeight:700, color:NB, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:6 }}>
               ✏️ Nakresli číslici (0–9)
             </div>
-            <div style={{ position:'relative', border:`2px solid ${NEON_BLUE}44`, borderRadius:10, overflow:'hidden', display:'inline-block', background:'#000' }}>
-              <canvas ref={canvasRef} width={280} height={280}
-                style={{ display:'block', cursor:'crosshair' }}
-                onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}/>
-              {/* Overlay hint */}
-              {inputs.every(v=>v<0.01) && (
-                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>
-                  <span style={{ fontSize:13, color:'#1e3a5f', fontFamily:'monospace' }}>← kresli zde</span>
+            <div style={{ position:'relative', border:`2px solid ${NB}44`, borderRadius:8, overflow:'hidden', lineHeight:0, background:'#000' }}>
+              <canvas ref={drawCv} width={280} height={280}
+                style={{ display:'block', cursor:'crosshair', touchAction:'none' }}
+                onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU}/>
+              {inputs.every(v=>v<0.01)&&(
+                <div style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none' }}>
+                  <span style={{ fontSize:13,color:'#1e3a5f' }}>← kresli zde myší</span>
                 </div>
               )}
             </div>
-            <button onClick={clearCanvas}
-              style={{ marginTop:8, width:280, padding:'7px', background:'rgba(239,68,68,.1)', color:'#f87171', border:'1px solid rgba(239,68,68,.3)', borderRadius:8, cursor:'pointer', fontFamily:'monospace', fontSize:11, fontWeight:700 }}>
+            <button onClick={clearAll}
+              style={{ marginTop:6,width:'100%',padding:'6px',background:'rgba(239,68,68,.1)',color:'#f87171',border:'1px solid rgba(239,68,68,.3)',borderRadius:7,cursor:'pointer',fontFamily:'monospace',fontSize:11,fontWeight:700 }}>
               🗑 Smazat
             </button>
           </div>
 
-          {/* 28×28 digitalizační náhled */}
-          <div style={{ padding:'12px 14px', flexShrink:0 }}>
-            <div style={{ fontSize:9, fontWeight:700, color:'#64748b', textTransform:'uppercase', marginBottom:6 }}>
-              28×28 digitalizace (každý čtverec = 1 pixel sítě)
+          {/* 28×28 digitalizace s mřížkou a hodnotami */}
+          <div style={{ padding:'10px 12px', flexShrink:0 }}>
+            <div style={{ fontSize:9, fontWeight:700, color:'#475569', textTransform:'uppercase', marginBottom:5 }}>
+              28×28 digitalizace — každý čtverec = 1 vstupní pixel
             </div>
-            <div style={{
-              display:'grid', gridTemplateColumns:'repeat(28,1fr)',
-              width:280, height:280, gap:0,
-              border:'1px solid #1e293b', borderRadius:4, overflow:'hidden',
-            }}>
-              {inputs.map((v,i) => (
-                <div key={i} style={{
-                  background: v > 0.01 ? `rgba(0,245,255,${v})` : '#0a0e1a',
-                  transition:'background .05s',
-                }}/>
-              ))}
+            <div style={{ position:'relative', border:'1px solid #1e293b', borderRadius:6, overflow:'hidden' }}>
+              {/* Pixel grid */}
+              <div style={{
+                display:'grid', gridTemplateColumns:'repeat(28,1fr)',
+                width:280, height:280,
+              }}>
+                {inputs.map((v,i) => (
+                  <div key={i} style={{
+                    background: v>0.01 ? `rgba(0,245,255,${Math.min(1,v)})` : '#0a0e1a',
+                    outline:'1px solid rgba(255,255,255,0.04)',
+                    position:'relative',
+                  }}>
+                    {/* Hodnota – jen pokud je buňka dostatečně světlá */}
+                    {v>0.4&&(
+                      <span style={{ position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'5px',color:'rgba(0,0,0,.7)',fontWeight:700,fontFamily:'monospace' }}>
+                        {v.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Predikce */}
-          {prediction !== null && (
-            <div style={{ padding:'0 14px 12px', flexShrink:0 }}>
-              <div style={{ padding:'10px 14px', background: confidence[prediction] > 0.7 ? 'rgba(57,255,20,.08)' : 'rgba(255,215,0,.07)', border:`1px solid ${confidence[prediction] > 0.7 ? NEON_GREEN : NEON_GOLD}44`, borderRadius:9 }}>
+          {pred !== null && (
+            <div style={{ padding:'0 12px 10px', flexShrink:0 }}>
+              <div style={{ padding:'10px 12px', background:probs[pred]>0.65?'rgba(57,255,20,.07)':'rgba(255,215,0,.06)', border:`1px solid ${probs[pred]>0.65?NG:NY}44`, borderRadius:8 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                  <div style={{ fontSize:36, fontWeight:900, color: confidence[prediction] > 0.7 ? NEON_GREEN : NEON_GOLD }}>{prediction}</div>
+                  <div style={{ fontSize:38, fontWeight:900, color:probs[pred]>0.65?NG:NY, lineHeight:1 }}>{pred}</div>
                   <div>
-                    <div style={{ fontSize:11, color:'#94a3b8' }}>Predikce sítě</div>
-                    <div style={{ fontSize:14, fontWeight:700, color: confidence[prediction] > 0.7 ? NEON_GREEN : NEON_GOLD }}>
-                      {(confidence[prediction] * 100).toFixed(1)}% jistota
+                    <div style={{ fontSize:10, color:'#64748b' }}>Predikce sítě</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:probs[pred]>0.65?NG:NY }}>
+                      {(probs[pred]*100).toFixed(1)}% jistota
                     </div>
+                    {label!==null && (
+                      <div style={{ fontSize:10, color: pred===label?NG:NP, marginTop:2 }}>
+                        {pred===label?'✓ Správně!':'✗ Chyba — koriguj backpropem'}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Pravděpodobnostní bar grafy */}
-          <div style={{ padding:'0 14px', flex:1, overflowY:'auto' }}>
-            <div style={{ fontSize:9, fontWeight:700, color:'#64748b', textTransform:'uppercase', marginBottom:6 }}>Pravděpodobnosti výstupu</div>
-            {confidence.map((p, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                <span style={{ fontSize:11, fontWeight:700, color: prediction===i ? NEON_GOLD : '#475569', minWidth:14, textAlign:'right' }}>{i}</span>
-                <div style={{ flex:1, height:14, background:'#0f172a', borderRadius:3, overflow:'hidden', border:`1px solid ${prediction===i?NEON_GOLD+'44':'#1e293b'}` }}>
+          {/* Pravděpodobnostní bary */}
+          <div style={{ padding:'0 12px', flex:1, overflowY:'auto' }}>
+            <div style={{ fontSize:9, fontWeight:700, color:'#334155', textTransform:'uppercase', marginBottom:5 }}>Výstupní pravděpodobnosti</div>
+            {probs.map((p,i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:5, marginBottom:3 }}>
+                <span style={{ fontSize:10, fontWeight:700, color:pred===i?NY:label===i?NG:'#334155', minWidth:12 }}>{i}</span>
+                <div style={{ flex:1, height:13, background:'#0d1117', borderRadius:3, overflow:'hidden', border:`1px solid ${pred===i?NY+'55':label===i?NG+'33':'#1e293b'}` }}>
                   <div style={{
-                    height:'100%', borderRadius:3,
-                    width:`${p * 100}%`,
-                    background: prediction===i ? `linear-gradient(90deg,${NEON_GOLD},${NEON_GREEN})` : '#1e3a5f',
-                    transition:'width .3s',
-                    boxShadow: prediction===i ? `0 0 8px ${NEON_GOLD}88` : 'none',
+                    height:'100%', borderRadius:3, transition:'width .25s',
+                    width:`${p*100}%`,
+                    background: pred===i ? `linear-gradient(90deg,${NY},${NG})` : label===i ? NG+'66' : '#1e3a5f',
+                    boxShadow: pred===i ? `0 0 8px ${NY}88` : 'none',
                   }}/>
                 </div>
-                <span style={{ fontSize:9, fontFamily:'monospace', color: prediction===i ? NEON_GOLD : '#334155', minWidth:34 }}>
-                  {(p * 100).toFixed(1)}%
+                <span style={{ fontSize:9, color:pred===i?NY:label===i?NG:'#334155', minWidth:32, fontFamily:'monospace' }}>
+                  {(p*100).toFixed(1)}%
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Backpropagation sekce */}
-          <div style={{ padding:'12px 14px', borderTop:'1px solid #1e293b', flexShrink:0 }}>
-            <div style={{ fontSize:9, fontWeight:700, color:NEON_PINK, textTransform:'uppercase', marginBottom:8 }}>🔁 Backpropagation – oprava chyby</div>
-            <div style={{ fontSize:10, color:'#64748b', marginBottom:8 }}>Jaká je správná číslice?</div>
+          {/* BACKPROPAGATION PANEL */}
+          <div style={{ padding:'12px', borderTop:'1px solid #1e293b', flexShrink:0, background:'#050810' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:NP, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+              🔁 Opravit chybu — Backpropagation
+            </div>
+            <div style={{ fontSize:10, color:'#475569', marginBottom:7 }}>
+              Jaká je <strong style={{ color:'#fff' }}>správná</strong> číslice?
+            </div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
               {Array.from({length:10},(_,i)=>(
-                <button key={i} onClick={()=>setCorr(i===correctLabel?null:i)}
-                  style={{ width:28, height:28, borderRadius:6, border:`1.5px solid ${correctLabel===i?NEON_GREEN:NEON_PINK+'44'}`, background:correctLabel===i?NEON_GREEN+'22':'rgba(255,45,120,.06)', color:correctLabel===i?NEON_GREEN:NEON_PINK, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'monospace', transition:'all .15s' }}>
+                <button key={i} onClick={()=>setLabel(label===i?null:i)}
+                  style={{ width:26,height:26,borderRadius:6,border:`1.5px solid ${label===i?NG:NP+'44'}`,background:label===i?NG+'22':'rgba(255,45,120,.05)',color:label===i?NG:NP,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'monospace',transition:'all .15s' }}>
                   {i}
                 </button>
               ))}
             </div>
-            <button onClick={doBackprop} disabled={correctLabel===null||backAnim}
-              className={backAnim?'shaking':''}
-              style={{ width:'100%', padding:'8px', background:backAnim?'rgba(255,45,120,.2)':'rgba(255,45,120,.1)', color:NEON_PINK, border:`1px solid ${NEON_PINK}55`, borderRadius:8, cursor:correctLabel===null?'not-allowed':'pointer', fontFamily:'monospace', fontSize:12, fontWeight:700, opacity:correctLabel===null?0.5:1 }}>
-              {backAnim ? '⚡ Učím se…' : '🎯 Spustit backpropagation'}
+            <button onClick={doBackprop} disabled={label===null||backRunning}
+              className={backRunning?'shk':''}
+              style={{ width:'100%', padding:'9px', background:backRunning?'rgba(255,45,120,.25)':label===null?'rgba(255,45,120,.05)':'rgba(255,45,120,.12)', color:NP, border:`1.5px solid ${label===null?NP+'22':NP+'66'}`, borderRadius:8, cursor:label===null?'not-allowed':'pointer', fontFamily:'monospace', fontSize:12, fontWeight:700, opacity:label===null?0.4:1, transition:'all .15s' }}>
+              {backRunning ? '⚡ Učím se… (zpětný tok aktivní)' : label===null ? '← vyber správnou číslici' : `🎯 Spustit backprop (label = ${label})`}
             </button>
+            {lossHist.length>0&&(
+              <div style={{ marginTop:8, fontSize:9, color:'#475569' }}>
+                Poslední loss: <strong style={{ color:NY }}>{lastLoss}</strong>
+                {' '}· avg: <strong style={{ color:NB }}>{avgLoss}</strong>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ══ STŘED: neuronová síť ══ */}
+        {/* ══ STŘED: síť přes celou šířku ══ */}
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-          {/* Síťový canvas */}
-          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', background:'#0a0e1a' }}>
-            <canvas ref={netCanvasRef} width={NET_W} height={NET_H}
-              style={{ maxWidth:'100%', maxHeight:'100%' }}/>
+
+          {/* Síťový canvas – přes celou šířku */}
+          <div ref={netDiv} style={{ flex:1, overflow:'hidden', background:'#07090f', position:'relative' }}>
+            <NetworkCanvas
+              net={net} inputs={inputs} acts={acts} probs={probs} pred={pred}
+              label={label} backRunning={backRunning} dots={dots}
+              canvasRef={netCv} netSizeRef={netSize}
+            />
           </div>
 
-          {/* Metrika tab */}
-          <div style={{ borderTop:'1px solid #1e293b', padding:'8px 16px', background:'#080d18', flexShrink:0, display:'flex', gap:20, alignItems:'center' }}>
-            <div style={{ fontSize:9, fontWeight:700, color:'#475569', textTransform:'uppercase' }}>Trénování</div>
-            {/* Mini loss chart */}
-            <div style={{ display:'flex', gap:1, alignItems:'flex-end', height:24 }}>
-              {loss.slice(-20).map((l, i) => (
+          {/* Loss graf + metriky */}
+          <div style={{ borderTop:'1px solid #1e293b', padding:'8px 14px', background:'#080d18', flexShrink:0, display:'flex', gap:20, alignItems:'center', minHeight:52 }}>
+            <div style={{ fontSize:9, fontWeight:700, color:'#334155', textTransform:'uppercase', minWidth:60 }}>Loss graf</div>
+            <div style={{ display:'flex', gap:2, alignItems:'flex-end', height:32, flex:1 }}>
+              {lossHist.length===0 ? (
+                <span style={{ fontSize:9, color:'#1e293b' }}>Po backpropu se zobrazí průběh ztráty...</span>
+              ) : lossHist.map((l,i) => (
                 <div key={i} style={{
-                  width:6, borderRadius:2,
-                  height:`${Math.min(24, l * 12 + 2)}px`,
-                  background: l < 0.5 ? NEON_GREEN : l < 1.5 ? NEON_GOLD : NEON_PINK,
-                  opacity:0.7 + i/30,
+                  flex:1, maxWidth:16, borderRadius:'2px 2px 0 0',
+                  height:`${Math.min(32, l*14+2)}px`,
+                  background: l<0.5?NG:l<1.5?NY:NP,
+                  opacity: 0.5 + (i/lossHist.length)*0.5,
+                  minWidth:4,
                 }}/>
               ))}
-              {loss.length === 0 && <span style={{ fontSize:9, color:'#334155' }}>Po backpropu se zobrazí graf...</span>}
             </div>
-            <div style={{ marginLeft:'auto', display:'flex', gap:16, fontSize:10 }}>
-              <span style={{ color:'#475569' }}>Sessions: <strong style={{ color:NEON_BLUE }}>{trainCount}</strong></span>
-              <span style={{ color:'#475569' }}>Loss: <strong style={{ color:NEON_GOLD }}>{avgLoss}</strong></span>
-              <span style={{ color:'#475569' }}>Acc: <strong style={{ color:NEON_GREEN }}>{avgAcc}</strong></span>
+            <div style={{ display:'flex', gap:14, fontSize:11, flexShrink:0 }}>
+              <span style={{ color:'#334155' }}>n: <strong style={{ color:NB }}>{trainN}</strong></span>
+              <span style={{ color:'#334155' }}>Loss: <strong style={{ color:NY }}>{avgLoss}</strong></span>
+              <span style={{ color:'#334155' }}>Acc: <strong style={{ color:NG }}>{avgAcc}</strong></span>
             </div>
           </div>
         </div>
 
         {/* ══ PRAVÝ PANEL: vzdělávací texty ══ */}
-        <div style={{ width:280, flexShrink:0, borderLeft:'1px solid #1e293b', display:'flex', flexDirection:'column', background:'#080d18', overflow:'hidden' }}>
-          {/* Navigační tabs */}
-          <div style={{ display:'flex', flexDirection:'column', borderBottom:'1px solid #1e293b', flexShrink:0 }}>
-            <div style={{ padding:'8px 12px', fontSize:9, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'.08em' }}>
-              📚 Vzdělávací průvodce
-            </div>
-            <div style={{ display:'flex', overflowX:'auto', padding:'0 8px 8px' }}>
-              {PANELS.map((p, i) => (
-                <button key={i} onClick={()=>setPanel(i)}
-                  style={{ flexShrink:0, padding:'4px 8px', marginRight:4, borderRadius:6, border:`1px solid ${activePanel===i?p.color+'55':'#1e293b'}`, background:activePanel===i?p.color+'15':'transparent', color:activePanel===i?p.color:'#475569', cursor:'pointer', fontFamily:'monospace', fontSize:9, fontWeight:700 }}>
-                  {p.icon}
-                </button>
-              ))}
-            </div>
+        <div style={{ width:262, flexShrink:0, borderLeft:'1px solid #1e293b', display:'flex', flexDirection:'column', background:'#080d18', overflow:'hidden' }}>
+          {/* Tab ikony */}
+          <div style={{ display:'flex', borderBottom:'1px solid #1e293b', flexShrink:0, padding:'6px 8px', gap:4 }}>
+            {PANELS.map((p,i)=>(
+              <button key={i} onClick={()=>setInfoPanel(i)} title={p.sub}
+                style={{ flex:1, padding:'5px 3px', borderRadius:7, border:`1px solid ${infoPanel===i?p.color+'55':'#1e293b'}`, background:infoPanel===i?p.color+'18':'transparent', color:infoPanel===i?p.color:'#334155', cursor:'pointer', fontFamily:'monospace', fontSize:14, fontWeight:700 }}>
+                {p.icon}
+              </button>
+            ))}
           </div>
 
           {/* Panel obsah */}
-          <div key={activePanel} className="panel-fade" style={{ flex:1, overflowY:'auto', padding:14 }}>
-            <div style={{ fontSize:8, fontWeight:700, color:PANELS[activePanel].color, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:4 }}>
-              {PANELS[activePanel].subtitle}
+          <div key={infoPanel} className="fi" style={{ flex:1, overflowY:'auto', padding:13 }}>
+            <div style={{ fontSize:8, fontWeight:700, color:panel.color, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:4 }}>
+              {panel.sub}
             </div>
-            <h3 style={{ fontSize:14, fontWeight:800, color:'#fff', margin:'0 0 10px', lineHeight:1.4 }}>
-              {PANELS[activePanel].title}
+            <h3 style={{ fontSize:13, fontWeight:800, color:'#fff', margin:'0 0 10px', lineHeight:1.4 }}>
+              {panel.title}
             </h3>
-            <p style={{ fontSize:11.5, color:'#94a3b8', lineHeight:1.8, margin:'0 0 14px' }}>
-              {PANELS[activePanel].text}
+            <p style={{ fontSize:11, color:'#94a3b8', lineHeight:1.8, margin:'0 0 12px' }}>
+              {panel.text}
             </p>
 
-            {/* Vizuální doplněk podle panelu */}
-            {activePanel === 0 && (
-              <div style={{ background:'#0d1117', borderRadius:8, padding:10, fontFamily:'monospace', fontSize:10, color:'#94a3b8', lineHeight:1.9 }}>
-                <div style={{ color:NEON_BLUE }}>pixel[0] = 0.0 ← černá</div>
-                <div style={{ color:NEON_GREEN }}>pixel[392] = 0.87 ← světlá</div>
-                <div style={{ color:'#fff' }}>pixel[783] = 1.0 ← bílá</div>
-                <div style={{ marginTop:6, color:'#475569' }}>Celkem: 28×28 = <span style={{ color:NEON_GOLD }}>784 vstupů</span></div>
+            {/* Panel 0 – Vstupní vrstva */}
+            {infoPanel===0&&(
+              <div style={{ background:'#0d1117',borderRadius:8,padding:10,fontFamily:'monospace',fontSize:10,lineHeight:1.9 }}>
+                <div style={{ color:NB }}>pixel[0,0]   = 0.00 ← černá</div>
+                <div style={{ color:NG }}>pixel[14,14] = 0.87 ← světlá</div>
+                <div style={{ color:'#fff' }}>pixel[27,27] = 1.00 ← bílá</div>
+                <div style={{ marginTop:6,color:'#475569' }}>28×28 = <span style={{ color:NY }}>784 vstupních neuronů</span></div>
               </div>
             )}
-            {activePanel === 1 && (
-              <div>
-                <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-                  {[['Kladná váha',NEON_GREEN,'zesiluje signál'],['Záporná váha',NEON_PINK,'tlumí signál'],['Slabá váha','#334155','ignorováno']].map(([l,c,d])=>(
-                    <div key={l} style={{ flex:1, padding:6, background:c+'12', border:`1px solid ${c}33`, borderRadius:6 }}>
-                      <div style={{ fontSize:9, fontWeight:700, color:c as string, marginBottom:2 }}>{l}</div>
-                      <div style={{ fontSize:8, color:'#64748b' }}>{d}</div>
+
+            {/* Panel 1 – Váhy */}
+            {infoPanel===1&&(
+              <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
+                {[[NG,'Kladná','zesiluje signál'],[NP,'Záporná','tlumí signál'],['#334155','Slabá','ignorováno']].map(([col,l,d])=>(
+                  <div key={l} style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 8px',background:col+'0d',border:`1px solid ${col}22`,borderRadius:6 }}>
+                    <div style={{ width:30,height:3,background:col,borderRadius:2 }}/>
+                    <div>
+                      <div style={{ fontSize:10,fontWeight:700,color:col as string }}>{l}</div>
+                      <div style={{ fontSize:9,color:'#475569' }}>{d}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Panel 2 – Neuron */}
+            {infoPanel===2&&(
+              <div style={{ background:'#0d1117',borderRadius:8,padding:10,fontFamily:'monospace',fontSize:11,lineHeight:2 }}>
+                <div style={{ color:NY }}>z = Σ(wᵢ · xᵢ) + b</div>
+                <div style={{ color:'#64748b' }}>w = váha spoje</div>
+                <div style={{ color:'#64748b' }}>x = vstupní hodnota</div>
+                <div style={{ color:NB }}>b = bias (práh)</div>
+                <div style={{ marginTop:8,borderTop:'1px solid #1e293b',paddingTop:8 }}>
+                  {acts&&acts.z1.slice(0,4).map((z,i)=>(
+                    <div key={i} style={{ fontSize:9,color:'#475569',lineHeight:1.8 }}>
+                      h1[{i}]: z=<span style={{ color:z>0?NG:NP }}>{z.toFixed(2)}</span>
+                      {' '}→ a=<span style={{ color:NG }}>{(acts.a1[i]).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            {activePanel === 2 && (
-              <div style={{ background:'#0d1117', borderRadius:8, padding:10, fontFamily:'monospace', fontSize:11, color:'#94a3b8', lineHeight:2 }}>
-                <div style={{ color:NEON_GOLD }}>z = Σ(wᵢ · xᵢ) + b</div>
-                <div>w = váhy spojů</div>
-                <div>x = vstupní hodnoty</div>
-                <div style={{ color:NEON_BLUE }}>b = bias (předpětí)</div>
-              </div>
-            )}
-            {activePanel === 3 && (
+
+            {/* Panel 3 – Aktivační funkce (ReLU + Softmax vizualizace) */}
+            {infoPanel===3&&(
               <div>
-                <div style={{ background:'#0d1117', borderRadius:8, padding:10, marginBottom:8 }}>
-                  <div style={{ fontSize:9, color:NEON_GREEN, fontFamily:'monospace', marginBottom:4 }}>ReLU (skrytá vrstva)</div>
-                  <div style={{ fontSize:10, fontFamily:'monospace', color:'#94a3b8' }}>f(z) = max(0, z)</div>
-                  <div style={{ display:'flex', gap:1, alignItems:'flex-end', height:30, marginTop:6 }}>
-                    {[-2,-1.5,-1,-.5,0,.5,1,1.5,2].map(z=>(
-                      <div key={z} style={{ flex:1, background:NEON_GREEN, borderRadius:1, height:`${Math.max(0,z)/2*30}px`, opacity:.8 }}/>
+                <div style={{ background:'#0d1117',borderRadius:8,padding:10,marginBottom:8 }}>
+                  <div style={{ fontSize:9,fontWeight:700,color:NG,marginBottom:6 }}>ReLU – skryté vrstvy</div>
+                  <div style={{ fontSize:10,fontFamily:'monospace',color:'#94a3b8',marginBottom:6 }}>f(z) = max(0, z)</div>
+                  {/* ReLU graf */}
+                  <svg width={200} height={70} style={{ display:'block' }}>
+                    <line x1={0} y1={50} x2={200} y2={50} stroke="#1e293b" strokeWidth={1}/>
+                    <line x1={100} y1={0} x2={100} y2={70} stroke="#1e293b" strokeWidth={1}/>
+                    {/* záporná část = 0 */}
+                    <line x1={0} y1={50} x2={100} y2={50} stroke={NP} strokeWidth={2.5}/>
+                    {/* kladná část = diagonála */}
+                    <line x1={100} y1={50} x2={200} y2={5} stroke={NG} strokeWidth={2.5}/>
+                    <text x={8}  y={64} fill="#475569" fontSize={8}>z&lt;0 → 0</text>
+                    <text x={110} y={20} fill={NG} fontSize={8}>z&gt;0 → z</text>
+                    <circle cx={100} cy={50} r={4} fill={NY}/>
+                  </svg>
+                  {acts&&(
+                    <div style={{ display:'flex',gap:2,marginTop:6,alignItems:'flex-end',height:28 }}>
+                      {acts.a1.map((a,i)=>(
+                        <div key={i} title={`h1[${i}]=${a.toFixed(2)}`}
+                          style={{ flex:1,borderRadius:'2px 2px 0 0',height:`${a*28}px`,background:a>0?NG:NP+'44',minWidth:3 }}/>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{ background:'#0d1117',borderRadius:8,padding:10 }}>
+                  <div style={{ fontSize:9,fontWeight:700,color:NY,marginBottom:6 }}>Softmax – výstupní vrstva</div>
+                  <div style={{ fontSize:10,fontFamily:'monospace',color:'#94a3b8',marginBottom:6 }}>P(i) = e^zᵢ / Σ e^zⱼ</div>
+                  {/* Softmax vizualizace */}
+                  <div style={{ display:'flex',gap:2,alignItems:'flex-end',height:40 }}>
+                    {probs.map((p,i)=>(
+                      <div key={i} style={{ display:'flex',flexDirection:'column',alignItems:'center',flex:1,gap:1 }}>
+                        <div style={{ width:'100%',borderRadius:'2px 2px 0 0',height:`${p*40}px`,background:pred===i?NY:NB+'66',minWidth:6,boxShadow:pred===i?`0 0 6px ${NY}`:undefined }}/>
+                        <span style={{ fontSize:7,color:pred===i?NY:'#334155' }}>{i}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
-                <div style={{ background:'#0d1117', borderRadius:8, padding:10 }}>
-                  <div style={{ fontSize:9, color:NEON_BLUE, fontFamily:'monospace', marginBottom:4 }}>Softmax (výstup)</div>
-                  <div style={{ fontSize:10, fontFamily:'monospace', color:'#94a3b8' }}>P(i) = e^zᵢ / Σe^zⱼ</div>
-                  <div style={{ fontSize:9, color:'#64748b', marginTop:4 }}>Výstup vždy sečte na 100%</div>
+                  <div style={{ fontSize:9,color:'#475569',marginTop:4 }}>Suma = 100% vždy</div>
                 </div>
               </div>
             )}
-            {activePanel === 4 && confidence.some(c=>c>0.05) && (
+
+            {/* Panel 4 – Výstup */}
+            {infoPanel===4&&pred!==null&&(
               <div>
-                <div style={{ fontSize:9, color:'#64748b', marginBottom:6 }}>Aktuální výstup sítě:</div>
-                {confidence.map((p, i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:5, marginBottom:3 }}>
-                    <span style={{ fontSize:10, color:prediction===i?NEON_GOLD:'#334155', minWidth:12 }}>{i}</span>
-                    <div style={{ flex:1, height:8, background:'#0f172a', borderRadius:2 }}>
-                      <div style={{ height:'100%', width:`${p*100}%`, background:prediction===i?NEON_GOLD:NEON_BLUE+'55', borderRadius:2 }}/>
+                <div style={{ fontSize:9,color:'#475569',marginBottom:6 }}>Top 3 predikce:</div>
+                {[...probs.map((p,i)=>({p,i}))].sort((a,b)=>b.p-a.p).slice(0,3).map(({p,i})=>(
+                  <div key={i} style={{ display:'flex',alignItems:'center',gap:6,marginBottom:5 }}>
+                    <span style={{ fontSize:14,fontWeight:900,color:pred===i?NY:NB,minWidth:20,textAlign:'center' }}>{i}</span>
+                    <div style={{ flex:1,height:14,background:'#0d1117',borderRadius:3,overflow:'hidden' }}>
+                      <div style={{ height:'100%',width:`${p*100}%`,background:pred===i?`linear-gradient(90deg,${NY},${NG})`:NB+'66',borderRadius:3 }}/>
                     </div>
-                    <span style={{ fontSize:8, color:prediction===i?NEON_GOLD:'#334155', minWidth:30, fontFamily:'monospace' }}>{(p*100).toFixed(0)}%</span>
+                    <span style={{ fontSize:10,fontFamily:'monospace',color:pred===i?NY:'#475569',minWidth:38 }}>{(p*100).toFixed(1)}%</span>
                   </div>
                 ))}
               </div>
             )}
-            {activePanel === 5 && (
-              <div style={{ background:'#0d1117', borderRadius:8, padding:10 }}>
-                <div style={{ fontSize:10, fontFamily:'monospace', color:'#94a3b8', lineHeight:2 }}>
-                  <div style={{ color:NEON_PINK }}>Gradient descent:</div>
-                  <div>w ← w − η·∂L/∂w</div>
-                  <div>b ← b − η·∂L/∂b</div>
-                  <div style={{ color:NEON_BLUE, marginTop:4 }}>η = {LEARN_RATE} (learning rate)</div>
-                  {loss.length > 0 && <div style={{ color:NEON_GREEN, marginTop:4 }}>Poslední loss: {loss[loss.length-1]?.toFixed(4)}</div>}
+
+            {/* Panel 5 – Backprop */}
+            {infoPanel===5&&(
+              <div style={{ background:'#0d1117',borderRadius:8,padding:10 }}>
+                <div style={{ fontFamily:'monospace',fontSize:10,color:'#94a3b8',lineHeight:2 }}>
+                  <div style={{ color:NP }}>Gradient descent:</div>
+                  <div>w ← w − η · ∂L/∂w</div>
+                  <div>b ← b − η · ∂L/∂b</div>
+                  <div style={{ color:NB,marginTop:4 }}>η = {LR} (learning rate)</div>
+                  {lossHist.length>0&&<>
+                    <div style={{ color:NY,marginTop:4 }}>Poslední loss: {lastLoss}</div>
+                    <div style={{ color:NG }}>Trénováno: {trainN}×</div>
+                  </>}
                 </div>
+                {/* Mini loss graf */}
+                {lossHist.length>1&&(
+                  <div style={{ marginTop:10 }}>
+                    <div style={{ fontSize:8,color:'#334155',marginBottom:4 }}>Průběh loss:</div>
+                    <div style={{ display:'flex',gap:2,alignItems:'flex-end',height:40 }}>
+                      {lossHist.map((l,i)=>(
+                        <div key={i} style={{ flex:1,borderRadius:'2px 2px 0 0',height:`${Math.min(40,l*16+2)}px`,background:l<0.5?NG:l<1.5?NY:NP,opacity:.7+i/lossHist.length*.3,minWidth:3 }}/>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
-
-          {/* Metriky tabulka */}
-          {trainCount > 0 && (
-            <div style={{ padding:'10px 14px', borderTop:'1px solid #1e293b', flexShrink:0 }}>
-              <div style={{ fontSize:9, fontWeight:700, color:'#475569', textTransform:'uppercase', marginBottom:6 }}>📊 Metriky</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                {[
-                  { l:'Sessions', v:trainCount, c:NEON_BLUE },
-                  { l:'Avg Loss',  v:avgLoss,    c:NEON_GOLD },
-                  { l:'Accuracy', v:avgAcc,      c:NEON_GREEN },
-                  { l:'Poslední', v:loss.length>0?loss[loss.length-1].toFixed(3):'—', c:NEON_PINK },
-                ].map(s=>(
-                  <div key={s.l} style={{ padding:'6px 8px', background:s.c+'0d', border:`1px solid ${s.c}22`, borderRadius:7 }}>
-                    <div style={{ fontSize:8, color:'#475569' }}>{s.l}</div>
-                    <div style={{ fontSize:13, fontWeight:800, color:s.c, fontFamily:'monospace' }}>{s.v}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Síťový canvas jako separátní komponenta (pro čistší re-render) ────────────
+function NetworkCanvas({ net, inputs, acts, probs, pred, label, backRunning, dots, canvasRef, netSizeRef }: {
+  net: Net; inputs: number[]; acts: ReturnType<typeof fwd>|null
+  probs: number[]; pred: number|null; label: number|null
+  backRunning: boolean; dots: any[]; canvasRef: React.RefObject<HTMLCanvasElement>
+  netSizeRef: React.MutableRefObject<{w:number;h:number}>
+}) {
+  const divRef = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ w: 900, h: 400 })
+
+  useEffect(() => {
+    const el = divRef.current; if (!el) return
+    const ro = new ResizeObserver(e => {
+      const { width, height } = e[0].contentRect
+      const s = { w: Math.floor(width), h: Math.floor(height) }
+      setSize(s); netSizeRef.current = s
+    })
+    ro.observe(el); return () => ro.disconnect()
+  }, [netSizeRef])
+
+  useEffect(() => {
+    const cv = canvasRef.current; if (!cv) return
+    const ctx = cv.getContext('2d')!
+    const W = size.w, H = size.h
+
+    ctx.clearRect(0, 0, W, H)
+    ctx.fillStyle = '#07090f'; ctx.fillRect(0, 0, W, H)
+
+    // Grid bg
+    ctx.strokeStyle = 'rgba(255,255,255,.025)'; ctx.lineWidth=1
+    for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+    for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+
+    // Spoje vstupy→H1
+    SAMPLE_IDX.forEach((si,vi)=>{
+      for(let hi=0;hi<H1;hi++){
+        const w=net.W1[hi][si], a=Math.min(0.55,Math.abs(w)*0.3+0.03)
+        ctx.strokeStyle=w>0?`rgba(0,245,255,${a})`:`rgba(255,45,120,${a})`
+        ctx.lineWidth=Math.min(1.8,Math.abs(w)*1.2+0.2)
+        ctx.beginPath();ctx.moveTo(LX[0]*W,lY(VIS_IN,vi,H));ctx.lineTo(LX[1]*W,lY(H1,hi,H));ctx.stroke()
+      }
+    })
+    // H1→H2
+    for(let i=0;i<H1;i++)for(let j=0;j<H2;j++){
+      const w=net.W2[j][i], a=Math.min(0.5,Math.abs(w)*0.25+0.03)
+      const jt=backRunning?(Math.random()-.5)*4:0
+      ctx.strokeStyle=w>0?`rgba(57,255,20,${a})`:`rgba(255,215,0,${a})`
+      ctx.lineWidth=Math.min(1.5,Math.abs(w)*1.0+0.2)
+      ctx.beginPath();ctx.moveTo(LX[1]*W,lY(H1,i,H)+jt);ctx.lineTo(LX[2]*W,lY(H2,j,H)+jt);ctx.stroke()
+    }
+    // H2→výstup
+    for(let i=0;i<H2;i++)for(let j=0;j<OUT;j++){
+      const w=net.W3[j][i], a=Math.min(0.6,Math.abs(w)*0.3+0.04), isWin=pred===j
+      ctx.strokeStyle=isWin?`rgba(255,215,0,${a+0.15})`:w>0?`rgba(57,255,20,${a})`:`rgba(255,45,120,${a})`
+      ctx.lineWidth=isWin?1.8:Math.min(1.5,Math.abs(w)*1.0+0.2)
+      ctx.beginPath();ctx.moveTo(LX[2]*W,lY(H2,i,H));ctx.lineTo(LX[3]*W,lY(OUT,j,H));ctx.stroke()
+    }
+
+    // Animační tečky
+    ;(dots as any[]).forEach(d=>{
+      const t=Math.max(0,Math.min(1,d.t));if(t<=0)return
+      const px=d.x+(d.tx-d.x)*t, py=d.y+(d.ty-d.y)*t
+      const al=t<0.1?t*10:t>0.85?(1-t)*6.7:1
+      ctx.beginPath();ctx.arc(px,py,3.5,0,Math.PI*2)
+      ctx.fillStyle=d.col+Math.round(al*200).toString(16).padStart(2,'0')
+      ctx.shadowColor=d.col;ctx.shadowBlur=10;ctx.fill();ctx.shadowBlur=0
+    })
+
+    // Vstupní neurony
+    SAMPLE_IDX.forEach((si,vi)=>{
+      const x=LX[0]*W, y=lY(VIS_IN,vi,H), v=inputs[si]
+      if(v>0.05){ctx.beginPath();ctx.arc(x,y,12,0,Math.PI*2);ctx.fillStyle=`rgba(0,245,255,${v*0.25})`;ctx.fill()}
+      ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2)
+      ctx.fillStyle=v>0.05?`rgba(0,245,255,${0.2+v*0.7})`:'#0d1117';ctx.fill()
+      ctx.strokeStyle=NB+'55';ctx.lineWidth=1;ctx.stroke()
+    })
+
+    // H1
+    for(let i=0;i<H1;i++){
+      const x=LX[1]*W, y=lY(H1,i,H), a=acts?.a1[i]??0
+      if(a>0.05){ctx.beginPath();ctx.arc(x,y,15,0,Math.PI*2);ctx.fillStyle=`rgba(57,255,20,${a*0.2})`;ctx.fill()}
+      ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2)
+      ctx.fillStyle=a>0.05?`rgba(57,255,20,${0.15+a*0.7})`:'#0d1117';ctx.fill()
+      ctx.strokeStyle=a>0.3?NG+'cc':'#1a2e1a';ctx.lineWidth=1.5;ctx.stroke()
+      if(a>0.08){ctx.fillStyle='#fff';ctx.font='bold 6px monospace';ctx.textAlign='center';ctx.fillText(a.toFixed(2),x,y+2.5)}
+    }
+
+    // H2
+    for(let i=0;i<H2;i++){
+      const x=LX[2]*W, y=lY(H2,i,H), a=acts?.a2[i]??0
+      if(a>0.05){ctx.beginPath();ctx.arc(x,y,15,0,Math.PI*2);ctx.fillStyle=`rgba(0,245,255,${a*0.2})`;ctx.fill()}
+      ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2)
+      ctx.fillStyle=a>0.05?`rgba(0,245,255,${0.15+a*0.7})`:'#0d1117';ctx.fill()
+      ctx.strokeStyle=a>0.3?NB+'cc':'#1a2e38';ctx.lineWidth=1.5;ctx.stroke()
+      if(a>0.08){ctx.fillStyle='#fff';ctx.font='bold 6px monospace';ctx.textAlign='center';ctx.fillText(a.toFixed(2),x,y+2.5)}
+    }
+
+    // Výstupní neurony
+    for(let i=0;i<OUT;i++){
+      const x=LX[3]*W, y=lY(OUT,i,H), p=probs[i], isWin=pred===i, isLbl=label===i
+      if(isWin){ctx.beginPath();ctx.arc(x,y,20,0,Math.PI*2);ctx.fillStyle=`rgba(255,215,0,${p*0.3})`;ctx.fill();ctx.shadowColor=NY;ctx.shadowBlur=20}
+      ctx.beginPath();ctx.arc(x,y,12,0,Math.PI*2)
+      ctx.fillStyle=isWin?`rgba(255,215,0,${0.2+p*0.7})`:isLbl?`rgba(57,255,20,.25)`:'#0d1117';ctx.fill()
+      ctx.strokeStyle=isWin?NY:isLbl?NG:'#1e293b';ctx.lineWidth=isWin?2.5:1.5;ctx.stroke()
+      ctx.shadowBlur=0
+      ctx.fillStyle=isWin?NY:'#e2e8f0';ctx.font=`bold ${isWin?11:9}px monospace`;ctx.textAlign='center'
+      ctx.fillText(String(i),x,y+4)
+      ctx.fillStyle=isWin?NY:'#334155';ctx.font='8px monospace';ctx.textAlign='left'
+      ctx.fillText(`${(p*100).toFixed(0)}%`,x+17,y+3)
+    }
+
+    // Popisky vrstev – VÝRAZNĚ nad neurony (y=14)
+    const labels: [number, string, string][] = [
+      [LX[0]*W, 'INPUT  784', NB],
+      [LX[1]*W, 'HIDDEN 1  ReLU', NG],
+      [LX[2]*W, 'HIDDEN 2  ReLU', NB],
+      [LX[3]*W, 'OUTPUT  0–9', NY],
+    ]
+    labels.forEach(([x, lbl, col]) => {
+      ctx.fillStyle = col + 'dd'
+      ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'
+      ctx.fillText(lbl, x, 14)
+    })
+
+  }, [net, inputs, acts, probs, pred, label, backRunning, dots, size, canvasRef])
+
+  return (
+    <div ref={divRef} style={{ width:'100%', height:'100%' }}>
+      <canvas ref={canvasRef} width={size.w} height={size.h}
+        style={{ width:'100%', height:'100%', display:'block' }}/>
     </div>
   )
 }
